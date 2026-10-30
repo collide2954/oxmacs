@@ -163,7 +163,7 @@ fn strings_comments_and_characters_keep_their_text() {
   ; comment  ( x
 (f \\( ;  note )
 x)
-(g #r\"raw ( \"
+(g \"\"\"raw ( \"\"\"
 y)
 ";
 
@@ -174,7 +174,7 @@ y)
 ; comment  ( x
 (f \\( ;  note )
    x)
-(g #r\"raw ( \"
+(g \"\"\"raw ( \"\"\"
    y)
 "
     );
@@ -182,16 +182,16 @@ y)
 
 #[test]
 fn interpolated_strings_holding_strings_stay_whole() {
-    let source = "(message \"{(if x \"Trash\" \"Delete\")} {{literal}} {n}\")
-(f \"a {(g \"(\")}
+    let source = "(message $\"{(if x \"Trash\" \"Delete\")} {{literal}} {n}\")
+(f $\"a {(g \"(\")}
 b\"
   c)
 ";
 
     assert_eq!(
         formatted(source),
-        "(message \"{(if x \"Trash\" \"Delete\")} {{literal}} {n}\")
-(f \"a {(g \"(\")}
+        "(message $\"{(if x \"Trash\" \"Delete\")} {{literal}} {n}\")
+(f $\"a {(g \"(\")}
 b\"
    c)
 "
@@ -247,6 +247,16 @@ body)
 (for [x xs]
   (f x))
 "
+    );
+}
+
+#[test]
+fn blocks_move_with_the_line_that_opens_them() {
+    let source = "(def page\n{text: \"\"\"\n  hello\n\n    world\n  \"\"\"})\n(def other\n        $\"\"\"\n        {x}\n        \"\"\")\n";
+
+    assert_eq!(
+        formatted(source),
+        "(def page\n  {text: \"\"\"\n    hello\n\n      world\n    \"\"\"})\n(def other\n  $\"\"\"\n  {x}\n  \"\"\")\n"
     );
 }
 

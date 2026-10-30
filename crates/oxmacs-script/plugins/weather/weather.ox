@@ -4,7 +4,7 @@
           (weather page :as p)))
 
 (def no-location
-  "Set the weather location in ~/.oxmacs/init.ox, such as (use-plugin weather :config {{location: \"Berlin\"}})")
+  "Set the weather location in ~/.oxmacs/init.ox, such as (use-plugin weather :config {location: \"Berlin\"})")
 
 (def stale-after (time/minutes 30))
 
@@ -15,7 +15,7 @@
   (let [reply (await (http/get url))]
     (if (= reply.status 200)
       reply.body
-      (raise (error "Open-Meteo replied {reply.status}")))))
+      (raise (error $"Open-Meteo replied {reply.status}")))))
 
 (def (show-mode-line)
   (let [forecast (get @state :forecast)]
@@ -30,12 +30,12 @@
   (try
     (let [place (look-up location)]
       (if (nil? place)
-        (swap! state assoc :problem "No place called {location}; check the weather location" :fetching false)
+        (swap! state assoc :problem $"No place called {location}; check the weather location" :fetching false)
         (let [forecast (f/parse-forecast (fetch-json (f/forecast-url place (setting :units))))]
           (swap! state assoc :place place :looked-up location :forecast forecast :fetching false)
           (show-mode-line))))
     (catch error e
-      (swap! state assoc :problem "Couldn't reach Open-Meteo: {e.message}" :fetching false))))
+      (swap! state assoc :problem $"Couldn't reach Open-Meteo: {e.message}" :fetching false))))
 
 (def (refresh)
   (let [location (setting :location)]

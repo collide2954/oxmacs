@@ -19,4 +19,4 @@
 
 (test "JavaScript keeps template strings open across lines"
   (expect (= (faces javascript "interface A") []))
-  (expect (= (lexer/lex javascript "const s = `a ${{b}}" nil) {spans: [[0 5 :keyword] [10 17 :string]] state: "`"})))
+  (expect (= (lexer/lex javascript "const s = `a ${b}" nil) {spans: [[0 5 :keyword] [10 17 :string]] state: "`"})))

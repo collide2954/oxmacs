@@ -167,12 +167,12 @@
   (let [n (count names)]
     (cond
       [(= n 1) (first names)]
-      [(= n 2) "{(nth names 0)} and {(nth names 1)}"]
-      [(= n 3) "{(nth names 0)}, {(nth names 1)} and {(nth names 2)}"]
-      [else "{(nth names 0)}, {(nth names 1)} and {(- n 2)} more"])))
+      [(= n 2) $"{(nth names 0)} and {(nth names 1)}"]
+      [(= n 3) $"{(nth names 0)}, {(nth names 1)} and {(nth names 2)}"]
+      [else $"{(nth names 0)}, {(nth names 1)} and {(- n 2)} more"])))
 
 (def (files n)
-  (if (= n 1) "1 file" "{n} files"))
+  (if (= n 1) "1 file" $"{n} files"))
 
 (def ^:shadow (delete flagged)
   (when-let [listing (current)]
@@ -181,10 +181,10 @@
         (message (if flagged "(No deletions requested)" "No file on this line"))
         (let [trash (get (settings) :delete-to-trash)
               names (map :name found)]
-          (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(describe names)}?"))
+          (when (await (yes-or-no $"{(if trash "Trash" "Delete")} {(describe names)}?"))
             (map (fn [entry] (await (delete-path (path/join listing.directory entry.name)))) found)
             (refresh-all)
-            (message "{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))
+            (message $"{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))
 
 (defcommand dired-do-flagged-delete "Delete the files flagged for deletion" (delete true))
 (defcommand dired-do-delete "Delete the marked files, or this one" (delete false))
@@ -195,15 +195,15 @@
           names (map :name found)
           question (cond
                      [(empty? found) nil]
-                     [(= (count found) 1) "{(if moving "Rename" "Copy")} {(first names)} to: "]
-                     [else "{(if moving "Move" "Copy")} {(files (count found))} to: "])]
+                     [(= (count found) 1) $"{(if moving "Rename" "Copy")} {(first names)} to: "]
+                     [else $"{(if moving "Move" "Copy")} {(files (count found))} to: "])]
       (if (nil? question)
         (message "No file on this line")
         (let [target (await (prompt-path question))
               into (await (file/exists? target))
               into (and into (get (await (file/metadata target)) :dir))]
           (if (and (> (count found) 1) (not into))
-            (message "Target must be a directory: {(path/abbreviate target)}")
+            (message $"Target must be a directory: {(path/abbreviate target)}")
             (do
               (map (fn [entry]
                      (let [from (path/join listing.directory entry.name)
@@ -211,11 +211,11 @@
                        (if moving
                          (await (move-path from to))
                          (when (or (not (await (file/exists? to)))
-                                   (await (yes-or-no "{(path/abbreviate to)} exists; replace it? ")))
+                                   (await (yes-or-no $"{(path/abbreviate to)} exists; replace it? ")))
                            (await (file/copy from to))))))
                    found)
               (refresh-all)
-              (message "{(if moving "Moved" "Copied")} {(files (count found))}"))))))))
+              (message $"{(if moving "Moved" "Copied")} {(files (count found))}"))))))))
 
 (defcommand dired-do-rename "Rename or move the marked files, or this one" (transfer true))
 (defcommand dired-do-copy "Copy the marked files, or this one" (transfer false))
@@ -224,7 +224,7 @@
   (when-let [state (state-here)]
     (let [target (await (prompt-path "Create directory: " :directories true))]
       (if (await (file/exists? target))
-        (message "{(path/abbreviate target)} already exists")
+        (message $"{(path/abbreviate target)} already exists")
         (do
           (await (file/make-dir target))
           (refresh state)

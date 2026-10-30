@@ -24,7 +24,7 @@
 (def (stem session)
   (if (string/ends-with? session "*") (string/slice session 0 (- (count session) 1)) session))
 
-(def (environment-name session) "{(stem session)} environment*")
+(def (environment-name session) $"{(stem session)} environment*")
 
 (def ^:shadow (entries payload)
   (keep (fn [line]
@@ -45,9 +45,9 @@
           fixed (+ 2 names 2 classes 2 sizes 2)
           shown-width (min (max 0 (- width fixed)) value-width)
           line (fn [entry]
-                 {line: [["  {(string/pad-end entry.name names)}  " :link]
-                         ["{(string/pad-end entry.class classes)}  " :comment]
-                         "{(string/pad-start entry.size sizes)}  "
+                 {line: [[$"  {(string/pad-end entry.name names)}  " :link]
+                         [$"{(string/pad-end entry.class classes)}  " :comment]
+                         $"{(string/pad-start entry.size sizes)}  "
                          [(if (>= shown-width least-value) (string/truncate entry.value shown-width) "") :comment]]
                   entry: entry})]
       (reduce (fn [lines [group title]]
@@ -102,12 +102,12 @@
 (def (ask-table session object view)
   (session/request
    session
-   "getOption(\"oxmacs\")$view({(session/r-string object)}, {view-rows}L, {view.offset}L, {(session/r-string view.sort)}, {(if view.decreasing "TRUE" "FALSE")}, {(session/r-string view.filter)})"))
+   $"getOption(\"oxmacs\")$view({(session/r-string object)}, {view-rows}L, {view.offset}L, {(session/r-string view.sort)}, {(if view.decreasing "TRUE" "FALSE")}, {(session/r-string view.filter)})"))
 
 (def (ask-object session object table)
   (if table
     (ask-table session object plain-view)
-    (session/request session "getOption(\"oxmacs\")$inspect({(session/r-string object)})")))
+    (session/request session $"getOption(\"oxmacs\")$inspect({(session/r-string object)})")))
 
 (defcommand r-environment "List the objects in the R session"
   (when-let [running (session/ensure)]
@@ -128,7 +128,7 @@
       (message "No object on this line"))))
 
 (def (short-type name)
-  "<{(or (get short-types name) (string/slice name 0 (min 4 (count name))))}>")
+  $"<{(or (get short-types name) (string/slice name 0 (min 4 (count name))))}>")
 
 (def (table-of payload)
   (let [lines (string/lines payload)
@@ -152,10 +152,10 @@
 
 (def (info table first-column last-column)
   (let [shown (count table.cells)
-        range (if (> table.rows shown) " (rows {(+ table.offset 1)}–{(+ table.offset shown)})" "")
-        sorted (if (= table.sort "") "" "  sorted by {table.sort} {(if table.decreasing "↓" "↑")}")
-        kept (if (= table.filter "") "" "  {table.rows} of {table.total} rows where {table.filter}")]
-    "{table.object}  {table.rows} × {table.columns}{range}{sorted}{kept}  columns {(+ first-column 1)}–{(+ last-column 1)}  ← →"))
+        range (if (> table.rows shown) $" (rows {(+ table.offset 1)}–{(+ table.offset shown)})" "")
+        sorted (if (= table.sort "") "" $"  sorted by {table.sort} {(if table.decreasing "↓" "↑")}")
+        kept (if (= table.filter "") "" $"  {table.rows} of {table.total} rows where {table.filter}")]
+    $"{table.object}  {table.rows} × {table.columns}{range}{sorted}{kept}  columns {(+ first-column 1)}–{(+ last-column 1)}  ← →"))
 
 (def (lay-out table first-column width)
   (let [label-width (min cell-width (apply max 0 (map (fn [row] (count (or (first row) ""))) table.cells)))
@@ -210,7 +210,7 @@
    "i" 'r-table-describe-column "g" 'r-table-reload "q" 'quit-window})
 
 (def (open-table session object)
-  (let [name "{(stem session)} {object}*"]
+  (let [name $"{(stem session)} {object}*"]
     (unless (buffer-exists? name)
       (with-buffer (open-buffer name [] :keys table-keys :show false :label "R tables"
                                 :on-resize (fn [width] (draw-table name width)))
@@ -222,8 +222,8 @@
 (def (tabled session payload)
   (when-let [table (table-of payload)]
     (let [name (open-table session table.object)
-          kept (if (= table.filter "") "" " where {table.filter}")]
-      (message "{table.object}: {table.rows} rows{kept}, {table.columns} columns")
+          kept (if (= table.filter "") "" $" where {table.filter}")]
+      (message $"{table.object}: {table.rows} rows{kept}, {table.columns} columns")
       (swap! (value-of name :r-table)
              (fn [view] (assoc view :table table :first (if (= (get-in view [:table :object]) table.object) (or view.first 0) 0))))
       (draw-table name (buffer-width name))
@@ -234,7 +234,7 @@
         object (first parts)
         name (open-table session object)]
     (swap! (value-of name :r-table) assoc :table nil)
-    (set-header name [[["str({object})" :comment]]])
+    (set-header name [[[$"str({object})" :comment]]])
     (set-lines name (string/lines (or (second parts) "")))
     (goto-line 0)))
 
@@ -245,7 +245,7 @@
         (let [last-column (max 0 (- (count view.table.names) 1))
               next (if forward (min (+ view.first 1) last-column) (max (- view.first 1) 0))]
           (if (= next view.first)
-            (message "Already at the {(if forward "last" "first")} column")
+            (message $"Already at the {(if forward "last" "first")} column")
             (do (swap! held assoc :first next)
               (draw-table (current-buffer) (buffer-width (current-buffer))))))))))
 
@@ -279,7 +279,7 @@
 
 (defcommand r-table-filter "Keep the rows of the table where an R expression is true"
   (when-let [view (table-here)]
-    (let [typed (await (prompt "Keep the rows of {view.object} where (R): " :initial view.table.filter))]
+    (let [typed (await (prompt $"Keep the rows of {view.object} where (R): " :initial view.table.filter))]
       (ask-table view.session view.object (assoc (current-view view) :filter (string/trim typed) :offset 0)))))
 
 (def (turn-page forward)
@@ -298,12 +298,12 @@
   (when-let [view (table-here)]
     (if-let [column (column-here view)]
       (session/request view.session
-                       "getOption(\"oxmacs\")$stats({(session/r-string view.object)}, {(session/r-string (get view.table.names column))})")
+                       $"getOption(\"oxmacs\")$stats({(session/r-string view.object)}, {(session/r-string (get view.table.names column))})")
       (message "No column here"))))
 
 (def (described-column _ payload)
   (let [[column kind text] (string/split payload "\t" 3)]
-    (message "{column} {(short-type (or kind ""))}: {text}")))
+    (message $"{column} {(short-type (or kind ""))}: {text}")))
 
 (defcommand r-table-reload "Ask R for the table again"
   (when-let [view (when-let [held (buffer-value :r-table)] @held)]
@@ -316,8 +316,8 @@
         name (help/symbol-at-point)]
     (cond ((not (session/running? running)) (message "Start R with C-c C-z to look at its objects"))
       ((not name) (message "No R name at point"))
-      (else (session/request running "getOption(\"oxmacs\")$peek({(session/r-string name)})")))))
+      (else (session/request running $"getOption(\"oxmacs\")$peek({(session/r-string name)})")))))
 
 (def (peeked _ payload)
   (let [[name text] (string/split payload "\n" 2)]
-    (message "{name}  {(string/trim-start (or text ""))}")))
+    (message $"{name}  {(string/trim-start (or text ""))}")))

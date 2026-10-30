@@ -5,7 +5,7 @@ use std::mem;
 
 use crate::span::Span;
 use crate::syntax::{Bracket, Kind, Prefix, State, Token, delimiter, tokens};
-pub use syntax::{Datum, Marks, Syntax, meta_flag, split_meta};
+pub use syntax::{Datum, Marks, PRELUDE_MARK, Syntax, meta_flag, split_meta};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadError {
@@ -85,6 +85,86 @@ impl Opener {
 }
 
 const META: &str = "^ takes a keyword or a map, as in ^:shadow or ^{indent: 1}";
+const ONE_LINE: &str =
+    "Text that follows \"\"\" on its line must end on that line; start a block on the next line";
+const CLOSING: &str = "Put the closing \"\"\" of a block on a line of its own";
+const SHALLOW: &str = "Indent every line of a \"\"\" block at least as far as its closing \"\"\"";
+const RAW: &str = "#r\"…\" is gone: write \"\"\"…\"\"\" for text taken as it is; ox migrate --strings rewrites it";
+
+enum Piece {
+    Text(String, Span),
+    Hole(Syntax),
+}
+
+fn hygienic(name: &str, span: Span) -> Syntax {
+    Syntax {
+        datum: Datum::Symbol(name.to_owned()),
+        span,
+        marks: Marks::prelude(),
+    }
+}
+
+fn assembled(pieces: Vec<Piece>, start: usize) -> Datum {
+    if !pieces.iter().any(|piece| matches!(piece, Piece::Hole(_))) {
+        let mut text = String::new();
+        for piece in pieces {
+            if let Piece::Text(part, _) = piece {
+                text.push_str(&part);
+            }
+        }
+        return Datum::Str(text);
+    }
+    let parts = pieces.into_iter().filter_map(|piece| match piece {
+        Piece::Text(text, _) if text.is_empty() => None,
+        Piece::Text(text, span) => Some(Syntax::new(Datum::Str(text), span)),
+        Piece::Hole(hole) => Some(hole),
+    });
+    let head = hygienic("str", Span::new(start, start + 1));
+    Datum::List(std::iter::once(head).chain(parts).collect())
+}
+
+fn dedented(pieces: &mut [Piece], indent: &str) -> bool {
+    let mut fits = true;
+    let mut line_start = true;
+    let count = pieces.len();
+    for (index, piece) in pieces.iter_mut().enumerate() {
+        let Piece::Text(text, _) = piece else {
+            fits &= !line_start || indent.is_empty();
+            line_start = false;
+            continue;
+        };
+        let last = index + 1 == count;
+        let mut out = String::new();
+        let mut lines = text.split('\n').peekable();
+        let mut first = true;
+        while let Some(line) = lines.next() {
+            if !first {
+                out.push('\n');
+                line_start = true;
+            }
+            first = false;
+            let ends = lines.peek().is_some() || last;
+            let line = if lines.peek().is_some() {
+                line.strip_suffix('\r').unwrap_or(line)
+            } else {
+                line
+            };
+            if !line_start {
+                out.push_str(line);
+                continue;
+            }
+            line_start = false;
+            if let Some(rest) = line.strip_prefix(indent) {
+                out.push_str(rest);
+            } else if !(ends && line.trim().is_empty()) {
+                fits = false;
+                out.push_str(line);
+            }
+        }
+        *text = out;
+    }
+    fits
+}
 
 enum Frame {
     Collection {
@@ -211,11 +291,11 @@ impl<'a> Reader<'a> {
             Kind::Caret => self.error(token.span, META),
             Kind::Dispatch => self.error(token.span, format!("Unknown form {text}")),
             Kind::StringStart => {
-                let datum = self.string(start);
+                let datum = self.string(token);
                 self.push(datum, start);
             }
-            Kind::Raw { closed } => {
-                let datum = self.raw(token, closed);
+            Kind::Raw { .. } => {
+                let datum = self.raw(token);
                 self.push(datum, start);
             }
             Kind::Regex { closed } => {
@@ -327,16 +407,14 @@ impl<'a> Reader<'a> {
                     let Some(name) = name else {
                         return;
                     };
+                    let called = if prefix == Prefix::Deref {
+                        hygienic(name, head)
+                    } else {
+                        Syntax::new(Datum::Symbol(name.to_owned()), head)
+                    };
                     syntax = Syntax {
                         span: head.through(syntax.span),
-                        datum: Datum::List(vec![
-                            Syntax {
-                                datum: Datum::Symbol(name.to_owned()),
-                                span: head,
-                                marks: Marks::default(),
-                            },
-                            syntax,
-                        ]),
+                        datum: Datum::List(vec![called, syntax]),
                         marks: Marks::default(),
                     };
                 }
@@ -451,55 +529,95 @@ impl<'a> Reader<'a> {
         }
     }
 
-    fn string(&mut self, start: usize) -> Datum {
+    fn string(&mut self, open: Token) -> Datum {
+        let start = open.starts();
+        let template = self.text(open).starts_with('$');
+        let fence = open.ends() - start - usize::from(template);
         let mut text = String::new();
         let mut pieces = Vec::new();
         let mut piece_start = self.at;
-        let mut interpolated = false;
-        let piece_end = loop {
+        let mut closed = true;
+        let end = loop {
             let index = self.next;
             let Some(token) = self.take() else {
                 self.unfinished(
                     Span::new(start, self.source.len()),
                     "This string is never closed",
                 );
+                closed = false;
                 break self.source.len();
             };
             match token.kind {
-                Kind::StringEnd => break token.starts(),
+                Kind::StringEnd => break token.ends(),
+                Kind::Text if template && self.text(token) == "}" => {
+                    self.error(token.span, "Write }} for a } in a $ string");
+                    text.push('}');
+                }
                 Kind::Text => text.push_str(self.text(token)),
                 Kind::Escape => text.extend(self.escape(token)),
                 Kind::HoleStart => {
-                    interpolated = true;
                     if !text.is_empty() {
-                        pieces.push(Syntax {
-                            datum: Datum::Str(mem::take(&mut text)),
-                            span: Span::new(piece_start, token.starts()),
-                            marks: Marks::default(),
-                        });
+                        let span = Span::new(piece_start, token.starts());
+                        pieces.push(Piece::Text(mem::take(&mut text), span));
                     }
-                    pieces.extend(self.interpolation(token, index));
+                    pieces.extend(self.interpolation(token, index).map(Piece::Hole));
                     piece_start = self.at;
                 }
                 _ => {}
             }
         };
-        if !interpolated {
-            return Datum::Str(text);
-        }
         if !text.is_empty() {
-            pieces.push(Syntax {
-                datum: Datum::Str(text),
-                span: Span::new(piece_start, piece_end),
-                marks: Marks::default(),
-            });
+            pieces.push(Piece::Text(text, Span::new(piece_start, end)));
         }
-        let head = Syntax {
-            datum: Datum::Symbol("str".to_owned()),
-            span: Span::new(start, start + 1),
-            marks: Marks::default(),
+        if fence > 1 && closed {
+            pieces = self.verbatim(pieces, Span::new(start, end));
+        }
+        assembled(pieces, start)
+    }
+
+    fn verbatim(&mut self, mut pieces: Vec<Piece>, span: Span) -> Vec<Piece> {
+        let opening = match pieces.first() {
+            Some(Piece::Text(text, _)) => {
+                text.find('\n').filter(|at| text[..*at].trim().is_empty())
+            }
+            _ => None,
         };
-        Datum::List(std::iter::once(head).chain(pieces).collect())
+        let Some(opening) = opening else {
+            if pieces
+                .iter()
+                .any(|piece| matches!(piece, Piece::Text(text, _) if text.contains('\n')))
+            {
+                self.error(span, ONE_LINE);
+            }
+            return pieces;
+        };
+        if let Some(Piece::Text(text, _)) = pieces.first_mut() {
+            text.drain(..=opening);
+        }
+        let alone = pieces.len() == 1;
+        let indent = match pieces.last_mut() {
+            Some(Piece::Text(text, _)) if alone || text.contains('\n') => {
+                let line = text.rfind('\n').map_or(0, |at| at + 1);
+                if !text[line..].trim().is_empty() {
+                    self.error(span, CLOSING);
+                    return pieces;
+                }
+                let indent = text[line..].to_owned();
+                text.truncate(line.saturating_sub(1));
+                if text.ends_with('\r') {
+                    text.pop();
+                }
+                indent
+            }
+            _ => {
+                self.error(span, CLOSING);
+                return pieces;
+            }
+        };
+        if !dedented(&mut pieces, &indent) {
+            self.error(span, SHALLOW);
+        }
+        pieces
     }
 
     fn escape(&mut self, token: Token) -> Option<char> {
@@ -532,19 +650,9 @@ impl<'a> Reader<'a> {
         Some(escaped)
     }
 
-    fn raw(&mut self, token: Token, closed: bool) -> Datum {
-        let text = self.text(token);
-        let hashes = text[2..].chars().take_while(|c| *c == '#').count();
-        let after = &text[2 + hashes..];
-        if !after.starts_with('"') {
-            self.error(token.span, "Write a raw string as #r\"…\" or #r#\"…\"#");
-            return Datum::Str(String::new());
-        }
-        if !closed {
-            self.unfinished(token.span, "This raw string is never closed");
-            return Datum::Str(String::new());
-        }
-        Datum::Str(after[1..after.len() - 1 - hashes].to_owned())
+    fn raw(&mut self, token: Token) -> Datum {
+        self.error(token.span, RAW);
+        Datum::Str(String::new())
     }
 
     fn regex(&mut self, token: Token, closed: bool) -> Datum {
@@ -553,18 +661,23 @@ impl<'a> Reader<'a> {
             return Datum::Str(String::new());
         }
         let start = token.starts();
-        let pattern = &self.text(token)[2..token.ends() - start - 1];
+        let text = self.text(token);
+        let fence = text[1..].len() - text[1..].trim_start_matches('"').len();
+        let fence = if fence >= 3 { fence } else { 1 };
+        let inner = Span::new(start + 1 + fence, token.ends() - fence);
+        let pattern = self.source[inner.start as usize..inner.end as usize].to_owned();
+        let pattern = if fence > 1 {
+            let pieces = self.verbatim(vec![Piece::Text(pattern, inner)], token.span);
+            match assembled(pieces, start) {
+                Datum::Str(text) => text,
+                _ => String::new(),
+            }
+        } else {
+            pattern
+        };
         Datum::List(vec![
-            Syntax {
-                datum: Datum::Symbol("regex".to_owned()),
-                span: Span::new(start, start + 1),
-                marks: Marks::default(),
-            },
-            Syntax {
-                datum: Datum::Str(pattern.to_owned()),
-                span: Span::new(start + 2, start + 2 + pattern.len()),
-                marks: Marks::default(),
-            },
+            hygienic("regex", Span::new(start, start + 1)),
+            Syntax::new(Datum::Str(pattern), inner),
         ])
     }
 
@@ -830,6 +943,35 @@ mod tests {
     }
 
     #[test]
+    fn verbatim_blocks_drop_the_indentation_of_their_closing_fence() {
+        assert_eq!(
+            shapes("\"\"\"\n    one\n      two\n\n    three\n    \"\"\" \"\"\"a \"q\" \\n\"\"\""),
+            [r#""one\n  two\n\nthree""#, r#""a \"q\" \\n""#]
+        );
+        assert_eq!(
+            shapes(
+                "$\"\"\"\n  Hi {name}\n  \"\"\" #\"\"\"\n  \\d+\n  \"\"\" \"\"\"\r\n  a\r\n  \"\"\""
+            ),
+            [r#"(str "Hi " name)"#, r#"(regex "\\d+")"#, r#""a""#]
+        );
+        assert_eq!(
+            shapes("\"\"\"\"\n  say \"\"\"hi\"\"\"\n  \"\"\"\""),
+            [r#""say \"\"\"hi\"\"\"""#]
+        );
+        let messages = |source: &str| -> Vec<String> {
+            read(source)
+                .1
+                .into_iter()
+                .map(|error| error.message)
+                .collect()
+        };
+        assert_eq!(messages("\"\"\"\n  a\n b\n  \"\"\""), [SHALLOW]);
+        assert_eq!(messages("\"\"\"\n  a\"\"\""), [CLOSING]);
+        assert_eq!(messages("\"\"\"text\nmore\"\"\""), [ONE_LINE]);
+        assert_eq!(messages("$\"a}b\""), ["Write }} for a } in a $ string"]);
+    }
+
+    #[test]
     fn a_colon_before_a_string_reads_as_any_keyword() {
         assert_eq!(
             data(r#":"Unit Price" :"a.b" : "x""#),
@@ -842,7 +984,7 @@ mod tests {
         );
         let (_, errors) = read(":(x)");
         assert!(errors.is_empty());
-        let (_, errors) = read(r#":"{x}""#);
+        let (_, errors) = read(r#":$"{x}""#);
         assert_eq!(
             errors.first().map(|error| error.message.as_str()),
             Some("A colon makes a keyword of a plain string, as in :\"Unit Price\"")
@@ -1078,19 +1220,20 @@ mod tests {
     #[test]
     fn strings_interpolate_expressions_in_braces() {
         assert_eq!(
-            shapes(r#""Hi {name}!" "{{x}} {(+ 1 2)}" "{city.name}" "plain}""#),
+            shapes(r#"$"Hi {name}!" $"{{x}} {(+ 1 2)}" $"{city.name}" "plain}" "a {b} c""#),
             [
                 r#"(str "Hi " name "!")"#,
                 r#"(str "{x} " (+ 1 2))"#,
                 "(str (. city :name))",
                 r#""plain}""#,
+                r#""a {b} c""#,
             ]
         );
     }
 
     #[test]
     fn interpolated_expressions_keep_their_spans_and_may_hold_strings() {
-        let source = r#""a{(f "}")}b""#;
+        let source = r#"$"a{(f "}")}b""#;
         let (data, errors) = read(source);
         let Datum::List(pieces) = &data[0].datum else {
             panic!("expected an interpolation");
@@ -1098,13 +1241,13 @@ mod tests {
 
         assert_eq!(errors, []);
         assert_eq!(data[0].to_string(), r#"(str "a" (f "}") "b")"#);
-        assert_eq!(data[0].span, Span::new(0, 13));
-        assert_eq!(pieces[2].span, Span::new(3, 10));
+        assert_eq!(data[0].span, Span::new(0, 14));
+        assert_eq!(pieces[2].span, Span::new(4, 11));
     }
 
     #[test]
-    fn holes_may_hold_raw_strings_regexes_and_comments_with_braces_and_quotes() {
-        let source = r##""<{(f #r#"a"}b"# #"\d{2}" #| } |# x)}>""##;
+    fn holes_may_hold_verbatim_text_regexes_and_comments_with_braces_and_quotes() {
+        let source = r#"$"<{(f """a"}b""" #"\d{2}" #| } |# x)}>""#;
 
         assert_eq!(errors(source), []);
         let (data, _) = read(source);
@@ -1122,18 +1265,18 @@ mod tests {
     #[test]
     fn interpolation_mistakes_are_reported() {
         assert_eq!(
-            errors(r#""{}" "{a b}" "{open""#),
+            errors(r#"$"{}" $"{a b}" $"{open""#),
             [
                 (
                     "Put an expression inside the braces".to_owned(),
-                    Span::new(1, 3)
+                    Span::new(2, 4)
                 ),
                 (
                     "Put one expression inside the braces".to_owned(),
-                    Span::new(6, 11)
+                    Span::new(8, 13)
                 ),
-                ("This { is never closed".to_owned(), Span::new(14, 15)),
-                ("This string is never closed".to_owned(), Span::new(13, 20)),
+                ("This { is never closed".to_owned(), Span::new(17, 18)),
+                ("This string is never closed".to_owned(), Span::new(15, 23)),
             ]
         );
     }
@@ -1195,7 +1338,8 @@ mod tests {
         assert_eq!(flags("'"), [true]);
         assert_eq!(flags("(a [b)"), [false]);
         assert_eq!(flags("1x"), [false]);
-        assert_eq!(flags(r#""{"#), [true, true]);
+        assert_eq!(flags(r#"$"{"#), [true, true]);
+        assert_eq!(flags("\"\"\"\nopen"), [true]);
     }
     #[test]
     fn symbols_span_their_bytes_in_utf8() {

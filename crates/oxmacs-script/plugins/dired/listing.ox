@@ -16,8 +16,8 @@
           day (string/pad-start (str moment.day) 2)
           age (- now modified)]
       (if (or (neg? age) (> age six-months))
-        "{month} {day}  {moment.year}"
-        "{month} {day} {(two moment.hour)}:{(two moment.minute)}"))))
+        $"{month} {day}  {moment.year}"
+        $"{month} {day} {(two moment.hour)}:{(two moment.minute)}"))))
 
 (def (next-order order)
   (cond [(= order :name) :newest] [(= order :newest) :largest] [else :name]))
@@ -43,12 +43,12 @@
   "The heading kept above the listing: its folder and order."
   (let [shown (path/abbreviate listing.directory)
         label (order-label listing.order)]
-    [[[(if label "  {shown} ({label}):" "  {shown}:") :heading]]]))
+    [[[(if label $"  {shown} ({label}):" $"  {shown}:") :heading]]]))
 
 (def (entry-name entry)
   (cond
     [entry.dir (str entry.name (path/separator))]
-    [entry.link "{entry.name} -> {entry.target}"]
+    [entry.link $"{entry.name} -> {entry.target}"]
     [else entry.name]))
 
 (def (entry-line listing entry width now)
@@ -57,8 +57,8 @@
         name (entry-name entry)
         face (cond [entry.dir :link] [entry.link :symlink] [else nil])
         prefix (if listing.details
-                 "{symbol} {(string/pad-start (size-text entry) width)}  {(string/pad-end (ls-time entry.modified now) time-width)}  "
-                 "{symbol} ")]
+                 $"{symbol} {(string/pad-start (size-text entry) width)}  {(string/pad-end (ls-time entry.modified now) time-width)}  "
+                 $"{symbol} ")]
     {line: [prefix (if face [name face] name)]
      background: (cond [(= mark :marked) :marked] [(= mark :flagged) :flagged] [else nil])
      name: entry.name

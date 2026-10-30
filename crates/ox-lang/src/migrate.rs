@@ -2,6 +2,7 @@ use crate::Isolate;
 use crate::check::{Binding, Occurrence};
 use crate::read::{self, Datum, Syntax};
 use crate::span::{Span, line_column};
+use crate::syntax::{Kind, Token, legacy_tokens};
 
 const PASSES: usize = 64;
 
@@ -127,6 +128,120 @@ fn import(spec: &Syntax) -> Option<Import> {
         module: segments.join("/"),
         alias,
     })
+}
+
+struct Opened {
+    start: usize,
+    holes: bool,
+    escapes: Vec<Token>,
+}
+
+enum Frame {
+    String(Opened),
+    Hole,
+}
+
+fn longest_quotes(text: &str) -> usize {
+    text.split(|character| character != '"')
+        .map(str::len)
+        .max()
+        .unwrap_or(0)
+}
+
+fn escaped(text: &str) -> String {
+    let mut out = String::from("\"");
+    for character in text.chars() {
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(character),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn verbatim(text: &str) -> String {
+    let quotes = longest_quotes(text);
+    if text.contains('\n') {
+        let fence = "\"".repeat(quotes.max(2) + 1);
+        return format!("{fence}\n{text}\n{fence}");
+    }
+    if text.is_empty() || text.starts_with('"') || text.ends_with('"') || quotes >= 3 {
+        return escaped(text);
+    }
+    format!("\"\"\"{text}\"\"\"")
+}
+
+fn raw_text(token: &str) -> &str {
+    let hashes = token[2..].len() - token[2..].trim_start_matches('#').len();
+    token
+        .get(3 + hashes..token.len() - 1 - hashes)
+        .unwrap_or_default()
+}
+
+pub fn migrate_strings(source: &str) -> Result<String, String> {
+    let mut edits: Vec<Rewrite> = Vec::new();
+    let mut frames: Vec<Frame> = Vec::new();
+    for token in legacy_tokens(source) {
+        let text = token.text(source);
+        match token.kind {
+            Kind::StringStart => frames.push(Frame::String(Opened {
+                start: token.starts(),
+                holes: false,
+                escapes: Vec::new(),
+            })),
+            Kind::Escape if text == "{{" || text == "}}" => {
+                if let Some(Frame::String(opened)) = frames.last_mut() {
+                    opened.escapes.push(token);
+                }
+            }
+            Kind::HoleStart => {
+                if let Some(Frame::String(opened)) = frames.last_mut() {
+                    opened.holes = true;
+                }
+                frames.push(Frame::Hole);
+            }
+            Kind::HoleEnd => {
+                frames.pop();
+            }
+            Kind::StringEnd => {
+                if let Some(Frame::String(opened)) = frames.pop() {
+                    if opened.holes {
+                        edits.push(insertion(opened.start as u32, "$".to_owned()));
+                    } else {
+                        edits.extend(opened.escapes.iter().map(|escape| Rewrite {
+                            span: escape.span,
+                            text: escape.text(source)[..1].to_owned(),
+                        }));
+                    }
+                }
+            }
+            Kind::Raw { closed: true } => edits.push(Rewrite {
+                span: token.span,
+                text: verbatim(raw_text(text)),
+            }),
+            _ => {}
+        }
+    }
+    edits.sort_by_key(|edit| edit.span.start);
+    let mut out = source.to_owned();
+    for edit in edits.iter().rev() {
+        out.replace_range(edit.span.start as usize..edit.span.end as usize, &edit.text);
+    }
+    match read::read(&out).1.first() {
+        Some(error) => {
+            let (line, column) = line_column(&out, error.span.start);
+            Err(format!(
+                "{line}:{column}: {} after rewriting its strings",
+                error.message
+            ))
+        }
+        None => Ok(out),
+    }
 }
 
 pub fn migrate(isolate: &mut Isolate, name: &str, source: &str) -> Result<String, String> {

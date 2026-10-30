@@ -32,6 +32,7 @@ use crate::native::expected;
 use crate::native::{Control, NativeFn};
 use crate::portable::Portable;
 use crate::profile::{Profile, Profiler};
+use crate::read::PRELUDE_MARK;
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::task::{Interrupter, TaskId};
@@ -43,7 +44,7 @@ use crate::value::promise::Promise;
 use crate::value::record::Record;
 use crate::vm::bind::{Binding, bind};
 use machine::{Caller, Fiber, Generator, Handler, Landing, Machine};
-use modules::{Module, ModuleId};
+use modules::{Module, ModuleId, PRELUDE};
 use routine::{Next, RAISED, Resumable, Started};
 use tasks::Task;
 
@@ -147,7 +148,7 @@ impl Default for Runtime {
             error_types: HashMap::new(),
             modules: Vec::new(),
             module_ids: HashMap::new(),
-            mark_modules: HashMap::new(),
+            mark_modules: HashMap::from([(PRELUDE_MARK, PRELUDE)]),
             last_raised: None,
             marks: 0,
             interrupter: Interrupter::default(),

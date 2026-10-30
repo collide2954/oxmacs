@@ -30,5 +30,5 @@
   (if-let [layout @saved]
     (do (reset! saved nil)
       (try (arrange-windows layout)
-        (catch error e (message "Cannot restore the layout: {e.message}"))))
+        (catch error e (message $"Cannot restore the layout: {e.message}"))))
     (message "No layout to restore")))

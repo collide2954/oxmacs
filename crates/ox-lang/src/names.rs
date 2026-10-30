@@ -237,15 +237,15 @@ mod tests {
     }
 
     #[test]
-    fn call_heads_see_through_holes_raw_strings_and_comments() {
+    fn call_heads_see_through_holes_verbatim_text_and_comments() {
         assert_eq!(
-            call_head("(msg \"{(if moving \"Moved\" ").as_deref(),
+            call_head("(msg $\"{(if moving \"Moved\" ").as_deref(),
             Some("if")
         );
-        assert_eq!(call_head("(f #r#\"(\"# ").as_deref(), Some("f"));
+        assert_eq!(call_head("(f \"\"\"(\"\"\" ").as_deref(), Some("f"));
         assert_eq!(call_head("(f #| ( |# ").as_deref(), Some("f"));
         assert_eq!(call_head("(f #\"(\" ").as_deref(), Some("f"));
-        assert_eq!(call_head("(f \"{x} open"), None);
+        assert_eq!(call_head("(f $\"{x} open"), None);
     }
 
     #[test]
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(typed_name("(f ; lim"), "");
         assert_eq!(typed_name("(f \"lim"), "");
         assert_eq!(typed_name("(f :ke"), "");
-        assert_eq!(typed_name("\"{(str/jo"), "str/jo");
+        assert_eq!(typed_name("$\"{(str/jo"), "str/jo");
     }
 
     #[test]

@@ -572,7 +572,7 @@ mod tests {
         let (mut editor, mut ox, job) = started(
             r##"(def heard (atom []))
 (console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
-               :prompts [#r#"^Browse\[\d+\]> $"#] :watch {debug: "^debug at "}
+               :prompts ["""^Browse\[\d+\]> $"""] :watch {debug: "^debug at "}
                :on-output (fn [kind payload] (swap! heard conj [kind payload]))
                :on-idle (fn [] (swap! heard conj :idle)))"##,
         );

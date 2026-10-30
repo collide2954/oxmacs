@@ -7,7 +7,7 @@
           parent-of ftp-url can-run? transfer-file local-copy))
 
 (def listing-pattern
-  "^([-dlbcpsD])([-rwxsStT]{{9})\\S*\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{{4}-\\d{{2}-\\d{{2} \\d{{2}:\\d{{2}|[A-Z][a-z]{{2}\\s+\\d{{1,2}\\s+(?:\\d{{4}|\\d{{1,2}:\\d{{2}))\\s(.*)$")
+  "^([-dlbcpsD])([-rwxsStT]{9})\\S*\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}|[A-Z][a-z]{2}\\s+\\d{1,2}\\s+(?:\\d{4}|\\d{1,2}:\\d{2}))\\s(.*)$")
 
 (def (join-path dir name)
   (if (string/ends-with? dir "/") (str dir name) (str dir "/" name)))

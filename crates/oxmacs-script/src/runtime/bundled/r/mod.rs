@@ -135,7 +135,7 @@ impl R {
 }
 
 pub(super) fn ox_text(text: &str) -> String {
-    format!("{text:?}").replace('{', "{{").replace('}', "}}")
+    format!("{text:?}")
 }
 
 pub(super) fn folder() -> PathBuf {

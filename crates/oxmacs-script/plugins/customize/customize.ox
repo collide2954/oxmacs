@@ -67,7 +67,7 @@
 (def (ask entry)
   (let [now (form/effective entry)
         key (name entry.key)
-        answer (await (prompt "{key}: " :initial (if (nil? now) "" (str now))))
+        answer (await (prompt $"{key}: " :initial (if (nil? now) "" (str now))))
         trimmed (string/trim answer)
         whole (= entry.kind :integer)]
     (cond ((and (= trimmed "") (or entry.unset entry.owner)) (change entry nil))
@@ -96,7 +96,7 @@
       (cond ((= entry.kind :toggle) (change entry (not (form/effective entry))))
         ((= entry.kind :choice) (change entry (next-choice entry)))
         ((= entry.kind :theme) (run-command 'load-theme))
-        ((form/structured? entry) (message "Change {(name entry.key)} in init.ox with settings"))
+        ((form/structured? entry) (message $"Change {(name entry.key)} in init.ox with settings"))
         (else (ask entry))))
     (message "No setting here")))
 
@@ -109,7 +109,7 @@
        (await (file/make-dir (path/parent file)))
        (await (file/write file (written/text all)))
        (reload-init)
-       (message "Wrote {(path/abbreviate file)}")))))
+       (message $"Wrote {(path/abbreviate file)}")))))
 
 (defcommand customize-revert "Put back the settings custom.ox and init.ox give"
   (reload-init))

@@ -129,12 +129,12 @@
   nil)
 
 (def (show found)
-  (let [name "git: {(path/name found.root)}"
+  (let [name $"git: {(path/name found.root)}"
         known (when (buffer-exists? name) (with-buffer name (buffer-value :git)))
         git (or known
                 (atom {name: name root: found.root metadata: found.metadata
                        folds: {closed: {} open: {} hidden: {}} diffs: {} snapshot: nil
-                       pane: {name: "git diff: {(path/name found.root)}" file: nil layout: :unified staged: false}}))]
+                       pane: {name: $"git diff: {(path/name found.root)}" file: nil layout: :unified staged: false}}))]
     (reread git)
     (let [state (ensure-diffs git)
           shown (status/render state.snapshot state.folds state.diffs (now))]
@@ -224,7 +224,7 @@
             (do
               (open-file target)
               (when number (goto-line (- number 1))))
-            (message "{row.path} is not in the working tree")))
+            (message $"{row.path} is not in the working tree")))
         (message "Nothing to visit here")))))
 
 (defcommand git-refresh "Read the repository again"
@@ -276,7 +276,7 @@
         [else (act found.git chosen)]))))
 
 (def (describe paths)
-  (if (= (count paths) 1) (first paths) "{(count paths)} files"))
+  (if (= (count paths) 1) (first paths) $"{(count paths)} files"))
 
 (def (change git args)
   (deactivate-mark)
@@ -332,8 +332,8 @@
 (def (throw-away git paths)
   (let [trash (get (settings) :delete-to-trash)]
     (when (await (yes-or-no (if trash
-                              "Move {(describe paths)} to the trash?"
-                              "Delete {(describe paths)}?")))
+                              $"Move {(describe paths)} to the trash?"
+                              $"Delete {(describe paths)}?")))
       (deactivate-mark)
       (map (fn [path]
              (let [full (path/join (get @git :root) path)]
@@ -356,7 +356,7 @@
        (when (await (yes-or-no "Discard all unstaged changes?"))
          (change git ["restore" "--" "."]))]
       [else
-       (when (await (yes-or-no "Discard changes to {(describe chosen.paths)}?"))
+       (when (await (yes-or-no $"Discard changes to {(describe chosen.paths)}?"))
          (change git (vec (concat ["restore" "--"] chosen.paths))))])))
 
 (defcommand git-discard "Discard the changes in the file, section, hunk or lines at point"
@@ -371,7 +371,7 @@
 
 (def (report-commit root)
   (let [parts (string/split (string/trim (repo/git root ["log" "-1" "--format=%h%x1f%s"])) "\u{1f}" 2)]
-    (message "Committed {(nth parts 0)} {(nth parts 1)}")))
+    (message $"Committed {(nth parts 0)} {(nth parts 1)}")))
 
 (def (show-staged git)
   (swap! git (fn [state] (assoc state :pane (assoc state.pane :staged true))))

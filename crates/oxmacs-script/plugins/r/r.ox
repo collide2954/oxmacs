@@ -42,7 +42,7 @@
 (session/on-marker "packages" package/available)
 (session/on-marker "tests" package/tested)
 (session/on-marker "installed" package/installed)
-(session/on-marker "viewer" (fn [_ url] (open-externally url) (message "Opened {url}")))
+(session/on-marker "viewer" (fn [_ url] (open-externally url) (message $"Opened {url}")))
 (on-saved :r-markdown markdown/saved)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)
@@ -126,7 +126,7 @@
 
 (defcommand r-help "Show R's help on a topic in *R help*"
   (let [default (help/symbol-at-point)
-        typed (string/trim (await (prompt (if default "R help on (default {default}): " "R help on: "))))
+        typed (string/trim (await (prompt (if default $"R help on (default {default}): " "R help on: "))))
         topic (if (string/blank? typed) default typed)]
     (when topic
       (pane/ask-help topic))))

@@ -52,7 +52,7 @@
         lines: (map (fn [line] {kind: :added text: line}) lines)}])))
 
 (def (header hunk)
-  "@@ -{hunk.old-start},{hunk.old-count} +{hunk.new-start},{hunk.new-count} @@")
+  $"@@ -{hunk.old-start},{hunk.old-count} +{hunk.new-start},{hunk.new-count} @@")
 
 (def (shown text)
   (if (string/ends-with? text "\r") (string/slice text 0 (- (string/length text) 1)) text))
@@ -71,17 +71,17 @@
                       [(= kind :note)
                        (walk (+ i 1) (if emitted (conj body line.text) body) old new emitted)]
                       [(= kind :context)
-                       (walk (+ i 1) (conj body " {line.text}") (+ old 1) (+ new 1) true)]
+                       (walk (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
                       [(and (= kind :added) picked)
-                       (walk (+ i 1) (conj body "+{line.text}") old (+ new 1) true)]
+                       (walk (+ i 1) (conj body $"+{line.text}") old (+ new 1) true)]
                       [(and (= kind :removed) picked)
-                       (walk (+ i 1) (conj body "-{line.text}") (+ old 1) new true)]
+                       (walk (+ i 1) (conj body $"-{line.text}") (+ old 1) new true)]
                       [(or (and (= kind :added) reverse) (and (= kind :removed) (not reverse)))
-                       (walk (+ i 1) (conj body " {line.text}") (+ old 1) (+ new 1) true)]
+                       (walk (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
                       [else (walk (+ i 1) body old new false)]))))
               0 [] 0 0 false)]
-    (str "diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
-         "@@ -{hunk.old-start},{(nth body 1)} +{hunk.new-start},{(nth body 2)} @@\n"
+    (str $"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
+         $"@@ -{hunk.old-start},{(nth body 1)} +{hunk.new-start},{(nth body 2)} @@\n"
          (string/join "\n" (nth body 0)) "\n")))
 
 (def word-chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")

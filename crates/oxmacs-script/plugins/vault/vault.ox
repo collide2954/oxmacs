@@ -130,7 +130,7 @@
       (raise (error "The vault has no entries yet")))
     (let [title (await (prompt question :choices (vec (map :title (sorted found)))))]
       (or (store/find-entry title)
-          (raise (error "No entry is called {title}"))))))
+          (raise (error $"No entry is called {title}"))))))
 
 (def (target question)
   (or (entry-here) (choose question)))
@@ -140,18 +140,18 @@
 
 (def (copy! value what secret?)
   (when (blank? value)
-    (raise (error "This entry has no {what}")))
+    (raise (error $"This entry has no {what}")))
   (clipboard-set value)
   (store/touch!)
   (if secret?
     (let [mine (inc (get @view :copies))]
       (swap! view assoc :copies mine)
-      (message "Copied the {what}; the clipboard clears in {(clear-after)} seconds")
+      (message $"Copied the {what}; the clipboard clears in {(clear-after)} seconds")
       (spawn (sleep (time/seconds (clear-after)))
         (when (= (get @view :copies) mine)
           (clipboard-set "")
           (message "Cleared the clipboard"))))
-    (message "Copied the {what}")))
+    (message $"Copied the {what}")))
 
 (def (ask question {initial ""})
   (await (prompt question :initial initial)))
@@ -180,7 +180,7 @@
 (defcommand vault-copy-code "Copy the one-time code of a vault entry"
   (let [entry (target "Copy the code of: ")]
     (when (blank? entry.totp)
-      (raise (error "{entry.title} has no one-time code")))
+      (raise (error $"{entry.title} has no one-time code")))
     (copy! (code entry) "code" true)))
 
 (defcommand vault-reveal "Show or hide the password of the entry"
@@ -204,7 +204,7 @@
                  totp: (ask "One-time code secret or otpauth link (optional): ")
                  notes: ""})
     (redraw-list)
-    (message "Added {title}")))
+    (message $"Added {title}")))
 
 (defcommand vault-edit "Change a field of a vault entry"
   (let [entry (target "Edit: ")
@@ -212,20 +212,20 @@
         key (keyword field)
         value (if (= field "password")
                 (ask-password "New password (empty makes one): ")
-                (ask "{field}: " :initial (text (get entry key))))]
+                (ask $"{field}: " :initial (text (get entry key))))]
     (store/change! entry.id (fn [old] (assoc old key value)))
     (redraw-list)
     (redraw-entry)
-    (message "Changed the {field} of {entry.title}")))
+    (message $"Changed the {field} of {entry.title}")))
 
 (defcommand vault-delete "Delete a vault entry"
   (let [entry (target "Delete: ")]
-    (when (await (yes-or-no "Delete {entry.title} from the vault? "))
+    (when (await (yes-or-no $"Delete {entry.title} from the vault? "))
       (store/remove! entry.id)
       (when (= (get @view :shown) entry.id)
         (close-buffer entry-buffer))
       (redraw-list)
-      (message "Deleted {entry.title}"))))
+      (message $"Deleted {entry.title}"))))
 
 (defcommand vault-lock "Lock the password vault now"
   (store/lock)
@@ -238,7 +238,7 @@
         made (cond ((= kind "passphrase") (store/passphrase))
                ((= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6))))
                (else (store/generate)))]
-    (copy! made "new {kind}" true)))
+    (copy! made $"new {kind}" true)))
 
 (def (imported kind)
   (cond ((= kind "keepass")
@@ -247,7 +247,7 @@
     ((= kind "bitwarden") (import/bitwarden (await (file/read (await (prompt-path "Bitwarden CSV: "))))))
     ((= kind "1password") (import/one-password (await (file/read (await (prompt-path "1Password CSV: "))))))
     ((= kind "pass") (import/pass))
-    (else (raise (error "oxmacs can't import from {kind}")))))
+    (else (raise (error $"oxmacs can't import from {kind}")))))
 
 (defcommand vault-import "Import passwords from KeePass, Bitwarden, 1Password or pass"
   (store/unlock)
@@ -258,4 +258,4 @@
         found (imported kind)
         added (store/add-all! found)]
     (redraw-list)
-    (message "Imported {added} of {(count found)} entries; the others were already there")))
+    (message $"Imported {added} of {(count found)} entries; the others were already there")))

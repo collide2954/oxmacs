@@ -1018,19 +1018,19 @@ mod tests {
     }
 
     #[test]
-    fn the_expression_before_point_understands_raw_strings_comments_and_holes() {
+    fn the_expression_before_point_understands_verbatim_text_comments_and_holes() {
         let last = |text: &str| last_expression(text).map(|span| text[span].to_owned());
 
         assert_eq!(
-            last("(def p #r\"C:\\dir\\\")").as_deref(),
-            Some("(def p #r\"C:\\dir\\\")")
+            last("(def p \"\"\"C:\\dir\\\"\"\")").as_deref(),
+            Some("(def p \"\"\"C:\\dir\\\"\"\")")
         );
         assert_eq!(
-            last("(f #r\"C:\\dir\\\"").as_deref(),
-            Some("#r\"C:\\dir\\\"")
+            last("(f \"\"\"C:\\dir\\\"\"\"").as_deref(),
+            Some("\"\"\"C:\\dir\\\"\"\"")
         );
         assert_eq!(last("(f x #| (g |# ").as_deref(), Some("x"));
-        assert_eq!(last("(msg \"a {(f 1)").as_deref(), Some("(f 1)"));
+        assert_eq!(last("(msg $\"a {(f 1)").as_deref(), Some("(f 1)"));
         assert_eq!(last("(f \"open").as_deref(), Some("\"open"));
         assert_eq!(last("(f #\"\\d{4}\"").as_deref(), Some("#\"\\d{4}\""));
     }

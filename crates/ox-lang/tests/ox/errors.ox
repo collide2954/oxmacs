@@ -33,12 +33,12 @@
 (try 1 (finally 2)) ;=> 1
 
 ;; deferror defines error types with message templates
-(deferror http-error [status url] "Request to {url} failed with {status}") (try (raise (http-error 404 "x.org")) (catch http-error e [e.status e.message])) ;=> [404 "Request to x.org failed with 404"]
+(deferror http-error [status url] $"Request to {url} failed with {status}") (try (raise (http-error 404 "x.org")) (catch http-error e [e.status e.message])) ;=> [404 "Request to x.org failed with 404"]
 (deferror oops []) (try (raise (oops)) (catch error e e.message)) ;=> "oops"
 (deferror oops []) (try (raise (oops)) (catch zero-division-error e :wrong) (catch oops e :right)) ;=> :right
 (deferror oops []) (oops) ;=> #oops{message: "oops" traceback: nil}
 (deferror oops []) (raise (oops)) ;! oops
-(deferror parse-error [line {column 0}] "Bad input at {line}:{column}") [(get (parse-error 3) :message) (get (parse-error 3 :column 7) :message)] ;=> ["Bad input at 3:0" "Bad input at 3:7"]
+(deferror parse-error [line {column 0}] $"Bad input at {line}:{column}") [(get (parse-error 3) :message) (get (parse-error 3 :column 7) :message)] ;=> ["Bad input at 3:0" "Bad input at 3:7"]
 (deferror parse-error [line {column 0}]) (parse-error 3) ;=> #parse-error{line: 3 column: 0 message: "parse-error" traceback: nil}
 (defrecord plain [x]) (try (raise (plain 1)) (catch error e :error) (catch _ e :plain)) ;=> :plain
 

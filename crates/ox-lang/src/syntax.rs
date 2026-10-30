@@ -72,11 +72,19 @@ impl Token {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Context {
-    String,
+    String { holes: bool, fence: usize },
     Hole(usize),
     Raw(usize),
-    Regex { escaped: bool },
+    Regex { escaped: bool, fence: usize },
     Block(usize),
+}
+
+fn quotes(text: &str) -> usize {
+    text.len() - text.trim_start_matches('"').len()
+}
+
+fn fence_of(run: usize) -> usize {
+    if run >= 3 { run } else { 1 }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -94,7 +102,7 @@ impl State {
     pub fn in_string(&self) -> bool {
         matches!(
             self.0.last(),
-            Some(Context::String | Context::Raw(_) | Context::Regex { .. })
+            Some(Context::String { .. } | Context::Raw(_) | Context::Regex { .. })
         )
     }
 
@@ -131,6 +139,12 @@ pub fn tokens(source: &str, state: &State) -> (Vec<Token>, State) {
     (found, lexer.state())
 }
 
+pub fn legacy_tokens(source: &str) -> Vec<Token> {
+    let mut lexer = Lexer::new(source, State::default());
+    lexer.legacy = true;
+    lexer.collect()
+}
+
 pub fn state_after(source: &str, state: &State) -> State {
     let mut lexer = Lexer::new(source, state.clone());
     lexer.by_ref().for_each(drop);
@@ -142,6 +156,7 @@ pub struct Lexer<'a> {
     source: &'a str,
     at: usize,
     stack: Vec<Context>,
+    legacy: bool,
 }
 
 impl<'a> Lexer<'a> {
@@ -150,6 +165,7 @@ impl<'a> Lexer<'a> {
             source,
             at: 0,
             stack: state.0,
+            legacy: false,
         }
     }
 
@@ -213,25 +229,33 @@ impl<'a> Lexer<'a> {
         self.emit(Kind::Raw { closed: false }, start)
     }
 
-    fn regex(&mut self, start: usize, mut escaped: bool) -> Token {
-        while let Some(character) = self.advance_char() {
-            if character == '"' && !escaped {
+    fn regex(&mut self, start: usize, mut escaped: bool, fence: usize) -> Token {
+        loop {
+            let rest = self.rest();
+            if fence > 1 && quotes(rest) >= fence {
+                self.at += fence;
                 return self.emit(Kind::Regex { closed: true }, start);
             }
-            escaped = character == '\\' && !escaped;
+            let Some(character) = self.advance_char() else {
+                break;
+            };
+            if fence == 1 && character == '"' && !escaped {
+                return self.emit(Kind::Regex { closed: true }, start);
+            }
+            escaped = fence == 1 && character == '\\' && !escaped;
         }
-        self.stack.push(Context::Regex { escaped });
+        self.stack.push(Context::Regex { escaped, fence });
         self.emit(Kind::Regex { closed: false }, start)
     }
 
-    fn string(&mut self, start: usize) -> Token {
+    fn string(&mut self, start: usize, holes: bool, fence: usize) -> Token {
         let rest = self.rest();
-        if rest.starts_with('"') {
-            self.at += 1;
+        if quotes(rest) >= fence {
+            self.at += fence;
             self.stack.pop();
             return self.emit(Kind::StringEnd, start);
         }
-        if rest.starts_with('\\') {
+        if fence == 1 && rest.starts_with('\\') {
             self.at += 1;
             if self.rest().starts_with("u{") {
                 match self.rest().find('}') {
@@ -243,20 +267,34 @@ impl<'a> Lexer<'a> {
             }
             return self.emit(Kind::Escape, start);
         }
-        if rest.starts_with("{{") || rest.starts_with("}}") {
+        if holes && (rest.starts_with("{{") || rest.starts_with("}}")) {
             self.at += 2;
             return self.emit(Kind::Escape, start);
         }
-        if rest.starts_with('{') {
+        if holes && rest.starts_with('{') {
             self.at += 1;
             self.stack.push(Context::Hole(0));
             return self.emit(Kind::HoleStart, start);
         }
-        let mut characters = rest.char_indices().peekable();
+        if holes && rest.starts_with('}') {
+            self.at += 1;
+            return self.emit(Kind::Text, start);
+        }
         let mut length = rest.len();
+        let mut characters = rest.char_indices();
         while let Some((offset, character)) = characters.next() {
-            let ends = matches!(character, '"' | '\\' | '{')
-                || (character == '}' && characters.peek().is_some_and(|(_, next)| *next == '}'));
+            let ends = match character {
+                '"' => {
+                    let run = quotes(&rest[offset..]);
+                    if run < fence && run > 1 {
+                        characters.nth(run - 2);
+                    }
+                    run >= fence
+                }
+                '\\' => fence == 1,
+                '{' | '}' => holes,
+                _ => false,
+            };
             if ends {
                 length = offset;
                 break;
@@ -318,8 +356,13 @@ impl<'a> Lexer<'a> {
             return self.raw(start, hashes);
         }
         if rest.starts_with("#\"") {
-            self.at += 2;
-            return self.regex(start, false);
+            let fence = if self.legacy {
+                1
+            } else {
+                fence_of(quotes(&rest[1..]))
+            };
+            self.at += 1 + fence;
+            return self.regex(start, false, fence);
         }
         if rest.starts_with("#|") {
             self.at += 2;
@@ -371,7 +414,7 @@ impl<'a> Lexer<'a> {
             '~' if rest.starts_with("~@") => Some((Prefix::Splice, 2)),
             '~' => prefix(Prefix::Unquote),
             '@' => prefix(Prefix::Deref),
-            ':' if rest.starts_with(":\"") => prefix(Prefix::Keyword),
+            ':' if rest.starts_with(":\"") || rest.starts_with(":$\"") => prefix(Prefix::Keyword),
             _ => None,
         };
         if let Some((prefix, length)) = marked {
@@ -388,8 +431,20 @@ impl<'a> Lexer<'a> {
             '{' => self.opened(Bracket::Map, 1, start),
             ')' | ']' | '}' => self.closed(start),
             '"' => {
-                self.at += 1;
-                self.stack.push(Context::String);
+                let fence = if self.legacy {
+                    1
+                } else {
+                    fence_of(quotes(rest))
+                };
+                self.at += fence;
+                let holes = self.legacy;
+                self.stack.push(Context::String { holes, fence });
+                self.emit(Kind::StringStart, start)
+            }
+            '$' if !self.legacy && rest[1..].starts_with('"') => {
+                let fence = fence_of(quotes(&rest[1..]));
+                self.at += 1 + fence;
+                self.stack.push(Context::String { holes: true, fence });
                 self.emit(Kind::StringStart, start)
             }
             '\\' => self.character(start),
@@ -420,14 +475,14 @@ impl Iterator for Lexer<'_> {
         }
         match self.stack.last().copied() {
             None | Some(Context::Hole(_)) => self.code(start),
-            Some(Context::String) => Some(self.string(start)),
+            Some(Context::String { holes, fence }) => Some(self.string(start, holes, fence)),
             Some(Context::Raw(hashes)) => {
                 self.stack.pop();
                 Some(self.raw(start, hashes))
             }
-            Some(Context::Regex { escaped }) => {
+            Some(Context::Regex { escaped, fence }) => {
                 self.stack.pop();
-                Some(self.regex(start, escaped))
+                Some(self.regex(start, escaped, fence))
             }
             Some(Context::Block(depth)) => {
                 self.stack.pop();
@@ -525,9 +580,9 @@ mod tests {
     #[test]
     fn strings_split_into_text_escapes_and_holes_that_may_hold_strings() {
         assert_eq!(
-            kinds(r#""a\n{{ {(f "}")} b}""#),
+            kinds(r#"$"a\n{{ {(f "}")} b}}""#),
             [
-                (Kind::StringStart, "\""),
+                (Kind::StringStart, "$\""),
                 (Kind::Text, "a"),
                 (Kind::Escape, "\\n"),
                 (Kind::Escape, "{{"),
@@ -540,8 +595,23 @@ mod tests {
                 (Kind::StringEnd, "\""),
                 (Kind::Close, ")"),
                 (Kind::HoleEnd, "}"),
-                (Kind::Text, " b}"),
+                (Kind::Text, " b"),
+                (Kind::Escape, "}}"),
                 (Kind::StringEnd, "\""),
+            ]
+        );
+        assert_eq!(
+            kinds(r#""a {b} \"c\"" """x "q" \y""""#),
+            [
+                (Kind::StringStart, "\""),
+                (Kind::Text, "a {b} "),
+                (Kind::Escape, "\\\""),
+                (Kind::Text, "c"),
+                (Kind::Escape, "\\\""),
+                (Kind::StringEnd, "\""),
+                (Kind::StringStart, "\"\"\""),
+                (Kind::Text, "x \"q\" \\y"),
+                (Kind::StringEnd, "\"\"\""),
             ]
         );
     }
@@ -549,7 +619,7 @@ mod tests {
     #[test]
     fn maps_inside_holes_close_before_the_hole_does() {
         assert_eq!(
-            kinds(r#""{(get {a: 1} :a)}""#)
+            kinds(r#"$"{(get {a: 1} :a)}""#)
                 .into_iter()
                 .map(|(kind, _)| kind)
                 .filter(|kind| matches!(kind, Kind::Close | Kind::HoleEnd))
@@ -591,7 +661,7 @@ mod tests {
     #[test]
     fn lines_resume_where_the_last_one_stopped() {
         let lines = [
-            "(def doc \"one {(f",
+            "(def doc $\"one {(f",
             " \"x\")} two",
             "three\" #| a",
             "b |# #r#\"c",
@@ -636,7 +706,9 @@ mod tests {
 
         assert!(after("(a b").in_code());
         assert!(after("\"open").in_string());
-        assert!(after("\"x {(f").in_code());
+        assert!(after("$\"x {(f").in_code());
+        assert!(after("\"x {(f").in_string());
+        assert!(after("\"\"\"\nx").in_string());
         assert!(after("#\"re").in_string());
         assert!(after("#| c").in_comment());
     }

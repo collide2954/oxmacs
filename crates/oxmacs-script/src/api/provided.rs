@@ -365,8 +365,8 @@ mod tests {
   :complete (fn [explicit] (if explicit ["alpha" "alps"] ["alpha"]))
   :signature (fn [] (when (> (point) 0) "(greet name)"))
   :docs (fn [] (if (> (point) 0) "Greets someone." nil))
-  :definition (fn [] {file: "{(oxmacs-home)}/b.note" line: 2})
-  :references (fn [] [{file: "{(oxmacs-home)}/b.note" line: 1} {file: "{(oxmacs-home)}/b.note" line: 3}]))"#;
+  :definition (fn [] {file: $"{(oxmacs-home)}/b.note" line: 2})
+  :references (fn [] [{file: $"{(oxmacs-home)}/b.note" line: 1} {file: $"{(oxmacs-home)}/b.note" line: 3}]))"#;
 
     fn noting(text: &str) -> (tempfile::TempDir, Editor, crate::Ox) {
         let (home, mut editor, mut ox) = started(NOTES);

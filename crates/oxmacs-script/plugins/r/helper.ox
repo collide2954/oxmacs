@@ -1,6 +1,7 @@
 (module (import (ox file) (ox path) (ox crypto)) (export script write))
 
-(def script #r#"local({
+(def script """
+local({
   original <- Sys.getenv("OXMACS_R_PROFILE_USER")
   if (nzchar(original)) {
     Sys.setenv(R_PROFILE_USER = original)
@@ -395,12 +396,13 @@ local({
   )
 })
 options(prompt = "\001>\002\003", continue = "\001+\002\003")
-"#)
+
+""")
 
 (def (write)
   "Writes the helper R reads as its profile to a file of its own and returns a promise of its path."
   (let [folder (path/join (path/temp) "oxmacs")
-        file (path/join folder "r-{(crypto/random 8)}.R")]
+        file (path/join folder $"r-{(crypto/random 8)}.R")]
     (spawn (await (file/make-dir folder))
       (await (file/write file script))
       file)))

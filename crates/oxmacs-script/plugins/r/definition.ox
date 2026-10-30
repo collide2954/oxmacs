@@ -13,7 +13,7 @@
 
 (def (assigns? text name equals)
   (let [trimmed (string/trim-start text)
-        after (cond ((string/starts-with? trimmed "`{name}`")
+        after (cond ((string/starts-with? trimmed $"`{name}`")
                      (string/slice trimmed (+ (string/length name) 2)))
                 ((and (string/starts-with? trimmed name)
                       (not (regex/matches? #"^[\p{L}\p{N}._]" (string/slice trimmed (string/length name)))))
@@ -92,10 +92,10 @@
         ((in-project name origin) true)
         ((and (session/running? running) (console-waiting? running))
          (reset! asked {name: name origin: origin})
-         (session/request running "getOption(\"oxmacs\")$definition({(session/r-string name)})")
+         (session/request running $"getOption(\"oxmacs\")$definition({(session/r-string name)})")
          true)
         ((language/ready?) nil)
-        (else (message "No definition of {name} in open R buffers or the project") true)))
+        (else (message $"No definition of {name} in open R buffers or the project") true)))
     (cond ((language/ready?) nil)
       (else (message "No symbol at point") true))))
 
@@ -112,8 +112,8 @@
                      path (if (> (count pieces) 1) (string/join "\t" (pop pieces)) place)
                      at (if (> (count pieces) 1) (or (string/to-number (last pieces)) 1) 1)]
                  (unless (visit path (- at 1) question.origin)
-                   (message "Cannot open {path}"))))
+                   (message $"Cannot open {path}"))))
           ((= kind "source")
            (apply remember-location question.origin)
-           (show-text "*R source: {name}*" place :mode "R" :read-only true))
-          (else (message "No definition of {name} found")))))))
+           (show-text $"*R source: {name}*" place :mode "R" :read-only true))
+          (else (message $"No definition of {name} found")))))))

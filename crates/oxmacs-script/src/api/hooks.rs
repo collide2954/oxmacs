@@ -422,7 +422,7 @@ mod tests {
                 "lister.ox",
                 r#"(module (import (ox path)))
 (defcommand list-dir "List a directory" (message "listing"))
-(on-open-directory (fn [dir] (message "opened {(path/name dir)}")))"#,
+(on-open-directory (fn [dir] (message $"opened {(path/name dir)}")))"#,
             ),
         ],
     };
@@ -621,7 +621,7 @@ mod tests {
             (
                 "reader.ox",
                 r#"(module (import (ox path)))
-(on-open-file "book" (fn [place] (message "reading {(path/name place)}")))"#,
+(on-open-file "book" (fn [place] (message $"reading {(path/name place)}")))"#,
             ),
         ],
     };

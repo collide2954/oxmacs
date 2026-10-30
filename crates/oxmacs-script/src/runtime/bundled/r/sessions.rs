@@ -267,7 +267,7 @@ fn code_from_a_script_is_echoed_line_by_line_as_r_reads_it() {
     let (mut r, job) = running_r();
     r.output(job, PROMPT);
 
-    r.eval(r#"(module (import (r session))) (session/evaluate "*R:analysis*" "x <- 1\nf <- function() {{\n1\n}}")"#);
+    r.eval(r#"(module (import (r session))) (session/evaluate "*R:analysis*" "x <- 1\nf <- function() {\n1\n}")"#);
 
     assert_eq!(r.sent(), ["x <- 1\nf <- function() {\n1\n}\n"]);
     assert_eq!(r.contents(), "> x <- 1\n");

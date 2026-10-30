@@ -3,7 +3,8 @@
 (def page
   {id: "language"
    title: "The language"
-   text: #r##"# The language
+   text: """"
+# The language
 
 An Ox program is a series of forms. A list `(f a b)` calls `f` with `a` and `b`; any other form is a value, or the value of a name.
 
@@ -15,8 +16,8 @@ An Ox program is a series of forms. A list `(f a b)` calls `f` with `a` and `b`;
 ## Values
 
 - Numbers: `42`, `-3.5`, `1e3`. Whole numbers grow as large as they need to. `/` always gives a float and `//` a whole number; `=` tells `1` from `1.0`, and `==` doesn't.
-- Strings: `"text"`, with `\n`, `\t`, `\"`, `\\` and `\u{263A}` escapes. `{expression}` inside a string inserts its value; write `{{` and `}}` for braces.
-- Raw strings: `#r"C:\temp\{x}"` keeps backslashes and braces as they are. Write `#r#"…"#` when the text holds a quote.
+- Strings: `"text"`, with `\n`, `\t`, `\"`, `\\` and `\u{263A}` escapes; braces are ordinary characters. With a `$` in front, `$"Hi {name}"` puts the value of each `{expression}` in its place, and `{{` and `}}` write braces.
+- Text taken as it is: `"""C:\temp\{x}"""` keeps backslashes, quotes and braces. A block starts on the line after `"""` and ends on the line before the closing `"""`, whose indentation every line loses; four or more quotes fence text that holds three. `$"""…"""` fills holes the same way, and `ox migrate --strings` rewrites files written for Ox before 0.15.
 - Keywords: `:name`, or `name:` in front of a value. They name things, mostly as map keys. A name with spaces or other odd characters, as data read from JSON, CSV, XML or HTTP headers can have, is written `:"Unit Price"`.
 - Symbols: `'name` is a name as data, as when `(bind-key "C-c h" 'hello)` names a command.
 - `true`, `false` and `nil`. Only `false` and `nil` are false; `0`, `""` and `[]` are true.
@@ -25,7 +26,7 @@ An Ox program is a series of forms. A list `(f a b)` calls `f` with `a` and `b`;
 
 ```
 (let [name "Ana"]
-  "Hello, {name}! You have {(+ 1 2)} new messages.")
+  $"Hello, {name}! You have {(+ 1 2)} new messages.")
 [(/ 7 2) (// 7 2) (= 1 1.0) (== 1 1.0)]
 ```
 
@@ -60,7 +61,7 @@ Parameters can have defaults, collect the rest, or be passed by name:
 
 ```
 (def (greet name (greeting "Hello") {loud false})
-  (let [text "{greeting}, {name}"]
+  (let [text $"{greeting}, {name}"]
     (if loud (str text "!") text)))
 (greet "Ana")
 (greet "Bo" "Hi" :loud true)
@@ -96,4 +97,5 @@ Each file is a module. Its header imports other modules and can list what it exp
 ```
 
 Imported names are called with the module's last word or alias: `string/split`, `js/read`. Built-in names such as `map` and `str` need no import, and the `ox/...` modules need only the import; everything more comes from plugins, which serve as Ox's standard library. [Modules and libraries](modules) covers both, and the [reference](ref:ox) lists every name.
-"##})
+
+""""})

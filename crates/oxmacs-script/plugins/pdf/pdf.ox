@@ -27,7 +27,7 @@
   (cond
     [(number? target) (move state {page: target})]
     [(reading/safe-link? target) (open-externally target)]
-    [else (message "Link: {target}")]))
+    [else (message $"Link: {target}")]))
 
 (def (render state)
   (fn []
@@ -39,7 +39,7 @@
                     (when doc.missing
                       (ui/button "Open the tool list" :on-click (fn [] (run-command 'list-tools))))
                     :spacing 14)]
-        [(nil? doc.pages) (ui/column (ui/space 40) (ui/text "Opening {(path/name doc.path)}…" :face :comment))]
+        [(nil? doc.pages) (ui/column (ui/space 40) (ui/text $"Opening {(path/name doc.path)}…" :face :comment))]
         [else
          (ui/pdf doc.path
                  :revision doc.revision
@@ -94,7 +94,7 @@
     (load state)
     (let [doc @state]
       (when doc.pages
-        (message "{(or doc.title (path/stem place))}{(if doc.author " by {doc.author}" "")} · {doc.pages} pages")))))
+        (message $"{(or doc.title (path/stem place))}{(if doc.author $" by {doc.author}" "")} · {doc.pages} pages")))))
 
 (on-open-file "pdf" (fn [place] (open-document place)))
 
@@ -102,7 +102,7 @@
                 (fn []
                   (each [name (buffer-list)]
                     (when-let [state (with-buffer name (buffer-value :pdf))]
-                      (when (load state) (message "Reloaded {name}"))))))
+                      (when (load state) (message $"Reloaded {name}"))))))
 
 (on-window-change :pdf (fn [] (show-place)))
 
@@ -150,10 +150,10 @@
 (defcommand pdf-goto-page "Go to a page by its number"
   (with-doc
     (fn [state doc]
-      (let [answer (await (prompt "Go to page (1-{doc.pages}): "))]
+      (let [answer (await (prompt $"Go to page (1-{doc.pages}): "))]
         (if-let [page (reading/page-number answer doc.pages)]
           (to-page state doc page)
-          (message "There is no page {answer}"))))))
+          (message $"There is no page {answer}"))))))
 
 (def (zoom-to state zoom)
   (swap! state assoc :zoom zoom))
@@ -192,12 +192,12 @@
   (let [doc @state
         at (reading/step doc.matches doc.match (or doc.page 0) by)]
     (if (nil? at)
-      (message "No match for {doc.query}")
+      (message $"No match for {doc.query}")
       (let [found (nth doc.matches at)
             rect (first found.rects)]
         (swap! state assoc :match at)
         (move state {page: found.page y: (if rect (nth rect 1) 0)})
-        (message "{(inc at)} of {(count doc.matches)} for {doc.query}")))))
+        (message $"{(inc at)} of {(count doc.matches)} for {doc.query}")))))
 
 (defcommand pdf-search "Search the document, marking every match"
   (with-doc
@@ -223,7 +223,7 @@
 
 (defcommand pdf-info "Say what document this is and where you are in it"
   (with-doc (fn [_ doc]
-              (message "{(or doc.title (path/name doc.path))}{(if doc.author " by {doc.author}" "")} · page {(inc (or doc.page 0))} of {doc.pages}"))))
+              (message $"{(or doc.title (path/name doc.path))}{(if doc.author $" by {doc.author}" "")} · page {(inc (or doc.page 0))} of {doc.pages}"))))
 
 (defcommand pdf-reload "Read the document again"
-  (with-doc (fn [state _] (load state) (message "Read {(buffer-name)} again"))))
+  (with-doc (fn [state _] (load state) (message $"Read {(buffer-name)} again"))))

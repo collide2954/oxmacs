@@ -33,5 +33,5 @@
   (map (fn [span] [(nth span 2) (nth span 0) (nth span 1)]) (get (lexer/lex spec text nil) :spans)))
 
 (test "C++ adds its keywords and nullptr to C's"
-  (expect (= (faces cpp "class A : public B {{ auto p = nullptr; }};")
+  (expect (= (faces cpp "class A : public B { auto p = nullptr; };")
              [[:keyword 0 5] [:keyword 10 16] [:keyword 21 25] [:constant 30 37]])))

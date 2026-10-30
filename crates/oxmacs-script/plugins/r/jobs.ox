@@ -13,15 +13,15 @@
     (let [script (language/rscript program)]
       (if (await (file/exists? script))
         script
-        (do (message "Rscript was not found beside {program}") nil)))))
+        (do (message $"Rscript was not found beside {program}") nil)))))
 
 (defcommand r-run-job "Run the R script in a background job, apart from the session"
   (let [file (buffer-file)]
     (if (and file (= (buffer-language) "R"))
       (when-let [script (rscript)]
         (run-command 'save-buffer)
-        (start "*R job: {(path/name file)}*" script [file] (or (session/project-here) (path/parent file))
-               :title "Rscript {(path/name file)}"))
+        (start $"*R job: {(path/name file)}*" script [file] (or (session/project-here) (path/parent file))
+               :title $"Rscript {(path/name file)}"))
       (message "Run a saved R script as a job"))))
 
 (def (app? folder)
@@ -39,12 +39,12 @@
 (def (heard-app line)
   (when-let [hit (regex/find #"Listening on (https?://\S+)" line)]
     (open-externally (first hit.groups))
-    (message "Opened {(first hit.groups)}")))
+    (message $"Opened {(first hit.groups)}")))
 
 (defcommand r-run-app "Run the Shiny app of this folder in a background job and open it"
   (if-let [folder (app-folder)]
     (when-let [script (rscript)]
-      (start "*R app: {(path/name folder)}*" script
-             ["-e" "options(shiny.autoreload = TRUE); shiny::runApp({(session/r-string folder)}, launch.browser = FALSE)"]
-             folder :on-line heard-app :title "Shiny app in {folder}"))
+      (start $"*R app: {(path/name folder)}*" script
+             ["-e" $"options(shiny.autoreload = TRUE); shiny::runApp({(session/r-string folder)}, launch.browser = FALSE)"]
+             folder :on-line heard-app :title $"Shiny app in {folder}"))
     (message "No Shiny app here: it needs app.R, or ui.R and server.R")))

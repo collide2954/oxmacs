@@ -33,7 +33,7 @@
     (if (nil? unit)
       "just now"
       (let [n (// seconds (nth unit 0))]
-        "{n} {(nth unit 1)}{(if (= n 1) "" "s")} ago"))))
+        $"{n} {(nth unit 1)}{(if (= n 1) "" "s")} ago"))))
 
 (def (segment-width segment)
   (string/length (str (if (string? segment) segment (nth segment 0)))))
@@ -66,14 +66,14 @@
     (if upstream
       (add out {kind: :info}
            [["Upstream: " :comment] [upstream.name :function :pill] "  "
-            ["↑{upstream.ahead}" (if (> upstream.ahead 0) :success :comment)] " "
-            ["↓{upstream.behind}" (if (> upstream.behind 0) :warning :comment)]])
+            [$"↑{upstream.ahead}" (if (> upstream.ahead 0) :success :comment)] " "
+            [$"↓{upstream.behind}" (if (> upstream.behind 0) :warning :comment)]])
       out)))
 
 (def (heading out section n folds)
   (add out {kind: :section section: section}
        (vec (concat [[(get titles section) :heading]]
-                    (if n [[" ({n})" :comment]] [])
+                    (if n [[$" ({n})" :comment]] [])
                     (if (get folds.closed section) [[" …" :comment]] [])))))
 
 (def (letter section kind)
@@ -86,14 +86,14 @@
     [else
      (let [added (nth counted 0)
            removed (nth counted 1)]
-       (vec (concat (if (> added 0) [["+{added}" :success]] [])
+       (vec (concat (if (> added 0) [[$"+{added}" :success]] [])
                     (if (and (> added 0) (> removed 0)) [" "] [])
-                    (if (> removed 0) [["-{removed}" :error]] []))))]))
+                    (if (> removed 0) [[$"-{removed}" :error]] []))))]))
 
 (def (file-line section change column counted)
   (let [shown (letter section change.kind)
         segments ["  " [(nth shown 0) (nth shown 1) :pill] "  " change.path]
-        segments (if change.from (conj segments [" ← {change.from}" :comment]) segments)]
+        segments (if change.from (conj segments [$" ← {change.from}" :comment]) segments)]
     (if (and counted (not (= counted [0 0])))
       (vec (concat (pad-past segments column) (stats counted)))
       segments)))

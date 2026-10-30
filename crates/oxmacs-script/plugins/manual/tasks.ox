@@ -3,7 +3,8 @@
 (def page
   {id: "tasks"
    title: "Tasks, time and I/O"
-   text: #r#"# Tasks, time and I/O
+   text: """
+# Tasks, time and I/O
 
 Ox code runs in small slices between keystrokes, so it never freezes the editor. Anything slow, such as reading a file or a web page, returns a promise, and `await` waits for it without blocking anything else.
 
@@ -117,4 +118,5 @@ oxmacs runs tasks a few milliseconds at a time between keystrokes, so a long loo
 - `init.ox`, `custom.ox`, loading a plugin and the REPL are stopped after 10 seconds.
 
 `*ox log*` then says "This took longer than 250 ms and was stopped", and `try` can't catch it. Code you evaluate in an Ox buffer runs as a task, and `C-c C-c` stops it. Keep slow work in a task: `spawn` it, and keep its result in an atom that the view reads.
-"#})
+
+"""})

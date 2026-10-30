@@ -14,14 +14,14 @@
         unit (string/replace forecast.temperature-unit "°" "")
         today (first forecast.days)]
     (column
-     (line "Now" "{(f/describe now.condition)}, {(f/degrees now.temperature)}{unit}, feels like {(f/degrees now.feels-like)}{unit}")
-     (line "" "Humidity {(f/percent now.humidity)}   Wind {(round now.wind-speed)} {forecast.wind-unit} from {(f/compass now.wind-direction)}")
+     (line "Now" $"{(f/describe now.condition)}, {(f/degrees now.temperature)}{unit}, feels like {(f/degrees now.feels-like)}{unit}")
+     (line "" $"Humidity {(f/percent now.humidity)}   Wind {(round now.wind-speed)} {forecast.wind-unit} from {(f/compass now.wind-direction)}")
      (when (and today today.sunrise today.sunset)
-       (line "" "Sunrise {(f/clock today.sunrise)}   Sunset {(f/clock today.sunset)}"))
-     (line "" "As of {(f/clock now.time)} local time"))))
+       (line "" $"Sunrise {(f/clock today.sunrise)}   Sunset {(f/clock today.sunset)}"))
+     (line "" $"As of {(f/clock now.time)} local time"))))
 
 (def (hour-line hour)
-  (line "" "{(f/clock hour.time)}  {(string/pad-start (f/degrees hour.temperature) 4)}  {(string/pad-start (f/percent hour.rain) 4)}  {(f/describe hour.condition)}"))
+  (line "" $"{(f/clock hour.time)}  {(string/pad-start (f/degrees hour.temperature) 4)}  {(string/pad-start (f/percent hour.rain) 4)}  {(f/describe hour.condition)}"))
 
 (def (hours-section forecast)
   (let [hours (f/upcoming forecast 24)]
@@ -34,7 +34,7 @@
        (map (fn [i] (hour-line (nth hours i))) (range 0 (count hours) 3))))))
 
 (def (day-line day)
-  (line "" "{(f/weekday day.date)} {(string/pad-start (str day.date.day) 2)}  {(string/pad-start (f/degrees day.low) 4)} / {(string/pad-end (f/degrees day.high) 4)}  {(string/pad-start (f/percent day.rain) 4)}  {(f/describe day.condition)}"))
+  (line "" $"{(f/weekday day.date)} {(string/pad-start (str day.date.day) 2)}  {(string/pad-start (f/degrees day.low) 4)} / {(string/pad-end (f/degrees day.high) 4)}  {(string/pad-start (f/percent day.rain) 4)}  {(f/describe day.condition)}"))
 
 (def (days-section forecast)
   (unless (empty? forecast.days)
@@ -51,7 +51,7 @@
 (def (page state location)
   (let [forecast state.forecast]
     (scrollable
-     (column (row (text "Weather" :face :heading) (text "  {(place-name state location)}"))
+     (column (row (text "Weather" :face :heading) (text $"  {(place-name state location)}"))
              (text "g refreshes   q quits" :face :comment)
              (space 8)
              (when state.problem (text state.problem :face :error))

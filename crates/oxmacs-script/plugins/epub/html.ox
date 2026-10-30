@@ -123,7 +123,7 @@
                ordered (= tag "ol")
                state (flush state kind)]
            (reduce (fn [state [at item]]
-                     (let [marker (if ordered "{(inc at)}." (if (even? depth) "•" "◦"))]
+                     (let [marker (if ordered $"{(inc at)}." (if (even? depth) "•" "◦"))]
                        (walk state item style {kind: :item marker: marker depth: depth} entry)))
                    state
                    (zip (range (count items)) items)))]
@@ -163,11 +163,11 @@
               {kind: :item marker: "2." depth: 0 runs: ["Two"]}])))
 
 (test "line breaks keep verse lines and pre keeps its lines"
-  (expect (= (get (read "<body><p>Tyger Tyger,<br/>burning bright</p><pre>\nfn main() {{\n}}\n</pre></body>") :blocks)
+  (expect (= (get (read "<body><p>Tyger Tyger,<br/>burning bright</p><pre>\nfn main() {\n}\n</pre></body>") :blocks)
              [{kind: :verse runs: ["Tyger Tyger,"]}
               {kind: :verse runs: ["burning bright"]}
-              {kind: :pre text: "fn main() {{"}
-              {kind: :pre text: "}}"}])))
+              {kind: :pre text: "fn main() {"}
+              {kind: :pre text: "}"}])))
 
 (test "images point at their entries and ids at their blocks"
   (let [read (read "<body><p>a</p><div id=\"pic\"><img src=\"../images/x.png\" alt=\"X\"/></div><p id=\"end\">b</p><script>no()</script></body>")]

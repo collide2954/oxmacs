@@ -94,7 +94,7 @@
 
 (def (casefold text)
   "text in the rfc1459 case mapping IRC servers compare names with."
-  (string/replace (string/replace (string/replace (string/replace (string/lower text) "[" "{{") "]" "}") "\\" "|") "~" "^"))
+  (string/replace (string/replace (string/replace (string/replace (string/lower text) "[" "{") "]" "}") "\\" "|") "~" "^"))
 
 (def (same-nick? a b)
   (and a b (= (casefold a) (casefold b))))
@@ -209,7 +209,7 @@
   (expect (nil? (action "hi")))
   (expect (= (styled "\u{2}bold\u{2} \u{3}4,1red\u{f} plain") [["bold" :heading] " " ["red" :error] " plain"]))
   (expect (= (plain-text "\u{3}12blue\u{3} done") "blue done"))
-  (expect (same-nick? "Ana[m]" "ana{{m}"))
+  (expect (same-nick? "Ana[m]" "ana{m}"))
   (expect (channel? "#x"))
   (expect (not (channel? "bo")))
   (expect (= (sasl-plain "ana" "pw") "YW5hAGFuYQBwdw=="))

@@ -7,7 +7,8 @@
 (def workbench "*bellow*")
 
 (def starter
-  #r##"(module (import (ox synth :as s)))
+  """
+(module (import (ox synth :as s)))
 
 (def pad
   (-> (s/mix (s/saw :detune -7) (s/saw :detune 7))
@@ -26,7 +27,8 @@
              :effects (s/delay (s/input) 0.42 :cross true))))
 
 (s/loop song)
-"##)
+
+""")
 
 (defonce ticks (atom 0))
 (defonce ticking (atom false))
@@ -54,7 +56,7 @@
 
 (def (heading)
   (if-let [at (s/position)]
-    "bar {(+ 1 (floor at.bar))}   {(round at.tempo)} bpm"
+    $"bar {(+ 1 (floor at.bar))}   {(round at.tempo)} bpm"
     "stopped"))
 
 (def (render)
@@ -103,7 +105,7 @@
 (defcommand bellow-new "Write a small song to start from, and visit it"
   (let [path (await (prompt-path "New song file: " :initial "song.ox"))]
     (if (await (file/exists? path))
-      (message "{path} already exists; pick another name")
+      (message $"{path} already exists; pick another name")
       (do (await (file/write path starter))
         (open-file path)))))
 

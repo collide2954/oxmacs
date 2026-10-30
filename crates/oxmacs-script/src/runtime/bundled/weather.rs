@@ -33,8 +33,6 @@ fn literal(text: &str) -> String {
         match character {
             '\\' => out.push_str("\\\\"),
             '"' => out.push_str("\\\""),
-            '{' => out.push_str("{{"),
-            '}' => out.push_str("}}"),
             '\n' => out.push_str("\\n"),
             other => out.push(other),
         }

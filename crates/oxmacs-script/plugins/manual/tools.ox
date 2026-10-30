@@ -3,7 +3,8 @@
 (def page
   {id: "tools"
    title: "The ox command"
-   text: #r#"# The ox command
+   text: """"
+# The ox command
 
 `ox` runs Ox outside the editor and holds Ox's tools, each a subcommand.
 
@@ -14,6 +15,7 @@ ox check PATH…         find mistakes without running anything
 ox fmt PATH…           format files in the one Ox style
 ox fmt --check PATH…   list files that are not formatted
 ox migrate PATH…       update files written for an older Ox
+ox migrate --strings PATH…  also rewrite strings, once, coming from Ox 0.14
 ox test PATH…          run the test blocks in files or folders
 ox profile FILE        run a file and show where the time went
 ox perf bench FILE     benchmark the functions a file returns
@@ -40,6 +42,8 @@ There are no style settings: `ox fmt` keeps your line breaks and fixes indentati
 ## Migrating
 
 When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, `case` into `match`, and `http/encode` into `string/url-encode`, importing `(ox string)` when the file doesn't.
+
+Coming from Ox 0.14, run `ox migrate --strings` once as well: it puts a `$` before every string with holes, writes `{{` and `}}` in the others as single braces, and turns `#r"…"` into `"""…"""`. Run it only once, since on a file it has already rewritten it would take literal braces for holes. `ox check` also warns about a plain string holding what looks like an old hole, such as `"Hi {name}"`.
 
 ## Testing
 
@@ -80,4 +84,5 @@ A test fails when its body raises, or a task it spawned raises within ten second
 ## Other editors
 
 `ox lsp` gives VS Code, Helix and Neovim diagnostics, completion, signatures, documentation on hover, definitions, references, renaming, an outline and formatting for Ox.
-"#})
+
+""""})

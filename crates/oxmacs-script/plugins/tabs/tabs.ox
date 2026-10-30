@@ -7,7 +7,7 @@
 (defonce state (atom {tabs: [{key: 1 name: nil seen: nil}] current: 0 next: 2 closed: []}))
 
 (def (key-of tab)
-  "tab-{tab.key}")
+  $"tab-{tab.key}")
 
 (def (labels)
   (let [s @state
@@ -153,7 +153,7 @@
   (let [names (labels)
         picked (await (prompt "Switch to tab: " :choices names))
         at (first (keep (fn [at] (when (= (nth names at) picked) at)) (range (count names))))]
-    (if at (select at) (message "No tab is called {picked}"))))
+    (if at (select at) (message $"No tab is called {picked}"))))
 
 (defcommand find-file-other-tab "Visit a file in a new tab"
   (let [path (await (prompt-path "Find file in new tab: "))]

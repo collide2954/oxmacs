@@ -21,7 +21,7 @@
                   (sorted (get model.entries folder [])))))
 
 (def (rows model)
-  "The rows of the tree under model.root, each {{path name dir depth open}}, folders first, walking into the open folders whose entries are known."
+  "The rows of the tree under model.root, each {path name dir depth open}, folders first, walking into the open folders whose entries are known."
   (walk model model.root 0 []))
 
 (def (prefixes parts)
@@ -89,7 +89,7 @@
   {errors: (+ (get a :errors 0) b.errors) warnings: (+ (get a :warnings 0) b.warnings)})
 
 (def (roll-up-problems problems root)
-  "problems, a map of file paths to {{errors warnings}}, with each folder between a file and root added up too."
+  "problems, a map of file paths to {errors warnings}, with each folder between a file and root added up too."
   (reduce (fn [out [file counts]]
             (loop [folder (path/parent file)
                    out out]

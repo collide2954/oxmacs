@@ -1,9 +1,9 @@
 ;; str joins what its arguments display as
 (str "a" 1 :k nil 2.5 \c) ;=> "a1:k2.5c"
 (str) ;=> ""
-(def name "Ana") "Hi {name}!" ;=> "Hi Ana!"
-"{(+ 1 2)} items" ;=> "3 items"
-(let [a 1 b 2] "{a}+{b}={(+ a b)}") ;=> "1+2=3"
+(def name "Ana") $"Hi {name}!" ;=> "Hi Ana!"
+$"{(+ 1 2)} items" ;=> "3 items"
+(let [a 1 b 2] $"{a}+{b}={(+ a b)}") ;=> "1+2=3"
 
 ;; strings count and index by character
 (count "héllo") ;=> 5

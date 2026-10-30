@@ -21,7 +21,7 @@
         kind (find (fn [known] (= (name known) answer)) (keys notes))]
     (if kind
       (start kind)
-      (message "There is no screensaver named \"{answer}\""))))
+      (message $"There is no screensaver named \"{answer}\""))))
 
 (def (wait-for-idle)
   (when-let [seconds (setting :idle)]

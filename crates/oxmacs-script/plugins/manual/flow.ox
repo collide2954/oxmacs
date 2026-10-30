@@ -3,7 +3,8 @@
 (def page
   {id: "flow"
    title: "Control and errors"
-   text: #r#"# Control and errors
+   text: """
+# Control and errors
 
 ## Choosing
 
@@ -68,7 +69,7 @@ A value no clause matches raises a `no-match-error`, so end with `[_ …]` when 
 
 ```
 (each [name ["Ada" "Grace"]]
-  (println "Hello, {name}"))
+  (println $"Hello, {name}"))
 ```
 
 In oxmacs, `print` and `println` write to *ox repl* when it is open and to *ox log* otherwise. The `ox` command writes them to the terminal.
@@ -96,7 +97,7 @@ In oxmacs, `print` and `println` write to *ox repl* when it is open and to *ox l
 `raise` throws a value. `try` catches by type, and `finally` always runs. `error` makes a plain error, and `deferror` defines an error type with fields and a message that can use them.
 
 ```
-(deferror http-error [status] "The server answered {status}")
+(deferror http-error [status] $"The server answered {status}")
 (try
   (raise (http-error 404))
   (catch http-error e e.message))
@@ -169,4 +170,5 @@ With several rules, the first that fits is used. The words in the vector after t
   [(swap-order a) [a]])
 [(swap-order 1 with 2) (swap-order 3)]
 ```
-"#})
+
+"""})

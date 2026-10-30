@@ -26,7 +26,7 @@ fn words_numbers_strings_calls_and_comments_get_their_faces() {
         "{spans: [[0 2 :keyword] [3 4 :function] [5 6 :constant] [8 14 :keyword] [15 18 :constant] [19 26 :comment]] state: nil}"
     );
     assert_eq!(
-        lexed(r#"(get (lexer/lex toy "{{\"a\": \"b\", x: Int}}" nil) :spans)"#),
+        lexed(r#"(get (lexer/lex toy "{\"a\": \"b\", x: Int}" nil) :spans)"#),
         "[[1 4 :attribute] [6 9 :string] [14 17 :type]]"
     );
     assert_eq!(

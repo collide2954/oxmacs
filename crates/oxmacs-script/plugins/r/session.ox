@@ -130,7 +130,7 @@
 
 (def (session-name directory)
   (let [folder (or (path/name directory) "R")
-        named (fn [number] (if (= number 1) "*R:{folder}*" "*R:{folder}:{number}*"))]
+        named (fn [number] (if (= number 1) $"*R:{folder}*" $"*R:{folder}:{number}*"))]
     (named (find (fn [number] (not (buffer-exists? (named number))))
                  (range 1 (+ 2 (count (buffer-list))))))))
 
@@ -145,7 +145,7 @@
   (let [width (buffer-width session)]
     (when (and width (>= width 10) (console-running? session) (not (helper-of session))
                (not= width (get-in @state [:widths session])))
-      (when (request session "getOption(\"oxmacs\")$width({width}L)")
+      (when (request session $"getOption(\"oxmacs\")$width({width}L)")
         (swap! state assoc-in [:widths session] width)))))
 
 (def kept-history 1000)
@@ -191,7 +191,7 @@
   (if-let [program (find-r)]
     (let [profile (await (helper/write))
           launched (get (swap! state update :launched inc) :launched)
-          plots (path/join (path/temp) "oxmacs" "plots-{(crypto/random 4)}-{launched}")
+          plots (path/join (path/temp) "oxmacs" $"plots-{(crypto/random 4)}-{launched}")
           original (process/env "R_PROFILE_USER")
           env (merge {R_PROFILE_USER: profile OXMACS_R_PLOTS: plots}
                      (if original {OXMACS_R_PROFILE_USER: original} {}))

@@ -200,6 +200,23 @@ fn literal<'s>(source: &'s str, syntax: &Syntax) -> Option<&'s str> {
     text.starts_with('"').then_some(text)
 }
 
+fn old_hole(text: &str, known: impl Fn(&str) -> bool) -> Option<&str> {
+    text.match_indices('{').find_map(|(at, _)| {
+        let rest = &text[at + 1..];
+        let end = rest.find(['{', '}', '\n', '"'])?;
+        if !rest[end..].starts_with('}') {
+            return None;
+        }
+        let inside = &rest[..end];
+        let named = inside.trim_start_matches('@').split('.').next()?;
+        let hole = inside.starts_with('(')
+            || (!inside.contains(char::is_whitespace)
+                && named.starts_with(|first: char| first.is_ascii_lowercase())
+                && known(named));
+        hole.then(|| &text[at..=at + 1 + end])
+    })
+}
+
 fn regex_call(regex: &[&Import], head: &Syntax) -> bool {
     let Some(name) = symbol(head) else {
         return false;
@@ -221,13 +238,13 @@ fn strings_in(source: &str, regex: &[&Import], form: &Syntax, found: &mut Vec<Di
                 .and_then(|_| items.get(1))
                 .filter(|pattern| {
                     literal(source, pattern).is_some_and(|text| {
-                        text.replace("\\\"", "").contains('\\') || text.contains("{{")
+                        !text.starts_with("\"\"\"") && text.replace("\\\"", "").contains('\\')
                     })
                 });
             if let Some(pattern) = pattern {
                 found.push(Diagnostic::warning(
                     "regex-string",
-                    "this pattern escapes backslashes or braces; a regex literal, #\"…\", needs no escapes",
+                    "this pattern escapes backslashes; a regex literal, #\"…\", needs no escapes",
                     pattern.span,
                 ));
             }
@@ -239,22 +256,6 @@ fn strings_in(source: &str, regex: &[&Import], form: &Syntax, found: &mut Vec<Di
         }
         Datum::Vector(items) | Datum::Map(items) | Datum::Set(items) | Datum::Record(_, items) => {
             items
-        }
-        Datum::Str(_) => {
-            let Some(text) = literal(source, form) else {
-                return;
-            };
-            let escapes = text.matches("{{").count();
-            if escapes >= 2 && !text.replace("\\\"", "").contains('\\') {
-                found.push(Diagnostic::warning(
-                    "braces",
-                    format!(
-                        "this string escapes braces {escapes} times; a raw string, #r\"…\", needs no escapes"
-                    ),
-                    form.span,
-                ));
-            }
-            return;
         }
         _ => return,
     };
@@ -629,7 +630,29 @@ impl Walker<'_> {
             | Datum::Record(_, items) => {
                 self.all(items);
             }
+            Datum::Str(_) => self.string(form),
             _ => {}
+        }
+    }
+
+    fn string(&mut self, form: &Syntax) {
+        let Some(text) = self
+            .source
+            .get(form.span.start as usize..form.span.end as usize)
+            .filter(|text| text.starts_with('"') && !text.starts_with("\"\"\""))
+        else {
+            return;
+        };
+        let known = |name: &str| {
+            let sym = Sym::intern(name);
+            self.locals.iter().any(|local| local.name == sym) || self.global(sym).is_some()
+        };
+        if let Some(hole) = old_hole(text, known) {
+            self.found.push(Diagnostic::warning(
+                "old-hole",
+                format!("{hole} was a hole before Ox 0.15; write $\"…\" to keep it one"),
+                form.span,
+            ));
         }
     }
 

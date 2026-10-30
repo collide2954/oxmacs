@@ -50,18 +50,18 @@
 
 (defcommand process-stop "Ask the process on this line to end"
   (on-process (fn [id]
-                (when (await (yes-or-no "Stop {(named id)}?"))
+                (when (await (yes-or-no $"Stop {(named id)}?"))
                   (stop-process id)))))
 
 (defcommand process-kill "End the process on this line at once"
   (on-process (fn [id]
-                (when (await (yes-or-no "Kill {(named id)}?"))
+                (when (await (yes-or-no $"Kill {(named id)}?"))
                   (kill-process id)))))
 
 (defcommand process-sort "Sort the processes by the next column"
   (swap! state update :sort table/next-sort)
   (draw false)
-  (message "Sorted by {(name (get @state :sort))}"))
+  (message $"Sorted by {(name (get @state :sort))}"))
 
 (defcommand process-sort-reverse "Reverse the order of the processes"
   (swap! state update :descending not)

@@ -25,4 +25,4 @@
   (map (fn [span] [(nth span 2) (nth span 0) (nth span 1)]) (get (lexer/lex spec text nil) :spans)))
 
 (test "TypeScript adds its keywords and types to JavaScript's"
-  (expect (= (faces typescript "interface A {{ x: number }}") [[:keyword 0 9] [:type 17 23]])))
+  (expect (= (faces typescript "interface A { x: number }") [[:keyword 0 9] [:type 17 23]])))

@@ -4,7 +4,7 @@
           (r help :as help))
   (export prompts watches heard))
 
-(def prompts [#r#"^Browse\[\d+\]> $"#])
+(def prompts ["""^Browse\[\d+\]> $"""])
 (def watches {debug: "^(debug at |debug: |Called from: |debugging in: )"})
 (def guide "Debugging: <f10> next  S-<f4> step in  S-<f6> finish  S-<f5> continue  S-<f8> stop")
 
@@ -39,7 +39,7 @@
 
 (def (flag call)
   (if-let [name (help/symbol-at-point)]
-    (session/send "{call}({name})")
+    (session/send $"{call}({name})")
     (message "No function name at point")))
 
 (defcommand r-debug-function "Debug the function at point the next time it runs" (flag "debugonce"))

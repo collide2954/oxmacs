@@ -13,10 +13,10 @@
   (str (name entry.key) ": " (pr-str value)))
 
 (def (core-form found)
-  (str "(settings {{" (string/join "\n           " (map pair found)) "}})\n"))
+  (str "(settings {" (string/join "\n           " (map pair found)) "})\n"))
 
 (def (plugin-form plugin found)
-  (str "(settings '" plugin " {{" (string/join " " (map pair found)) "}})\n"))
+  (str "(settings '" plugin " {" (string/join " " (map pair found)) "})\n"))
 
 (def (text all)
   "custom.ox for all the entries: the settings changed since it was read, the ones it set before, and none that are at their defaults."

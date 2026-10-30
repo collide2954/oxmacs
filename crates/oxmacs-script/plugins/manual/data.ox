@@ -3,7 +3,8 @@
 (def page
   {id: "data"
    title: "Data"
-   text: #r#"# Data
+   text: """
+# Data
 
 Ox data never changes in place. Functions that "change" a collection return a new one and leave the old one as it was, sharing most of its structure, so this is cheap.
 
@@ -132,4 +133,5 @@ An atom holds a value that can be replaced. `@` reads it, `reset!` replaces it a
 (module (import (ox regex)))
 (regex/replace #"(\d+)-(\d+)" "10-20" "$2-$1")
 ```
-"#})
+
+"""})

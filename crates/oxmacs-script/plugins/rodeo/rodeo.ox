@@ -3,7 +3,8 @@
           (ox string)))
 
 (def starter
-  #r##"(module (import (ox rodeo)))
+  """
+(module (import (ox rodeo)))
 
 (rodeo/screen 320 180)
 (rodeo/actions {left: [:left :a] right: [:right :d] jump: [:space :up :w]})
@@ -30,7 +31,8 @@
     (rodeo/rect [0 (+ ground 16) 320 30] "#008751")
     (rodeo/rect [p.x p.y 12 16] "#ff004d")
     (rodeo/text "Arrows move, space jumps" [6 6] :color "#fff1e8")))
-"##)
+
+""")
 
 (defonce slowed (atom false))
 
@@ -65,7 +67,7 @@
 (defcommand rodeo-new "Write a small game to start from, and visit it"
   (let [path (await (prompt-path "New game file: " :initial "game.ox"))]
     (if (await (file/exists? path))
-      (message "{path} already exists; pick another name")
+      (message $"{path} already exists; pick another name")
       (do (await (file/write path starter))
         (open-file path)))))
 

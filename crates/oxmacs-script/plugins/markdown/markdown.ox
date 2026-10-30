@@ -7,7 +7,7 @@
 (def (items)
   "The headings of the current buffer, indented by level, for M-g i."
   (vec (map (fn [found] {label: (str (string/repeat "  " (- found.level 1)) found.title)
-                         note: "L{(+ found.line 1)}"
+                         note: $"L{(+ found.line 1)}"
                          line: found.line})
             (grammar/headings (buffer-text)))))
 

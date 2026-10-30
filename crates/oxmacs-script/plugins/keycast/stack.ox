@@ -54,7 +54,7 @@
 
 (def (pieces cast)
   (concat (map (fn [key] [key nil :keycap]) cast.keys)
-          (if (> cast.count 1) [["×{cast.count}" :comment]] [])
+          (if (> cast.count 1) [[$"×{cast.count}" :comment]] [])
           [cast.command]))
 
 (def (rows casts now)
@@ -65,8 +65,8 @@
 (def (caption cast)
   "The mode-line text for cast, or nil when there is none."
   (when cast
-    (str (string/join " " (map (fn [key] "[{key}]") cast.keys))
-         (if (> cast.count 1) " ×{cast.count}" "")
+    (str (string/join " " (map (fn [key] $"[{key}]") cast.keys))
+         (if (> cast.count 1) $" ×{cast.count}" "")
          " " cast.command)))
 
 (def (wait casts now)

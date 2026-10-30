@@ -1,5 +1,5 @@
 use ox_lang::Isolate;
-use ox_lang::migrate::migrate;
+use ox_lang::migrate::{migrate, migrate_strings};
 
 fn migrated(source: &str) -> String {
     migrate(&mut Isolate::new(), "user", source).unwrap_or_else(|problem| panic!("{problem}"))
@@ -79,6 +79,36 @@ fn moved_functions_take_their_new_name_and_module() {
     assert_eq!(
         migrated("(module (import (ox http)))\n(http/encode q)"),
         "(module (import (ox http) (ox string)))\n(string/url-encode q)"
+    );
+}
+
+#[test]
+fn old_strings_take_their_new_spelling_and_keep_their_values() {
+    let strings =
+        |source: &str| migrate_strings(source).unwrap_or_else(|problem| panic!("{problem}"));
+
+    assert_eq!(
+        strings(r#"(str "a {x} b" "{{literal}}" "plain")"#),
+        r#"(str $"a {x} b" "{literal}" "plain")"#
+    );
+    assert_eq!(
+        strings(r#""outer {(f "inner {y}")} {{x}}""#),
+        r#"$"outer {(f $"inner {y}")} {{x}}""#
+    );
+    assert_eq!(
+        strings(r##"[#r"C:\Users" #r#"say "hi""# #r"" #"\d{2}"]"##),
+        r#"["""C:\Users""" "say \"hi\"" "" #"\d{2}"]"#
+    );
+    let block = strings("(def page #r#\"# Title\n\n  indented {x}\n\"#)");
+    assert_eq!(
+        block,
+        "(def page \"\"\"\n# Title\n\n  indented {x}\n\n\"\"\")"
+    );
+    let (forms, errors) = ox_lang::read::read(&block);
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(
+        forms[0].to_string(),
+        "(def page \"# Title\\n\\n  indented {x}\\n\")"
     );
 }
 

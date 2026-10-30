@@ -3,7 +3,8 @@
 (def page
   {id: "editor"
    title: "Extending oxmacs"
-   text: #r#"# Extending oxmacs
+   text: """
+# Extending oxmacs
 
 Everything below works in `init.ox`, in a plugin, or straight from the REPL. The [Editor API](ref:oxmacs) lists every function, and [Buffers and views](ui) covers what a plugin can show.
 
@@ -26,8 +27,8 @@ Everything below works in `init.ox`, in a plugin, or straight from the REPL. The
 ```
 (defcommand greet "Greet someone"
   (let [name (await (prompt "Name: " :choices ["Ana" "Bo"]))]
-    (when (await (yes-or-no "Greet {name}?"))
-      (message "Hello, {name}"))))
+    (when (await (yes-or-no $"Greet {name}?"))
+      (message $"Hello, {name}"))))
 ```
 
 `prompt-path` asks for a file or a folder, with completion. `C-g` cancels a prompt by failing its promise, which ends the command unless it catches the error.
@@ -59,7 +60,7 @@ Positions count characters from 0. `insert` adds text at point and moves point a
 Hooks call a function, as a task, when something happens. Registering the same key again replaces the earlier function.
 
 ```text
-(on-saved :log-saves (fn [path] (message "Saved {path}")))
+(on-saved :log-saves (fn [path] (message $"Saved {path}")))
 (on-idle :rest 300 (fn [] (message "Time for a break")))
 ```
 
@@ -99,4 +100,5 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
 ```
 
 Settings made this way last until oxmacs quits; keep them in `init.ox`. Plugins declare settings of their own, read with `setting`; see [Writing a plugin](plugins).
-"#})
+
+"""})

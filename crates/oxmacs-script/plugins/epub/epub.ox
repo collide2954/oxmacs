@@ -59,7 +59,7 @@
                                (if (= block.kind :image)
                                  (if-let [image (decoded book block.src)]
                                    {kind: :image image: image alt: block.alt}
-                                   {kind: :center runs: [{text: "[{(if (string/blank? block.alt) "image" block.alt)}]" italic: true}]})
+                                   {kind: :center runs: [{text: $"[{(if (string/blank? block.alt) "image" block.alt)}]" italic: true}]})
                                  block))
                              read.blocks))]
         {blocks: blocks ids: read.ids sources: (keep :src read.blocks)}))))
@@ -68,7 +68,7 @@
   (let [state (current)
         book (when state @state)]
     (set-mode-line :epub (when (and book book.chapters)
-                           "{(inc book.chapter)}/{(count book.chapters)} · {(or book.progress 0)}%"))))
+                           $"{(inc book.chapter)}/{(count book.chapters)} · {(or book.progress 0)}%"))))
 
 (def (ensure-chapter state index)
   (let [book @state]
@@ -115,7 +115,7 @@
           part (package/fragment href)
           index (chapter-of @state entry)]
       (if (nil? index)
-        (message "This link leads outside the book: {href}")
+        (message $"This link leads outside the book: {href}")
         (do (ensure-chapter state index)
           (let [block (get (get @state :ids) index)
                 start (or (when part (get block part)) 0)]
@@ -132,7 +132,7 @@
     (let [book @state
           doc (get book.docs book.chapter)]
       (if (nil? doc)
-        (ui/column (ui/space 40) (ui/text "Opening {book.title}…" :face :comment))
+        (ui/column (ui/space 40) (ui/text $"Opening {book.title}…" :face :comment))
         (ui/pages doc
                   :at book.at
                   :typeface (setting :typeface)
@@ -185,10 +185,10 @@
             at (or (when kept kept.at) [0 0])]
         (reset! state book)
         (go state chapter at)
-        (message "{book.title}{(if book.creator " by {book.creator}" "")}"))
+        (message $"{book.title}{(if book.creator $" by {book.creator}" "")}"))
       (catch error e
         (close-buffer buffer)
-        (message "Couldn't open {(path/name place)}: {e.message}")))))
+        (message $"Couldn't open {(path/name place)}: {e.message}")))))
 
 (on-open-file "epub" (fn [place] (open-book place)))
 
@@ -232,7 +232,7 @@
 (def (chapter-texts book)
   (let [total (count book.chapters)]
     (vec (map (fn [index]
-                (when (= 0 (mod index 5)) (message "Searching {(inc index)}/{total}…"))
+                (when (= 0 (mod index 5)) (message $"Searching {(inc index)}/{total}…"))
                 (let [entry (nth book.chapters index)
                       blocks (or (get book.blocks index)
                                  (if (map? entry)
@@ -245,12 +245,12 @@
   (let [book @state
         matches (or book.matches [])]
     (if (empty? matches)
-      (message "No match for {book.query}")
+      (message $"No match for {book.query}")
       (let [at (mod (+ (or book.match -1) step) (count matches))
             found (nth matches at)]
         (swap! state assoc :match at)
         (go state found.chapter [found.block found.start])
-        (message "{(inc at)} of {(count matches)} for {book.query}")))))
+        (message $"{(inc at)} of {(count matches)} for {book.query}")))))
 
 (defcommand epub-search "Search the whole book, showing every match"
   (with-book
@@ -306,7 +306,7 @@
   (vec (mapcat (fn [kept]
                  (let [entry (nth book.chapters kept.chapter)
                        found (when (string? entry) (find (fn [item] (= item.entry entry)) book.toc))
-                       title (if found found.title "Chapter {(inc kept.chapter)}")]
+                       title (if found found.title $"Chapter {(inc kept.chapter)}")]
                    (concat [{line: [[title :heading]] highlight: kept}
                             {line: ["  " [(string/truncate (package/tidy kept.text) 120) (if kept.note :added :marked)]] highlight: kept}]
                            (if kept.note [{line: ["    " [kept.note :comment]] highlight: kept}] [])
@@ -340,13 +340,13 @@
 
 (defcommand epub-info "Say what book this is and how far through it you are"
   (with-book (fn [_ book]
-               (message "{book.title}{(if book.creator " by {book.creator}" "")} · chapter {(inc book.chapter)} of {(count book.chapters)} · {(or book.progress 0)}%"))))
+               (message $"{book.title}{(if book.creator $" by {book.creator}" "")} · chapter {(inc book.chapter)} of {(count book.chapters)} · {(or book.progress 0)}%"))))
 
 (defcommand epub-recent "Open a book read lately"
   (let [kept (remembered)]
     (if (empty? kept)
       (message "No books read yet")
-      (let [labels (map (fn [book] "{book.title} ({(path/name book.path)})") kept)
+      (let [labels (map (fn [book] $"{book.title} ({(path/name book.path)})") kept)
             picked (await (prompt "Open book: " :choices labels))
             at (first (keep (fn [at] (when (= (nth labels at) picked) at)) (range (count labels))))]
         (when at (open-file (get (nth kept at) :path)))))))
@@ -363,7 +363,7 @@
     (each [place (library/found folder)]
       (let [card (library/card place (find (fn [book] (library/same-place? book.path place)) kept))]
         (swap! shelf update :books conj card)))
-    (message "{(count (get @shelf :books))} books in {(path/abbreviate folder)}")))
+    (message $"{(count (get @shelf :books))} books in {(path/abbreviate folder)}")))
 
 (defcommand epub-library "Show the books in a folder as covers"
   (let [folder (or (setting :library) (await (prompt-path "Library folder: " :directories true)))]

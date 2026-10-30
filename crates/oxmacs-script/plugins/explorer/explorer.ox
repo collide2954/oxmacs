@@ -99,7 +99,7 @@
   (let [title [(str " " (string/upper (or (path/name s.root) s.root))) :heading]]
     (if (filtering? s)
       [[title]
-       [["  Filter: " :comment] [s.filter :link] ["  {(count (filter :match rows))} found" :comment]]]
+       [["  Filter: " :comment] [s.filter :link] [$"  {(count (filter :match rows))} found" :comment]]]
       [[title]])))
 
 (def (row-index rows place)
@@ -302,10 +302,10 @@
 
 (defcommand explorer-new-file "Make a file in the folder on this line and open it"
   (let [folder (folder-for (here))
-        name (await (prompt "New file in {(relative folder)}/: "))
+        name (await (prompt $"New file in {(relative folder)}/: "))
         target (apply path/join folder (string/split name "/"))]
     (if (await (file/exists? target))
-      (message "{(relative target)} already exists")
+      (message $"{(relative target)} already exists")
       (do (await (file/make-dir (path/parent target)))
         (await (file/write target ""))
         (swap! state update :open conj folder)
@@ -315,10 +315,10 @@
 
 (defcommand explorer-new-folder "Make a folder in the folder on this line"
   (let [folder (folder-for (here))
-        name (await (prompt "New folder in {(relative folder)}/: "))
+        name (await (prompt $"New folder in {(relative folder)}/: "))
         target (apply path/join folder (string/split name "/"))]
     (if (await (file/exists? target))
-      (message "{(relative target)} already exists")
+      (message $"{(relative target)} already exists")
       (do (await (file/make-dir target))
         (swap! state update :open conj folder)
         (reload-around target)
@@ -333,12 +333,12 @@
       (when (if moving
               (await (move-path row.path target))
               (when (or (not (await (file/exists? target)))
-                        (await (yes-or-no "{answer} exists; replace it? ")))
+                        (await (yes-or-no $"{answer} exists; replace it? ")))
                 (await (file/copy row.path target))
                 true))
         (reload-around row.path target)
         (reveal target)
-        (message "{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))
+        (message $"{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))
 
 (defcommand explorer-rename "Rename or move the file or folder on this line" (transfer true))
 (defcommand explorer-copy "Copy the file or folder on this line" (transfer false))
@@ -346,11 +346,11 @@
 (defcommand explorer-delete "Delete the file or folder on this line"
   (when-let [row (here)]
     (let [trash (get (settings) :delete-to-trash)]
-      (when (await (yes-or-no "{(if trash "Trash" "Delete")} {(relative row.path)}?"))
+      (when (await (yes-or-no $"{(if trash "Trash" "Delete")} {(relative row.path)}?"))
         (await (delete-path row.path))
         (reload-around row.path)
         (draw (path/parent row.path))
-        (message "{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))
+        (message $"{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))
 
 (defcommand explorer-open-externally "Open the file or folder on this line with its usual app"
   (when-let [row (here)] (open-externally row.path)))
@@ -358,7 +358,7 @@
 (defcommand explorer-copy-path "Copy the path of the file or folder on this line"
   (when-let [row (here)]
     (clipboard-set row.path)
-    (message "Copied {row.path}")))
+    (message $"Copied {row.path}")))
 
 (def (clicked line clicks)
   (when (= clicks 1)
@@ -373,9 +373,9 @@
         (unless (or (same? (path/parent moving.path) into)
                     (same? moving.path into)
                     (inside? into moving.path))
-          (when (await (yes-or-no "Move {(relative moving.path)} into {(relative into)}/?"))
+          (when (await (yes-or-no $"Move {(relative moving.path)} into {(relative into)}/?"))
             (if (await (file/exists? target))
-              (message "{(relative target)} already exists")
+              (message $"{(relative target)} already exists")
               (do (await (move-path moving.path target))
                 (swap! state update :open conj into)
                 (reload-around moving.path target)

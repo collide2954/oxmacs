@@ -7,7 +7,7 @@ use ox_lang::value::Value;
 
 const JOBS: &str = r#"
 (defrecord hit [file line])
-(deferror job-error [n] "Job {n} failed")
+(deferror job-error [n] $"Job {n} failed")
 (def (square n) (* n n))
 (def (echo x) x)
 (def (find) (hit "a.ox" 3))

@@ -14,7 +14,7 @@ use crate::expand::patterns::is_pattern;
 use crate::expand::quote::{MISPLACED_META, datum_value};
 use crate::forms::Form;
 use crate::heap::Heap;
-use crate::read::{Datum, Marks, Syntax, split_meta};
+use crate::read::{Datum, Marks, PRELUDE_MARK, Syntax, split_meta};
 use crate::span::{Source, Span};
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -529,7 +529,7 @@ impl Compiler<'_> {
                     return Err(malformed());
                 };
                 let name = Sym::intern(name);
-                let (found, body) = documented(body);
+                let (found, body) = documented(body)?;
                 doc = found;
                 self.lambda(
                     Some(name),
@@ -665,7 +665,7 @@ impl Compiler<'_> {
             ));
         };
         let name = Sym::intern(name);
-        let (doc, body) = documented(body);
+        let (doc, body) = documented(body)?;
         self.lambda(
             Some(name),
             parameters,
@@ -1322,7 +1322,17 @@ impl Compiler<'_> {
     }
 }
 
-fn documented(body: &[Syntax]) -> (Option<&str>, &[Syntax]) {
+fn template(form: &Syntax) -> bool {
+    let Datum::List(items) = &form.datum else {
+        return false;
+    };
+    items.first().is_some_and(|head| {
+        head.marks.last() == Some(PRELUDE_MARK)
+            && matches!(&head.datum, Datum::Symbol(name) if name.ends_with("str"))
+    })
+}
+
+fn documented(body: &[Syntax]) -> Result<(Option<&str>, &[Syntax]), Error> {
     match body {
         [
             Syntax {
@@ -1330,7 +1340,11 @@ fn documented(body: &[Syntax]) -> (Option<&str>, &[Syntax]) {
                 ..
             },
             rest @ ..,
-        ] if !rest.is_empty() => (Some(doc.as_str()), rest),
-        _ => (None, body),
+        ] if !rest.is_empty() => Ok((Some(doc.as_str()), rest)),
+        [first, rest @ ..] if !rest.is_empty() && template(first) => Err(Error::at(
+            first.span,
+            "A docstring can't have holes: write it without the $",
+        )),
+        _ => Ok((None, body)),
     }
 }

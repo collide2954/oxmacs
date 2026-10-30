@@ -100,7 +100,7 @@
 (def (runnable found line)
   (let [chunk (chunk-at found line)]
     (cond ((not chunk) (message "Not in an R chunk") nil)
-      ((not (r-chunk? chunk)) (message "This is a {chunk.language} chunk, so R does not run it") nil)
+      ((not (r-chunk? chunk)) (message $"This is a {chunk.language} chunk, so R does not run it") nil)
       (else chunk))))
 
 (def (leading text)
@@ -205,8 +205,8 @@
                                   (else state)))
                    ((contains? #{"\"" "'" "`"} character) (assoc state :quote character))
                    ((= character "#") (assoc state :comment true))
-                   ((contains? #{"(" "[" "{{"} character) (update state :depth inc))
-                   ((contains? #{")" "]" "}}"} character) (update state :depth dec))
+                   ((contains? #{"(" "[" "{"} character) (update state :depth inc))
+                   ((contains? #{")" "]" "}"} character) (update state :depth dec))
                    (else state)))
                {depth: 0 quote: nil escaped: false comment: false}
                (map str (string/chars text)))
@@ -246,19 +246,19 @@
   (let [before (if (> (current-column) 0) "\n" "")
         at (point)]
     (try
-      (insert (str before "```{{r}}\n\n```\n"))
+      (insert (str before "```{r}\n\n```\n"))
       (set-point (+ at (string/length before) 7))
       (catch error e (message e.message)))))
 
 (def (outline found)
   "The headings and chunks of parsed R Markdown, in order, as items for M-g i."
   (let [chunks found.chunks
-        headings (map (fn [heading] {line: heading.line label: heading.title note: "L{(+ heading.line 1)}"})
+        headings (map (fn [heading] {line: heading.line label: heading.title note: $"L{(+ heading.line 1)}"})
                       found.headings)
         blocks (map (fn [at] (let [chunk (nth chunks at)]
                                {line: chunk.start
-                                label: "chunk {(or chunk.name (+ at 1))}"
-                                note: "{chunk.language}  L{(+ chunk.start 1)}"}))
+                                label: $"chunk {(or chunk.name (+ at 1))}"
+                                note: $"{chunk.language}  L{(+ chunk.start 1)}"}))
                     (range (count chunks)))]
     (vec (sort-by (fn [item] item.line) (concat headings blocks)))))
 
@@ -267,7 +267,8 @@
 (def (renderable? file)
   (and file (contains? #{"rmd" "qmd"} (string/lower (or (path/extension file) "")))))
 
-(def render-script #r#"path <- commandArgs(trailingOnly = TRUE)[1]
+(def render-script """
+path <- commandArgs(trailingOnly = TRUE)[1]
 started <- Sys.time() - 1
 quarto <- Sys.which("quarto")
 knits <- requireNamespace("rmarkdown", quietly = TRUE) &&
@@ -295,7 +296,8 @@ if (inherits(out, "error")) {
   quit(save = "no", status = 1)
 }
 cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
-"#)
+
+""")
 
 (def (script-file)
   (let [file (path/join (path/temp) "oxmacs-render.R")]
@@ -307,24 +309,24 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
     (cond ((= tag "oxmacs-rendered")
            (do (swap! rendering disj file)
              (open-externally value)
-             (message "Rendered {(path/name value)}")))
+             (message $"Rendered {(path/name value)}")))
       ((= tag "oxmacs-render-failed")
        (do (swap! rendering disj file)
-         (message "Rendering failed: {value}")))
+         (message $"Rendering failed: {value}")))
       (else nil))))
 
 (def (render-with file program args)
   "Renders file by running program with args as a background job, opening the file it reports it made."
   (swap! rendering conj file)
-  (jobs/start "*R render: {(path/name file)}*" program args (path/parent file)
-              :title "Rendering {(path/name file)}"
+  (jobs/start $"*R render: {(path/name file)}*" program args (path/parent file)
+              :title $"Rendering {(path/name file)}"
               :on-line (fn [line] (heard file line))
               :on-exit (fn [_] (swap! rendering disj file))))
 
 (def (render file)
   (when-let [script (jobs/rscript)]
     (render-with file script [(script-file) file])
-    (message "Rendering {(path/name file)}")))
+    (message $"Rendering {(path/name file)}")))
 (defcommand r-markdown-render "Save the document, render it with R Markdown or Quarto and open the result"
   (let [file (buffer-file)]
     (if (renderable? file)

@@ -41,8 +41,8 @@
     (when-let [running (session/ensure)]
       (if-let [[_ call] (find (fn [[package _]] (has? running package)) (get tools action))]
         (do (session/show-console running false)
-          (session/evaluate running "{call}({(session/r-string root)})"))
-        (message "{(get actions action)} a package needs devtools")))
+          (session/evaluate running $"{call}({(session/r-string root)})"))
+        (message $"{(get actions action)} a package needs devtools")))
     (message "This project has no DESCRIPTION, so it is not an R package")))
 
 (defcommand r-load-all "Load the R package of this project from its source" (develop :load))
@@ -56,7 +56,7 @@
     (when-let [running (session/ensure)]
       (if (has? running "renv")
         (do (session/show-console running false)
-          (session/evaluate running "renv::{call}(project = {(session/r-string root)})"))
+          (session/evaluate running $"renv::{call}(project = {(session/r-string root)})"))
         (message "This needs renv; install it in R with install.packages(\"renv\")")))
     (message "This file is not in an R project")))
 
@@ -69,7 +69,7 @@
   (if-let [root (package-root)]
     (when-let [running (session/ensure)]
       (if (has? running "testthat")
-        (session/request running "getOption(\"oxmacs\")$test({(session/r-string root)})")
+        (session/request running $"getOption(\"oxmacs\")$test({(session/r-string root)})")
         (message "Running tests needs testthat")))
     (message "This project has no DESCRIPTION, so it is not an R package")))
 
@@ -94,7 +94,7 @@
                                 label: mark face: face
                                 text: (if (string/blank? row.message) row.test (str row.test "  " row.message))}))
                            rows))
-                 :title "{(tally "passed")} passed, {(tally "failed")} failed, {(tally "skipped")} skipped"
+                 :title $"{(tally "passed")} passed, {(tally "failed")} failed, {(tally "skipped")} skipped"
                  :root folder
                  :on-refresh (fn [] (run-command 'r-test)))))
 (def package-keys {"RET" 'r-package-toggle "h" 'r-package-help "g" 'r-packages "q" 'quit-window
@@ -131,13 +131,13 @@
     (let [running (get @listing :session)]
       (session/show-console running false)
       (session/evaluate running (if row.attached
-                                  "detach({(session/r-string (str "package:" row.name))})"
-                                  "library({row.name})"))
+                                  $"detach({(session/r-string (str "package:" row.name))})"
+                                  $"library({row.name})"))
       (swap! listing update :rows (fn [rows] (vec (map (fn [other] (if (= other.name row.name) (assoc other :attached (not row.attached)) other)) rows))))
       (set-lines packages-buffer (package-lines (get @listing :rows))))
     (message "No package on this line")))
 
 (defcommand r-package-help "Show the help index of the package on this line"
   (if-let [row (package-here)]
-    (session/request (get @listing :session) "getOption(\"oxmacs\")$help_index({(session/r-string row.name)})")
+    (session/request (get @listing :session) $"getOption(\"oxmacs\")$help_index({(session/r-string row.name)})")
     (message "No package on this line")))

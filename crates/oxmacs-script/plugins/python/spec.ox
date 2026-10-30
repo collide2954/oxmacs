@@ -19,7 +19,7 @@
   (expect (= (faces python "@cache") [[:attribute 0 6]]))
   (expect (= (faces python "def f(x: int) -> None:  # done")
              [[:keyword 0 3] [:function 4 5] [:type 9 12] [:constant 17 21] [:comment 24 30]]))
-  (expect (= (faces python "s = rb'\\x00' + f\"{{x}}\"") [[:string 4 12] [:string 15 21]]))
+  (expect (= (faces python "s = rb'\\x00' + f\"{x}\"") [[:string 4 12] [:string 15 21]]))
   (expect (= (lexer/lex python "    r\"\"\"Doc" nil) {spans: [[4 11 :string]] state: "\"\"\""}))
   (expect (= (lexer/lex python "ends \\\"\"\" here\"\"\" pass" "\"\"\"")
              {spans: [[0 17 :string] [18 22 :keyword]] state: nil})))

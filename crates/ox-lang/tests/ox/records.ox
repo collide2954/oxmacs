@@ -50,7 +50,7 @@
 (def a {b: {c: {d: 4}}}) a.b.c.d ;=> 4
 (def a {b: nil}) a.b.c.d ;=> nil
 (def a nil) a.b ;=> nil
-(def city {name: "Lyon"}) "Hi {city.name}!" ;=> "Hi Lyon!"
+(def city {name: "Lyon"}) $"Hi {city.name}!" ;=> "Hi Lyon!"
 (let [p {x: 1 y: 2}] (+ p.x p.y)) ;=> 3
 (def (f m) m.k) (f {k: :v}) ;=> :v
 (def n 5) n.x ;! 5 has no field x

@@ -3,7 +3,8 @@
 (def page
   {id: "start"
    title: "Getting started"
-   text: #r#"# Getting started
+   text: """
+# Getting started
 
 Ox is the language you extend oxmacs in: a small Lisp with immutable data, string interpolation and lightweight tasks. Everything in this manual runs inside oxmacs.
 
@@ -58,4 +59,5 @@ When code you evaluate fails, the error shows beside the form and in `*ox log*`.
 - [Extending oxmacs](editor): commands, keys and hooks.
 - [Buffers and views](ui): showing your own text and widgets.
 - [Writing a plugin](plugins): packaging what you built.
-"#})
+
+"""})

@@ -3,7 +3,8 @@
 (def page
   {id: "plugins"
    title: "Writing a plugin"
-   text: #r##"# Writing a plugin
+   text: """
+# Writing a plugin
 
 A plugin is a folder under `~/.oxmacs/plugins` with a manifest and Ox modules. It costs nothing until it is used: at startup oxmacs reads its files but runs none of them, and the code loads the first time one of its commands, keys or modes is used.
 
@@ -32,7 +33,7 @@ So plugins do two jobs. They extend the editor, and they are where shared Ox cod
 
 ```text
 (defcommand hello "Say hello"
-  (message "Hello, {(setting :name)}!"))
+  (message $"Hello, {(setting :name)}!"))
 ```
 
 4. Press `C-c C-k` in `hello.ox`. The plugin starts, and `M-x hello` works. Plugins in your folder stay off until you turn them on, so to have it in every session, add this to `init.ox`:
@@ -129,4 +130,5 @@ zen          0.1.2    opt-in   Distraction-free writing in one centered column
 ## Learn from the bundled plugins
 
 dired, git, weather, irc, calendar, vault, remote, markdown and this manual are all plugins written this way. Their sources are in the oxmacs repository under `crates/oxmacs-script/plugins`.
-"##})
+
+"""})

@@ -4,7 +4,7 @@
 
 (def (label doc)
   "The mode line's account of where doc is shown: page of pages and the scale."
-  "{(inc (or doc.page 0))}/{doc.pages} · {(or doc.percent 100)}%")
+  $"{(inc (or doc.page 0))}/{doc.pages} · {(or doc.percent 100)}%")
 
 (def (marks matches at page)
   "The marks for the matches found near page, the one numbered at drawn as current."
@@ -38,7 +38,7 @@
 
 (def (outline-labels outline)
   "The outline's headings, indented by depth, with their page numbers."
-  (vec (map (fn [heading] "{(string/repeat "  " heading.depth)}{heading.title} · p. {(inc heading.page)}") outline)))
+  (vec (map (fn [heading] $"{(string/repeat "  " heading.depth)}{heading.title} · p. {(inc heading.page)}") outline)))
 
 (def (zoomed percent factor)
   "The scale after zooming the scale shown, percent, by factor, kept between a quarter and eight times."

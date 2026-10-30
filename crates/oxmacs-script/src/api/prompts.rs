@@ -332,7 +332,7 @@ mod tests {
         run(
             &mut editor,
             &mut ox,
-            r#"(defcommand careful "Careful" (try (try (await (prompt "Name: ")) (catch error e (message "error"))) (catch quit e (message "stopped: {e.message}"))))"#,
+            r#"(defcommand careful "Careful" (try (try (await (prompt "Name: ")) (catch error e (message "error"))) (catch quit e (message $"stopped: {e.message}"))))"#,
             "careful",
         );
         press(&mut editor, &mut ox, "C-g");

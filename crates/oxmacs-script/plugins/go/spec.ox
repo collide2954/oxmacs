@@ -18,6 +18,6 @@
   (map (fn [span] [(nth span 2) (nth span 0) (nth span 1)]) (get (lexer/lex spec text nil) :spans)))
 
 (test "Go shows raw strings across lines and its built-in types"
-  (expect (= (faces go "func (r *Reader) Read(p []byte) (n int, err error) {{")
+  (expect (= (faces go "func (r *Reader) Read(p []byte) (n int, err error) {")
              [[:keyword 0 4] [:function 17 21] [:type 26 30] [:type 35 38] [:type 44 49]]))
   (expect (= (lexer/lex go "s := `raw" nil) {spans: [[5 9 :string]] state: "`"})))

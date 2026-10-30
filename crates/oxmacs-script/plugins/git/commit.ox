@@ -8,11 +8,11 @@
   (let [lines (concat [(string/trim-end message) ""
                        "# Write the message above; lines starting with # are left out."
                        "# C-c C-c commits and C-c C-k cancels."]
-                      (if snapshot.branch ["#" "# On branch {snapshot.branch}"] [])
+                      (if snapshot.branch ["#" $"# On branch {snapshot.branch}"] [])
                       (if (empty? snapshot.staged)
                         []
                         (cons "# Changes to be committed:"
-                              (map (fn [change] "#   {change.path}") snapshot.staged))))]
+                              (map (fn [change] $"#   {change.path}") snapshot.staged))))]
     (str (string/join "\n" lines) "\n")))
 
 (def (message-text text)

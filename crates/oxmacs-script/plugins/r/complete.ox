@@ -28,7 +28,7 @@
       (else
        (let [start (max (line-start) (or (console-input-start) 0))
              line (text-between start (point))]
-         (when (session/request running "getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
+         (when (session/request running $"getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
            (reset! asked {buffer: (buffer-name) start: start explicit: explicit}))
          true)))))
 
@@ -106,7 +106,7 @@
       ((= spot (get @signatures :shown)) true)
       ((and (session/running? running) (console-waiting? running) (not @asked))
        (swap! signatures assoc :shown spot)
-       (session/request running "getOption(\"oxmacs\")$signature({(session/r-string name)})")
+       (session/request running $"getOption(\"oxmacs\")$signature({(session/r-string name)})")
        true)
       (else nil))))
 

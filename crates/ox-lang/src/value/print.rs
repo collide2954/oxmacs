@@ -266,8 +266,6 @@ fn string(text: &str, out: &mut String) {
             '\t' => out.push_str("\\t"),
             '\r' => out.push_str("\\r"),
             '\0' => out.push_str("\\0"),
-            '{' => out.push_str("{{"),
-            '}' => out.push_str("}}"),
             _ if character.is_control() => {
                 let _ = write!(out, "\\u{{{:x}}}", u32::from(character));
             }
@@ -348,11 +346,11 @@ mod tests {
     }
 
     #[test]
-    fn strings_print_quoted_with_escapes_and_doubled_braces() {
+    fn strings_print_quoted_with_escapes_and_their_braces_as_they_are() {
         let mut heap = Heap::default();
         let text = heap.string("a\"b\\c\nd\t{e}\u{1}").unwrap();
 
-        assert_eq!(write(&heap, text), r#""a\"b\\c\nd\t{{e}}\u{1}""#);
+        assert_eq!(write(&heap, text), r#""a\"b\\c\nd\t{e}\u{1}""#);
     }
 
     #[test]
@@ -413,7 +411,7 @@ mod tests {
 
         assert_eq!(display(&heap, text), "hi {x}");
         assert_eq!(display(&heap, Value::Char('a')), "a");
-        assert_eq!(display(&heap, list), r#"("hi {{x}}")"#);
+        assert_eq!(display(&heap, list), r#"("hi {x}")"#);
         assert_eq!(display(&heap, Value::Int(2)), "2");
     }
 }

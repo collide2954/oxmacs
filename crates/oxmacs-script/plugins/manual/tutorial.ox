@@ -3,7 +3,8 @@
   (export text open))
 
 (def text
-  #r#"The oxmacs tutorial
+  """
+The oxmacs tutorial
 
 This is your own copy of the tutorial: edit it as you go. oxmacs keeps
 your place, so C-h t brings you back here. Delete tutorial.txt in your
@@ -124,7 +125,8 @@ writing plugins, and lists every function. It has examples you can
 run with x.
 
 You have finished the tutorial.
-"#)
+
+""")
 
 (def (folder)
   (or (plugin-folder 'manual) (path/home)))

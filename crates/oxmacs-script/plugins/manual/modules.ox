@@ -3,7 +3,8 @@
 (def page
   {id: "modules"
    title: "Modules and libraries"
-   text: #r##"# Modules and libraries
+   text: """
+# Modules and libraries
 
 ## Files are modules
 
@@ -108,4 +109,5 @@ A module is also how work moves to another thread. `worker` loads a module in a 
 ```
 
 Arguments and results must be plain data: numbers, strings, keywords, symbols, records and collections of them, and channels. Functions, atoms and promises can't cross. Workers find modules the way the `ox` command does; in oxmacs a worker can't load a plugin's modules, so use workers in code that `ox` runs.
-"##})
+
+"""})

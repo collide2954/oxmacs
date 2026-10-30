@@ -3,7 +3,8 @@
 (def page
   {id: "ui"
    title: "Buffers and views"
-   text: #r##"# Buffers and views
+   text: """
+# Buffers and views
 
 A plugin shows its work in buffers of text lines, in views of widgets, or in menus, and a mode gives files of a kind their own keys and colors.
 
@@ -54,7 +55,7 @@ A line written as a map, such as `{line: pieces background: :region}`, gets a ba
 (open-view "*clicks*"
            (fn []
              (ui/column
-              (ui/text "Clicked {@clicks} times" :face :heading)
+              (ui/text $"Clicked {@clicks} times" :face :heading)
               (ui/button "Click" :on-click (fn [] (swap! clicks inc))))))
 ```
 
@@ -74,7 +75,7 @@ A line written as a map, such as `{line: pieces background: :region}`, gets a ba
 (defcommand counter-bump "Count once more"
   (swap! (buffer-value :counter) inc))
 (let [counted (atom 0)]
-  (with-buffer (open-view "*counter*" (fn [] (ui/text "Counted {@counted}"))
+  (with-buffer (open-view "*counter*" (fn [] (ui/text $"Counted {@counted}"))
                           :keys {"SPC" 'counter-bump})
     (set-buffer-value! :counter counted)))
 ```
@@ -122,6 +123,7 @@ The highlighter runs again whenever the buffer changes and is stopped after 250 
 ```
 (transient "Deploy"
   [{title: "Options" switches: [["v" "--verbose" "Say more"]]}
-   {title: "Run" actions: [["d" "Deploy" (fn [flags] (message "Deploying with {flags}"))]]}])
+   {title: "Run" actions: [["d" "Deploy" (fn [flags] (message $"Deploying with {flags}"))]]}])
 ```
-"##})
+
+"""})

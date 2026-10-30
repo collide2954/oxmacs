@@ -90,7 +90,7 @@
   (expect (= (bullet "  * item") {marker: "*" start: 2 end: 3 text: "item"}))
   (expect (= (bullet "12) twelfth") {marker: "12)" start: 0 end: 3 text: "twelfth"}))
   (expect (= (fence "~~~ r") {marker: "~~~" info: "r"}))
-  (expect (= (fence "``` {{r setup}") {marker: "```" info: "{{r"})))
+  (expect (= (fence "``` {r setup}") {marker: "```" info: "{r"})))
 
 (test "inline tokens are code, strong text and links"
   (expect (= (tokens "a `b` **c** __d__ [e](f)")

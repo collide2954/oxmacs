@@ -103,7 +103,7 @@
     (cond
       [(nil? para) page]
       [(= para.kind :bullet)
-       (let [lead (if (contains? #{"-" "*" "+"} para.marker) "  • " "  {para.marker} ")]
+       (let [lead (if (contains? #{"-" "*" "+"} para.marker) "  • " $"  {para.marker} ")]
          (add-lines page (wrap (inline para.text) width
                                :lead lead
                                :indent (string/repeat " " (string/length lead)))))]

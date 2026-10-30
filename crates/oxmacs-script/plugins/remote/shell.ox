@@ -26,7 +26,7 @@
 
 (def (one-shot dir command)
   "The script a shell of its own reads to run command in dir and end, with its errors in its output and nothing to read."
-  (str "cd -- " (quoted dir) " && {{ " command "\n} 2>&1 </dev/null\n"))
+  (str "cd -- " (quoted dir) " && { " command "\n} 2>&1 </dev/null\n"))
 
 (def prompter
   "What a console sends a shell without a terminal so it prints the prompt the console knows."
@@ -91,7 +91,7 @@
              (fn []
                (let [process (or (live host) (start! host))
                      marker (str "__ox_" (crypto/random 6) "__")]
-                 (unless (process/write process (str "{{ " command "\n} 2>&1; printf '%s %s\\n' '" marker "' \"$?\"\n"))
+                 (unless (process/write process (str "{ " command "\n} 2>&1; printf '%s %s\\n' '" marker "' \"$?\"\n"))
                    (raise (ended host)))
                  (or (read-until process.lines marker [] on-line)
                      (raise (ended host)))))))

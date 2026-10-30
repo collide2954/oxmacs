@@ -147,26 +147,26 @@ fn undefined_names_are_errors_that_suggest_a_close_name() {
 }
 
 #[test]
-fn escaped_regex_patterns_and_brace_heavy_strings_suggest_literals() {
+fn escaped_regex_patterns_and_old_holes_are_pointed_out() {
     let source = r#"(module (import (ox regex) (ox regex :as re :only [split])))
-(regex/find "^(\\d{{4}})$" "2026")
+(regex/find "^(\\d{4})$" "2026")
 (re/matches? "a+" "aa")
 (split "\\s+" "a b")
 (regex/find #"\d+" "1")
+(regex/find """\d"""  "1")
 (regex/find "\"[^\"]*\"" "a")
-(str "{{\"a\": 1, \"b\": {{}}}}")
-(str "{{one}} only" "{{a}} \n {{b}}")
+(str "{\"a\": 1, \"b\": {}}")
 (def x 1)
-(regex/find "{x}\\d" "1")"#;
-    let pattern =
-        r#"this pattern escapes backslashes or braces; a regex literal, #"…", needs no escapes"#;
+(str "Hi {x}, {(inc x)}")
+(regex/find $"{x}\\d" "1")"#;
+    let pattern = r#"this pattern escapes backslashes; a regex literal, #"…", needs no escapes"#;
 
     assert_eq!(
         found(source),
         [
             (
                 Severity::Warning,
-                r#""^(\\d{{4}})$""#.to_owned(),
+                r#""^(\\d{4})$""#.to_owned(),
                 pattern.to_owned()
             ),
             (
@@ -176,9 +176,8 @@ fn escaped_regex_patterns_and_brace_heavy_strings_suggest_literals() {
             ),
             (
                 Severity::Warning,
-                r#""{{\"a\": 1, \"b\": {{}}}}""#.to_owned(),
-                r#"this string escapes braces 2 times; a raw string, #r"…", needs no escapes"#
-                    .to_owned()
+                r#""Hi {x}, {(inc x)}""#.to_owned(),
+                r#"{x} was a hole before Ox 0.15; write $"…" to keep it one"#.to_owned()
             ),
         ]
     );

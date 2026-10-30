@@ -47,9 +47,9 @@ const SUBCOMMANDS: &[Subcommand] = &[
     },
     Subcommand {
         name: "migrate",
-        usage: "[--check] PATH...",
+        usage: "[--check] [--strings] PATH...",
         summary: "update files written for an older Ox, or list the ones that need it",
-        flags: &["--check"],
+        flags: &["--check", "--strings"],
         valued: &[],
         run: migrate,
     },
@@ -305,10 +305,17 @@ fn fmt(parsed: &Parsed) -> Result<ExitCode, String> {
 }
 
 fn migrate(parsed: &Parsed) -> Result<ExitCode, String> {
-    rewrite(parsed, "Migrated", |file, source| {
-        let mut isolate = isolate_for(file, &[]);
-        ox_lang::migrate::migrate(&mut isolate, &file.display().to_string(), source)
-    })
+    if parsed.flag("--strings") {
+        return rewrite(parsed, "Migrated", |file, source| {
+            renamed(file, &ox_lang::migrate::migrate_strings(source)?)
+        });
+    }
+    rewrite(parsed, "Migrated", renamed)
+}
+
+fn renamed(file: &Path, source: &str) -> Result<String, String> {
+    let mut isolate = isolate_for(file, &[]);
+    ox_lang::migrate::migrate(&mut isolate, &file.display().to_string(), source)
 }
 
 fn rewrite(

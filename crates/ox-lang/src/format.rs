@@ -310,17 +310,41 @@ pub fn format_with(source: &str, known: &Forms) -> Result<String, String> {
     }
 }
 
+fn opened_block(source: &str, units: &[Unit], end: usize) -> Option<usize> {
+    let unit = continuing(units, end)?;
+    let opener = source[unit.start..end].trim_end();
+    let fence = opener.trim_start_matches(['$', '#']);
+    let block = fence.len() >= 3
+        && fence.chars().all(|character| character == '"')
+        && opener.len() - fence.len() <= 1;
+    block.then_some(unit.end)
+}
+
+fn shifted(line: &str, by: isize) -> String {
+    if line.trim().is_empty() {
+        return line.to_owned();
+    }
+    let spaces = line.len() - line.trim_start_matches(' ').len();
+    let kept = spaces.saturating_add_signed(by);
+    format!("{}{}", " ".repeat(kept), &line[spaces..])
+}
+
 fn layout(source: &str, forms: &Forms) -> String {
     let (found, _) = units(source);
     let mut state = State::new(forms);
     let mut out: Vec<String> = Vec::new();
     let mut commented = false;
+    let mut block: Option<(usize, isize)> = None;
     for (start, end) in lines(source) {
         let line = out.len();
         if continuing(&found, start).is_some() {
             let pieces = pieces(source, start, end, &found);
             state.feed(&pieces, &raw_columns(&pieces), line);
-            out.push(source[start..end].to_owned());
+            let text = &source[start..end];
+            out.push(match block {
+                Some((until, by)) if start < until => shifted(text, by),
+                _ => text.to_owned(),
+            });
             commented = pieces
                 .last()
                 .is_some_and(|piece| piece.kind == Kind::Comment);
@@ -352,6 +376,10 @@ fn layout(source: &str, forms: &Forms) -> String {
             }
         }
         let indent = state.indentation();
+        if let Some(until) = opened_block(source, &found, end) {
+            let moved = indent.cast_signed() - (first - start).cast_signed();
+            block = Some((until, moved));
+        }
         let (text, columns) = render(&pieces, true);
         let columns: Vec<usize> = columns.iter().map(|column| column + indent).collect();
         state.feed(&pieces, &columns, line);

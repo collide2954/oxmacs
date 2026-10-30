@@ -127,7 +127,7 @@
           words (get marks at)]
       (cond
         [(not (= line.kind (if old :removed :added))) [[number :comment] " " shown]]
-        [(nil? words) [["{number} {shown}" face :pill]]]
+        [(nil? words) [[$"{number} {shown}" face :pill]]]
         [else (vec (concat [[number :comment] " "]
                            (marked shown (visible words text text-width) face)))]))))
 
@@ -172,4 +172,4 @@
             {lines: []} (range (count files)))))
 
 (def (nothing path)
-  {lines: [{line: [["No changes to {path}" :comment]] kind: :blank}]})
+  {lines: [{line: [[$"No changes to {path}" :comment]] kind: :blank}]})

@@ -510,7 +510,8 @@ mod tests {
 
     #[test]
     fn lines_are_highlighted_by_what_they_hold() {
-        let spans = highlight_line(r#"(def (greet name) (str "Hi {name}" :loud 42 nil)) ; say hi"#);
+        let spans =
+            highlight_line(r#"(def (greet name) (str $"Hi {name}" :loud 42 nil)) ; say hi"#);
 
         assert_eq!(
             spans,
@@ -518,15 +519,19 @@ mod tests {
                 (1..4, Highlight::Keyword),
                 (6..11, Highlight::Function),
                 (19..22, Highlight::Function),
-                (23..27, Highlight::String),
-                (27..28, Highlight::Attribute),
-                (32..33, Highlight::Attribute),
-                (33..34, Highlight::String),
-                (35..40, Highlight::Constant),
-                (41..43, Highlight::Constant),
-                (44..47, Highlight::Constant),
-                (50..58, Highlight::Comment),
+                (23..28, Highlight::String),
+                (28..29, Highlight::Attribute),
+                (33..34, Highlight::Attribute),
+                (34..35, Highlight::String),
+                (36..41, Highlight::Constant),
+                (42..44, Highlight::Constant),
+                (45..48, Highlight::Constant),
+                (51..59, Highlight::Comment),
             ]
+        );
+        assert_eq!(
+            highlight_line(r#"(str "Hi {name}")"#),
+            [(1..4, Highlight::Function), (5..16, Highlight::String)]
         );
     }
 
@@ -688,25 +693,25 @@ mod tests {
     }
 
     #[test]
-    fn raw_strings_regexes_and_strings_inside_holes_are_colored_whole() {
+    fn verbatim_text_regexes_and_strings_inside_holes_are_colored_whole() {
         assert_eq!(
-            highlight_line("(f #r#\"say \"hi\"\"# x)"),
-            [(1..2, Highlight::Function), (3..17, Highlight::String)]
+            highlight_line("(f \"\"\"say \"hi\" now\"\"\" x)"),
+            [(1..2, Highlight::Function), (3..21, Highlight::String)]
         );
         assert_eq!(
             highlight_line("(re #\"\\d{4}\")"),
             [(1..3, Highlight::Function), (4..12, Highlight::String)]
         );
         assert_eq!(
-            highlight_line("\"{(if on \"Moved\" \"Copied\")} it\""),
+            highlight_line("$\"{(if on \"Moved\" \"Copied\")} it\""),
             [
-                (0..1, Highlight::String),
-                (1..2, Highlight::Attribute),
-                (3..5, Highlight::Keyword),
-                (9..16, Highlight::String),
-                (17..25, Highlight::String),
-                (26..27, Highlight::Attribute),
-                (27..31, Highlight::String),
+                (0..2, Highlight::String),
+                (2..3, Highlight::Attribute),
+                (4..6, Highlight::Keyword),
+                (10..17, Highlight::String),
+                (18..26, Highlight::String),
+                (27..28, Highlight::Attribute),
+                (28..32, Highlight::String),
             ]
         );
     }

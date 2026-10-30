@@ -16,10 +16,10 @@
 (def (reason ran)
   (let [said (filter (fn [line] (not (string/blank? line)))
                      (string/lines (if (string/blank? ran.stderr) ran.stdout ran.stderr)))]
-    (if (empty? said) "git exited with {ran.status}" (string/trim (last said)))))
+    (if (empty? said) $"git exited with {ran.status}" (string/trim (last said)))))
 
 (def (output ran)
-  (if (= ran.status 0) ran.stdout (raise (error "Git: {(reason ran)}"))))
+  (if (= ran.status 0) ran.stdout (raise (error $"Git: {(reason ran)}"))))
 
 (def (git root args)
   (output (await (run root args))))

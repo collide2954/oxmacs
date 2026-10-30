@@ -38,7 +38,7 @@
 (def (show)
   "Shows the current buffer rendered as Markdown in a buffer beside it, drawn again when its file is saved."
   (let [file (buffer-file)
-        name "*Markdown: {(if file (path/name file) (buffer-name))}*"
+        name $"*Markdown: {(if file (path/name file) (buffer-name))}*"
         state (atom {text: (buffer-text) folder: (if file (path/parent file) (default-directory)) source: file})
         buffer (open-buffer name [] :beside true :label "Markdown previews"
                             :keys {"RET" 'follow-link "TAB" 'next-link "S-TAB" 'previous-link

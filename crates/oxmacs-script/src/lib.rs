@@ -362,7 +362,7 @@ mod tests {
         let mut ox = Ox::new();
 
         let shown = ox
-            .eval(&mut editor, r#"(message "Hello from {"Ox"}") 42"#)
+            .eval(&mut editor, r#"(message $"Hello from {"Ox"}") 42"#)
             .unwrap();
 
         assert_eq!(shown, "42");

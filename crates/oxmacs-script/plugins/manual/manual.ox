@@ -36,7 +36,7 @@
     [(= module "oxmacs") "Always available in oxmacs: these reach the editor."]
     [else (let [spec (string/replace module "/" " ")
                 short (alias module)]
-            "Import it with `(import ({spec}))`, then call its names as `{short}/name`.")]))
+            $"Import it with `(import ({spec}))`, then call its names as `{short}/name`.")]))
 
 (def (reference-text docs)
   (str "# " (module-title docs.module) "\n\n" (module-intro docs.module) "\n\n"
@@ -50,9 +50,9 @@
        "Ox is the language oxmacs is extended in. The guide teaches it in a few short chapters; the reference lists every name in the library and the editor API, from their own documentation.\n\n"
        "`RET` follows a link, `l` goes back, `n` and `p` turn pages, `s` searches, `i` looks up a name and `x` runs the example at point in the REPL.\n\n"
        "## Guide\n\n"
-       (string/join "\n" (map (fn [page] "- [{page.title}]({page.id})") guide))
+       (string/join "\n" (map (fn [page] $"- [{page.title}]({page.id})") guide))
        "\n\n## Reference\n\n"
-       (string/join "\n" (map (fn [docs] "- [{(module-title docs.module)}](ref:{docs.module})") modules))
+       (string/join "\n" (map (fn [docs] $"- [{(module-title docs.module)}](ref:{docs.module})") modules))
        "\n\n## New to oxmacs?\n\n[Start the tutorial](tutorial), also on `C-h t`.\n"))
 
 (def (snippet line)
@@ -65,12 +65,12 @@
 (def (search-text term modules)
   (let [pages (keep (fn [page]
                       (when-let [line (first (filter (fn [line] (mentions? line term)) (string/lines page.text)))]
-                        "- [{page.title}: {(snippet line)}]({page.id}?{(string/url-encode term)})"))
+                        $"- [{page.title}: {(snippet line)}]({page.id}?{(string/url-encode term)})"))
                     guide)
         names (mapcat (fn [docs]
                         (keep (fn [entry]
                                 (when (or (mentions? entry.name term) (mentions? (or entry.doc "") term))
-                                  "- [{(qualified docs.module entry.name)}](ref:{docs.module}#{entry.name})"))
+                                  $"- [{(qualified docs.module entry.name)}](ref:{docs.module}#{entry.name})"))
                               docs.entries))
                       modules)
         found (concat pages names)]
@@ -141,7 +141,7 @@
   (let [modules (reference)
         page (page-of spot.id modules)]
     (if (nil? page)
-      (message "There is no manual page called {spot.id}")
+      (message $"There is no manual page called {spot.id}")
       (let [shown (md/render page.text (width))
             line (line-for shown page.entries spot)]
         (when from
@@ -209,7 +209,7 @@
         chosen (await (prompt "Look up: " :choices (reduce (fn [notes [label place]] (assoc notes label place.module)) {} (entries found))))]
     (if-let [place (get found chosen)]
       (show! {id: (str "ref:" place.module) anchor: place.name} :from (remember-here))
-      (message "Nothing in the manual is called {chosen}"))))
+      (message $"Nothing in the manual is called {chosen}"))))
 
 (defcommand ox-manual-run "Run the example at point in the REPL"
   (let [line (current-line)

@@ -32,7 +32,7 @@
 (def (ask-help topic)
   (when-let [running (session/ensure)]
     (swap! state assoc :pending topic)
-    (session/request running "getOption(\"oxmacs\")$help({(session/r-string topic)})")))
+    (session/request running $"getOption(\"oxmacs\")$help({(session/r-string topic)})")))
 
 (def (move step edge)
   (let [known @state
@@ -40,7 +40,7 @@
     (if (and (>= at 0) (< at (count known.history)))
       (do (swap! state assoc :at at)
         (render (get-in known [:history at :text])))
-      (message "No {edge} help page"))))
+      (message $"No {edge} help page"))))
 
 (def (shown-page) (when (= (buffer-name) help-buffer) (get @state :page)))
 

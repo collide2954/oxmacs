@@ -58,7 +58,7 @@
            (fn []
              (when (expired?)
                (lock)
-               (message "Vault locked after {(minutes)} minutes unused"))))))
+               (message $"Vault locked after {(minutes)} minutes unused"))))))
 
 (def (sealed-file key header entries)
   (json/write (assoc header :sealed (crypto/seal key (json/write {entries: entries})))))
@@ -164,7 +164,7 @@
   (if-let [entry (find-entry title)]
     (do (touch!)
       {user: entry.username password: entry.password})
-    (raise (error "The vault has no entry called {title}"))))
+    (raise (error $"The vault has no entry called {title}"))))
 
 (def (pick choices wanted)
   (let [size (count choices)]

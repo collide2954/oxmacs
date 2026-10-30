@@ -22,10 +22,10 @@
 (module (import (ox string))) [(string/words "  one two	three  ") (string/reverse "héllo") (string/truncate "hello world" 8) (string/truncate "short" 8)] ;=> [["one" "two" "three"] "olléh" "hello w…" "short"]
 
 ;; raw strings keep braces, backslashes and quotes as they are
-#r"C:\Users\{name}" ;=> "C:\\Users\\{{name}}"
-#r#"{"a": "b"}"# ;=> "{{\"a\": \"b\"}}"
-#r##"say "#hi"#"## ;=> "say \"#hi\"#"
-(count #r"\n") ;=> 2
+"""C:\Users\{name}""" ;=> "C:\\Users\\{name}"
+"""{"a": "b"}""" ;=> "{\"a\": \"b\"}"
+"""say "#hi"#""" ;=> "say \"#hi\"#"
+(count """\n""") ;=> 2
 
 (module (import (ox time))) (time/format 0 "%Y" :place "UTC") ;! time/format has no keyword parameter :place
 (module (import (ox time))) (time/format 0 "%Y" :zone "UTC") ;=> "1970"
@@ -38,5 +38,11 @@
 ;; any keyword prints so that it reads back: :"…" when its name isn't plain
 (= :"Unit Price" (keyword "Unit Price")) ;=> true
 (pr-str [(keyword "Unit Price") (keyword "a.b") :plain]) ;=> "[:\"Unit Price\" :a.b :plain]"
-(pr-str {(keyword "Unit Price") 3 (keyword "a.b") 6 (keyword "1x") 4 plain: 7}) ;=> "{{:\"Unit Price\" 3 :a.b 6 :1x 4 plain: 7}}"
+(pr-str {(keyword "Unit Price") 3 (keyword "a.b") 6 (keyword "1x") 4 plain: 7}) ;=> "{:\"Unit Price\" 3 :a.b 6 :1x 4 plain: 7}"
 (get {:"Unit Price" 3} (keyword "Unit Price")) ;=> 3
+
+;; plain strings keep braces, $ strings fill holes, """ text is taken as it is
+(let [name "Ana"] ["{name}" $"{name}" $"{{name}}" """{name} \n"""]) ;=> ["{name}" "Ana" "{name}" "{name} \\n"]
+(def (f) $"doc {x}" 1) ;! A docstring can't have holes: write it without the $
+(let [str (fn [& _] :shadowed) name "Ana"] $"Hi {name}") ;=> "Hi Ana"
+(let [deref (fn [_] :shadowed) a (atom 2)] @a) ;=> 2

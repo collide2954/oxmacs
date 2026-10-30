@@ -55,8 +55,8 @@
     (when (and wanted (not plots.asked) (not= plots.rendered wanted))
       (let [[index [width height]] wanted
             call (if (and plots.pinned plots.shown)
-                   "getOption(\"oxmacs\")$plot_pinned({plots.shown.id}L, {width}L, {height}L)"
-                   "getOption(\"oxmacs\")$plot({index}L, {width}L, {height}L)")]
+                   $"getOption(\"oxmacs\")$plot_pinned({plots.shown.id}L, {width}L, {height}L)"
+                   $"getOption(\"oxmacs\")$plot({index}L, {width}L, {height}L)")]
         (when (session/request plots.session call)
           (change! name assoc :asked wanted))))))
 
@@ -95,7 +95,7 @@
       (plots.gallery (grid name plots))
       (plots.shown
        (let [picture (shown-image plots)
-             counter (ui/row (ui/space) (ui/text "{plots.shown.index} / {plots.shown.count}" :face :comment))]
+             counter (ui/row (ui/space) (ui/text $"{plots.shown.index} / {plots.shown.count}" :face :comment))]
          (if picture
            (ui/column counter (ui/image picture :width plots.shown.width :height plots.shown.height))
            counter)))
@@ -118,7 +118,7 @@
   name)
 
 (def (plots-buffer session)
-  (let [name (or (unpinned-of session) "{(stem session)} plots*")]
+  (let [name (or (unpinned-of session) $"{(stem session)} plots*")]
     (unless (held name)
       (make name {session: session pinned: false}))
     name))
@@ -198,7 +198,7 @@
   (let [plots (plots-of name)]
     (if (and plots plots.shown)
       [plots.shown.index plots.shown.id (or plots.size size)]
-      (do (message "No plot to {action}") nil))))
+      (do (message $"No plot to {action}") nil))))
 
 (def (move-selection name step)
   (change! name update :gallery
@@ -218,7 +218,7 @@
                 (if (and (>= next 1) (<= next plots.shown.count))
                   (do (change! name assoc :wanted next)
                     (refresh name))
-                  (message "This is the {(if forward "last" "first")} plot"))))))))))
+                  (message $"This is the {(if forward "last" "first")} plot"))))))))))
 
 (def (pick name position)
   (when (get (plots-of name) :gallery)
@@ -249,17 +249,17 @@
 (defcommand r-plot-save "Save the shown R plot to a file"
   (when-let [name (here)]
     (when-let [[index _ _] (shown-plot name "save")]
-      (let [path (await (prompt-path "Save plot as: " :initial "plot-{index}.png"))]
+      (let [path (await (prompt-path "Save plot as: " :initial $"plot-{index}.png"))]
         (when-let [[_ id [width height]] (shown-plot name "save")]
           (session/request (get (plots-of name) :session)
-                           "getOption(\"oxmacs\")$plot_save({id}L, {(session/r-string path)}, {width}L, {height}L)"))))))
+                           $"getOption(\"oxmacs\")$plot_save({id}L, {(session/r-string path)}, {width}L, {height}L)"))))))
 
 (defcommand r-plot-delete "Delete the shown R plot from the history"
   (when-let [name (here)]
     (unless (refused name)
       (when-let [[index id [width height]] (shown-plot name "delete")]
         (when (session/request (get (plots-of name) :session)
-                               "getOption(\"oxmacs\")$plot_delete({id}L, {width}L, {height}L)")
+                               $"getOption(\"oxmacs\")$plot_delete({id}L, {width}L, {height}L)")
           (change! name assoc :asked [index [width height]] :wanted nil))))))
 
 (defcommand r-plot-zoom "Open a large copy of the shown R plot"
@@ -268,7 +268,7 @@
       (let [wide (max (* width 2) zoom-width)
             tall (// (* wide height) (max width 1))]
         (session/request (get (plots-of name) :session)
-                         "getOption(\"oxmacs\")$plot_zoom({id}L, {wide}L, {tall}L)")))))
+                         $"getOption(\"oxmacs\")$plot_zoom({id}L, {wide}L, {tall}L)")))))
 
 (defcommand r-plot-gallery "Show all R plots side by side, or the shown one again"
   (when-let [name (here)]
@@ -284,7 +284,7 @@
                  tile [(// width (max across 1)) (// height (max down 1))]]
              (change! name assoc :tile tile)
              (session/request plots.session
-                              "getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))))))))
+                              $"getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))))))))
 
 (defcommand r-plot-pin "Keep the shown R plot in its own window"
   (when-let [name (here)]
@@ -292,7 +292,7 @@
       (let [plots (plots-of name)]
         (if (not plots.shown)
           (message "No plot to pin")
-          (let [pinned "{(string/replace name "plots*" "")}plot {plots.shown.index}*"]
+          (let [pinned $"{(string/replace name "plots*" "")}plot {plots.shown.index}*"]
             (make pinned (-> plots (assoc :pinned true) (dissoc :gallery)))
             (switch-to-buffer pinned)
             (close-buffer name)

@@ -21,10 +21,16 @@ pub enum Datum {
     Meta(Vec<Syntax>),
 }
 
+pub const PRELUDE_MARK: u32 = 0;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct Marks(Vec<u32>);
 
 impl Marks {
+    pub fn prelude() -> Self {
+        Self(vec![PRELUDE_MARK])
+    }
+
     pub fn last(&self) -> Option<u32> {
         self.0.last().copied()
     }

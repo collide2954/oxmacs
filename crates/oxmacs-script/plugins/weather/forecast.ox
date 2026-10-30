@@ -10,11 +10,11 @@
 (def daily-fields "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset")
 
 (def (geocode-url name)
-  "{geocoding}?name={(string/url-encode (string/trim name))}&count=1&language=en&format=json")
+  $"{geocoding}?name={(string/url-encode (string/trim name))}&count=1&language=en&format=json")
 
 (def (forecast-url place units)
   (let [imperial (if (= units :imperial) "&temperature_unit=fahrenheit&wind_speed_unit=mph" "")]
-    "{endpoint}?latitude={place.latitude}&longitude={place.longitude}&current={current-fields}&hourly={hourly-fields}&daily={daily-fields}&timezone=auto&forecast_days=7{imperial}"))
+    $"{endpoint}?latitude={place.latitude}&longitude={place.longitude}&current={current-fields}&hourly={hourly-fields}&daily={daily-fields}&timezone=auto&forecast_days=7{imperial}"))
 
 (def (parse-place text)
   (when-let [found (first (get (json/read text) :results []))]
@@ -131,27 +131,28 @@
               values))))))
 
 (def (degrees value)
-  (if (nil? value) "–" "{(round value)}°"))
+  (if (nil? value) "–" $"{(round value)}°"))
 
 (def (percent value)
-  (if (nil? value) "–" "{(round value)}%"))
+  (if (nil? value) "–" $"{(round value)}%"))
 
 (def (two number)
   (string/pad-start (str number) 2 "0"))
 
 (def (clock moment)
-  "{(two moment.hour)}:{(two moment.minute)}")
+  $"{(two moment.hour)}:{(two moment.minute)}")
 
 (def (weekday moment)
   (string/capitalize (string/slice (str moment.weekday) 1 4)))
 
 (def (brief forecast)
   (let [now forecast.now]
-    "{(icon now.condition now.day)} {(degrees now.temperature)}"))
+    $"{(icon now.condition now.day)} {(degrees now.temperature)}"))
 
-(def places-sample #r#"{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}"#)
+(def places-sample """{"results":[{"id":2950159,"name":"Berlin","latitude":52.52437,"longitude":13.41053,"country_code":"DE","timezone":"Europe/Berlin","country":"Germany","admin1":"Land Berlin"}],"generationtime_ms":0.9}""")
 
-(def forecast-sample #r#"{
+(def forecast-sample """
+{
     "latitude": 52.52, "longitude": 13.42, "timezone": "Europe/Berlin",
     "current_units": {"temperature_2m": "°C", "wind_speed_10m": "km/h"},
     "current": {"time": "2026-10-19T14:15", "temperature_2m": 13.2, "apparent_temperature": 11.04,
@@ -168,13 +169,14 @@
               "precipitation_probability_max": [10, 85],
               "sunrise": ["2026-10-19T07:32", "2026-10-20T07:34"],
               "sunset": ["2026-10-19T18:09", "2026-10-20T18:07"]}
-}"#)
+}
+""")
 
 (test "places are looked up by name"
   (expect (= (geocode-url "São Paulo")
              "https://geocoding-api.open-meteo.com/v1/search?name=S%C3%A3o%20Paulo&count=1&language=en&format=json"))
   (expect (= (place-label (parse-place places-sample)) "Berlin, Land Berlin, Germany"))
-  (expect (nil? (parse-place "{{}}"))))
+  (expect (nil? (parse-place "{}"))))
 
 (test "forecasts ask for the configured units"
   (let [place (parse-place places-sample)
