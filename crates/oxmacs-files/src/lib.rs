@@ -5,6 +5,8 @@ pub mod paths;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod platform;
+pub mod units;
+pub mod uri;
 mod write;
 
 pub use write::{NewFile, write, write_with};

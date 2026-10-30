@@ -1,10 +1,11 @@
 use std::cmp::Reverse;
 use std::path::PathBuf;
 
+use oxmacs_files::uri;
 use serde_json::Value;
 
 use super::features::STALE;
-use super::{Encoding, ServerId, number, protocol};
+use super::{Encoding, ServerId, number};
 use crate::editor::Editor;
 use crate::text::{Buffer, BufferId};
 
@@ -24,13 +25,13 @@ pub(super) fn files(edit: &Value) -> Vec<(PathBuf, Vec<Value>)> {
         for change in changes {
             let uri = change["textDocument"]["uri"].as_str();
             let edits = change.get("edits").and_then(Value::as_array);
-            if let (Some(path), Some(edits)) = (uri.and_then(protocol::path), edits) {
+            if let (Some(path), Some(edits)) = (uri.and_then(uri::to_path), edits) {
                 found.push((path, edits.clone()));
             }
         }
     } else if let Some(changes) = edit.get("changes").and_then(Value::as_object) {
         for (uri, edits) in changes {
-            if let (Some(path), Some(edits)) = (protocol::path(uri), edits.as_array()) {
+            if let (Some(path), Some(edits)) = (uri::to_path(uri), edits.as_array()) {
                 found.push((path, edits.clone()));
             }
         }
@@ -85,7 +86,7 @@ impl Editor {
             .into_iter()
             .flatten()
             .filter_map(|change| {
-                let path = protocol::path(change["textDocument"]["uri"].as_str()?)?;
+                let path = uri::to_path(change["textDocument"]["uri"].as_str()?)?;
                 Some((path, change["textDocument"]["version"].as_i64()))
             })
             .chain(files(edit).into_iter().map(|(path, _)| (path, None)))

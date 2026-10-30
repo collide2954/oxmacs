@@ -1,7 +1,6 @@
 mod edits;
 mod features;
 mod glue;
-mod protocol;
 mod servers;
 
 use std::env;
@@ -9,9 +8,10 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use oxmacs_files::units::Encoding;
+use oxmacs_files::uri;
 use serde_json::{Value, json};
 
-pub use protocol::Encoding;
 pub use servers::ServerSpec;
 
 use crate::external::lsp::{Event, Launch};
@@ -191,9 +191,9 @@ fn initialize(root: &Path) -> Value {
     json!({
         "processId": std::process::id(),
         "clientInfo": {"name": "oxmacs", "version": env!("CARGO_PKG_VERSION")},
-        "rootUri": protocol::uri(root),
+        "rootUri": uri::from_path(root),
         "rootPath": root.display().to_string(),
-        "workspaceFolders": [{"uri": protocol::uri(root), "name": name}],
+        "workspaceFolders": [{"uri": uri::from_path(root), "name": name}],
         "capabilities": {
             "general": {"positionEncodings": ["utf-32", "utf-16"]},
             "window": {"workDoneProgress": true},
@@ -325,7 +325,7 @@ impl Lsp {
                 None => return,
             },
         };
-        let uri = protocol::uri(file.path);
+        let uri = uri::from_path(file.path);
         self.reconcile(file.buffer, id, &uri);
         let Some(client) = self.client(id) else {
             return;
@@ -527,7 +527,7 @@ impl Lsp {
                 let Some(root) = self.client(id).map(|client| client.root.clone()) else {
                     return Vec::new();
                 };
-                json!([{"uri": protocol::uri(&root), "name": root.display().to_string()}])
+                json!([{"uri": uri::from_path(&root), "name": root.display().to_string()}])
             }
             "workspace/applyEdit" => {
                 return vec![Outcome::EditRequested {
@@ -626,7 +626,7 @@ impl Lsp {
         let Some(uri) = params.get("uri").and_then(Value::as_str) else {
             return Vec::new();
         };
-        let Some(path) = protocol::path(uri) else {
+        let Some(path) = uri::to_path(uri) else {
             return Vec::new();
         };
         let items = params

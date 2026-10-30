@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 lsp-server.workspace = true
 ox-lang.workspace = true
+oxmacs-files.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

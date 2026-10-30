@@ -3925,6 +3925,7 @@ version = "0.14.0"
 dependencies = [
  "lsp-server",
  "ox-lang",
+ "oxmacs-files",
  "serde_json",
  "tempfile",
 ]

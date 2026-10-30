@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::error::Error;
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
@@ -11,6 +10,8 @@ use ox_lang::forms::Forms;
 use ox_lang::ide::{self, Source};
 use ox_lang::names;
 use ox_lang::span::Span;
+use oxmacs_files::units::Encoding;
+use oxmacs_files::uri;
 use serde_json::{Value, json};
 
 type Failure = Box<dyn Error + Send + Sync>;
@@ -63,61 +64,6 @@ struct Server<'a> {
     editor: Option<Isolate>,
 }
 
-fn decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut at = 0;
-    while at < bytes.len() {
-        let escaped = (bytes[at] == b'%')
-            .then(|| text.get(at + 1..at + 3))
-            .flatten()
-            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
-        if let Some(byte) = escaped {
-            out.push(byte);
-            at += 3;
-        } else {
-            out.push(bytes[at]);
-            at += 1;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-fn path_of(uri: &str) -> Option<PathBuf> {
-    let rest = decode(uri.strip_prefix("file://")?);
-    let drive = rest.as_bytes().get(2) == Some(&b':')
-        && rest.starts_with('/')
-        && rest.as_bytes()[1].is_ascii_alphabetic();
-    if drive {
-        let mut local = rest[1..].to_owned();
-        local[..1].make_ascii_uppercase();
-        return Some(PathBuf::from(local.replace('/', "\\")));
-    }
-    Some(PathBuf::from(rest))
-}
-
-fn keeps(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || b"-._~/:".contains(&byte)
-}
-
-fn uri_of(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
-    let rooted = if text.starts_with('/') {
-        text
-    } else {
-        format!("/{text}")
-    };
-    let mut encoded = String::from("file://");
-    for byte in rooted.bytes() {
-        if keeps(byte) {
-            encoded.push(char::from(byte));
-        } else {
-            let _ = write!(encoded, "%{byte:02X}");
-        }
-    }
-    encoded
-}
-
 fn line_starts(text: &str) -> Vec<usize> {
     std::iter::once(0)
         .chain(text.match_indices('\n').map(|(at, _)| at + 1))
@@ -128,7 +74,8 @@ fn position(text: &str, byte: usize) -> Value {
     let byte = byte.min(text.len());
     let starts = line_starts(text);
     let line = starts.partition_point(|start| *start <= byte) - 1;
-    let character: usize = text[starts[line]..byte].chars().map(char::len_utf16).sum();
+    let before = &text[starts[line]..byte];
+    let character = Encoding::Utf16.to_units(before, before.chars().count());
     json!({"line": line, "character": character})
 }
 
@@ -145,16 +92,10 @@ fn offset(text: &str, at: &Value) -> usize {
     let Some(start) = starts.get(line).copied() else {
         return text.len();
     };
-    let mut wanted = usize::try_from(at["character"].as_u64().unwrap_or(0)).unwrap_or(0);
-    let mut byte = start;
-    for character in text[start..].chars() {
-        if wanted == 0 || character == '\n' {
-            break;
-        }
-        wanted = wanted.saturating_sub(character.len_utf16());
-        byte += character.len_utf8();
-    }
-    byte
+    let units = usize::try_from(at["character"].as_u64().unwrap_or(0)).unwrap_or(0);
+    let line = text[start..].split('\n').next().unwrap_or_default();
+    let column = Encoding::Utf16.to_column(line, units);
+    start + line.chars().take(column).map(char::len_utf8).sum::<usize>()
 }
 
 fn completion_kind(kind: Kind) -> u8 {
@@ -246,7 +187,7 @@ impl<'a> Server<'a> {
         let uri = params["textDocument"]["uri"].as_str()?.to_owned();
         match notification.method.as_str() {
             "textDocument/didOpen" => {
-                let path = path_of(&uri);
+                let path = uri::to_path(&uri);
                 let name = path
                     .as_ref()
                     .map_or_else(|| uri.clone(), |path| path.display().to_string());
@@ -420,8 +361,9 @@ impl<'a> Server<'a> {
             .describe(&module, &name)?
             .place?;
         let file = Path::new(place.file());
-        file.is_file()
-            .then(|| json!({"uri": uri_of(file), "range": range(&place.source.text, place.span)}))
+        file.is_file().then(
+            || json!({"uri": uri::from_path(file), "range": range(&place.source.text, place.span)}),
+        )
     }
 
     fn references(&self, params: &Value) -> Option<Value> {
@@ -547,35 +489,4 @@ pub fn serve(options: &Options) -> Result<(), Failure> {
     drop(connection);
     threads.join()?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn uris_and_paths_match_the_editor_s_vectors() {
-        for (path, uri) in [
-            (
-                r"C:\Users\ana\my code\a#b%c.ox",
-                "file:///C:/Users/ana/my%20code/a%23b%25c.ox",
-            ),
-            (
-                "/home/ana/naïve €.ox",
-                "file:///home/ana/na%C3%AFve%20%E2%82%AC.ox",
-            ),
-        ] {
-            assert_eq!(uri_of(Path::new(path)), uri);
-            assert_eq!(path_of(uri), Some(PathBuf::from(path)));
-        }
-        for (uri, path) in [
-            ("file:///c%3A/x/y.ox", r"C:\x\y.ox"),
-            ("file:///tmp/100%", "/tmp/100%"),
-            ("file:///tmp/%zz%4", "/tmp/%zz%4"),
-            ("file:///tmp/%aé%é%41", "/tmp/%aé%éA"),
-        ] {
-            assert_eq!(path_of(uri), Some(PathBuf::from(path)), "{uri}");
-        }
-        assert_eq!(path_of("https://example.com"), None);
-    }
 }

@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::path::Path;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -14,15 +13,6 @@ struct Client {
 }
 
 const WAIT: Duration = Duration::from_secs(20);
-
-fn uri(path: &Path) -> String {
-    let text = path.display().to_string().replace('\\', "/");
-    if text.starts_with('/') {
-        format!("file://{text}")
-    } else {
-        format!("file:///{text}")
-    }
-}
 
 impl Client {
     fn start() -> Self {
@@ -121,7 +111,7 @@ const SHAPES: &str = "(def (area w h) \"Width times height.\" (* w h))
 
 fn shapes() -> (tempfile::TempDir, String, Client) {
     let dir = tempfile::tempdir().unwrap();
-    let file = uri(&dir.path().join("shapes.ox"));
+    let file = oxmacs_files::uri::from_path(&dir.path().join("shapes.ox"));
     (dir, file, Client::start())
 }
 
@@ -216,7 +206,7 @@ fn definitions_references_and_renames_follow_names() {
 #[test]
 fn renames_and_references_follow_the_binding_not_the_spelling() {
     let (dir, file, mut client) = shapes();
-    let geometry = uri(&dir.path().join("geometry.ox"));
+    let geometry = oxmacs_files::uri::from_path(&dir.path().join("geometry.ox"));
     let source = "(def (area w h) (* w h))\n(def (scaled area k) (* area k))\n(area 1 2)\n";
     std::fs::write(dir.path().join("geometry.ox"), source).unwrap();
     client.open(&geometry, source);

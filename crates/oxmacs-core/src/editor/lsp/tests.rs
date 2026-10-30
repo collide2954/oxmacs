@@ -123,7 +123,7 @@ fn opening_a_file_starts_its_server_in_the_project_root() {
     assert_eq!(initialize["method"], "initialize");
     assert_eq!(
         initialize["params"]["rootUri"],
-        super::protocol::uri(dir.path()).as_str()
+        oxmacs_files::uri::from_path(dir.path()).as_str()
     );
     assert!(editor.mode_line().contains("rust-analyzer…"));
     fs::write(dir.path().join("src/lib.rs"), "").unwrap();
@@ -177,7 +177,7 @@ fn diagnostics_from_the_server_show_where_they_point() {
     reply(
         &mut editor,
         &json!({"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {
-            "uri": super::protocol::uri(&path),
+            "uri": oxmacs_files::uri::from_path(&path),
             "diagnostics": [
                 {"range": {"start": {"line": 1, "character": 8}, "end": {"line": 1, "character": 10}},
                  "severity": 2, "message": "unused variable"},
@@ -546,7 +546,7 @@ fn m_dot_goes_to_the_definition_and_m_comma_comes_back() {
     answer(
         &mut editor,
         &request,
-        &json!([{"uri": super::protocol::uri(&dir.path().join("src/lib.rs")),
+        &json!([{"uri": oxmacs_files::uri::from_path(&dir.path().join("src/lib.rs")),
                 "range": {"start": {"line": 0, "character": 7}, "end": {"line": 0, "character": 13}}}]),
     );
     assert_eq!(editor.buffer().name(), "lib.rs");
@@ -559,7 +559,7 @@ fn m_dot_goes_to_the_definition_and_m_comma_comes_back() {
 #[test]
 fn m_question_lists_the_references_in_xref() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     press(&mut editor, "C-n C-f C-f C-f C-f C-f C-f C-f C-f");
 
     press(&mut editor, "M-?");
@@ -584,7 +584,7 @@ fn m_question_lists_the_references_in_xref() {
 #[test]
 fn f2_renames_through_the_server_and_leaves_files_unsaved() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     press(&mut editor, "C-f C-f C-f C-f");
 
     press(&mut editor, "<f2>");
@@ -613,7 +613,7 @@ fn f2_renames_through_the_server_and_leaves_files_unsaved() {
 #[test]
 fn edits_and_diagnostics_reach_a_buffer_through_another_spelling_of_its_file() {
     let (dir, mut editor) = capable();
-    let other = super::protocol::uri(&dir.path().join("src").join(".").join("main.rs"));
+    let other = oxmacs_files::uri::from_path(&dir.path().join("src").join(".").join("main.rs"));
     let buffers = editor.buffer_ids().len();
     press(&mut editor, "C-f C-f C-f C-f");
 
@@ -652,7 +652,7 @@ fn edits_and_diagnostics_reach_a_buffer_through_another_spelling_of_its_file() {
 #[test]
 fn edits_inserted_at_the_same_place_keep_the_server_s_order() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     press(&mut editor, "C-f C-f C-f C-f");
 
     press(&mut editor, "<f2>");
@@ -681,7 +681,7 @@ fn edits_inserted_at_the_same_place_keep_the_server_s_order() {
 #[test]
 fn c_c_dot_offers_the_server_s_fixes_with_the_diagnostics_here() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     let diagnostic = json!({"range": {"start": {"line": 1, "character": 8}, "end": {"line": 1, "character": 10}},
                             "severity": 2, "message": "unused variable"});
     reply(
@@ -772,7 +772,7 @@ fn edits_for_text_that_changed_since_the_request_are_dropped() {
 #[test]
 fn renames_for_text_that_changed_since_the_request_are_dropped() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     press(&mut editor, "C-f C-f C-f C-f <f2> C-a C-k");
     type_text(&mut editor, "start");
     press(&mut editor, "RET");
@@ -838,7 +838,7 @@ fn format_on_save_still_saves_when_the_server_fails_or_stops() {
 #[test]
 fn edits_the_server_asks_for_are_applied() {
     let (dir, mut editor) = capable();
-    let main = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let main = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
 
     reply(
         &mut editor,
@@ -1050,12 +1050,16 @@ fn reopened(editor: &mut Editor, old: &str, new: &str) -> bool {
 fn writing_a_buffer_to_another_file_reopens_its_document_there() {
     let (dir, mut editor) = started();
     editor.take_effects();
-    let old = super::protocol::uri(&dir.path().join("src/main.rs"));
+    let old = oxmacs_files::uri::from_path(&dir.path().join("src/main.rs"));
     let new = dir.path().join("src/start.rs");
 
     editor.finish_write(new.clone());
 
-    assert!(reopened(&mut editor, &old, &super::protocol::uri(&new)));
+    assert!(reopened(
+        &mut editor,
+        &old,
+        &oxmacs_files::uri::from_path(&new)
+    ));
 }
 
 #[test]
@@ -1070,7 +1074,7 @@ fn moving_a_visited_file_reopens_its_document_at_the_new_place() {
 
     assert!(reopened(
         &mut editor,
-        &super::protocol::uri(&from),
-        &super::protocol::uri(&to)
+        &oxmacs_files::uri::from_path(&from),
+        &oxmacs_files::uri::from_path(&to)
     ));
 }

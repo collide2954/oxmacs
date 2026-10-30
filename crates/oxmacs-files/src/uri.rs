@@ -1,56 +1,11 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Encoding {
-    Utf8,
-    Utf16,
-    Utf32,
-}
-
-impl Encoding {
-    pub fn named(name: Option<&str>) -> Self {
-        match name {
-            Some("utf-8") => Self::Utf8,
-            Some("utf-32") => Self::Utf32,
-            _ => Self::Utf16,
-        }
-    }
-
-    fn units(self, character: char) -> usize {
-        match self {
-            Self::Utf8 => character.len_utf8(),
-            Self::Utf16 => character.len_utf16(),
-            Self::Utf32 => 1,
-        }
-    }
-
-    pub fn to_units(self, line: &str, column: usize) -> usize {
-        line.chars()
-            .take(column)
-            .map(|character| self.units(character))
-            .sum()
-    }
-
-    pub fn to_column(self, line: &str, units: usize) -> usize {
-        let mut counted = 0;
-        let mut column = 0;
-        for character in line.chars() {
-            if counted >= units {
-                break;
-            }
-            counted += self.units(character);
-            column += 1;
-        }
-        column
-    }
-}
-
 fn keeps(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || b"-._~/:".contains(&byte)
 }
 
-pub fn uri(path: &Path) -> String {
+pub fn from_path(path: &Path) -> String {
     let text = path.to_string_lossy().replace('\\', "/");
     let rooted = if text.starts_with('/') {
         text
@@ -88,7 +43,7 @@ fn decoded(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-pub fn path(uri: &str) -> Option<PathBuf> {
+pub fn to_path(uri: &str) -> Option<PathBuf> {
     let rest = decoded(uri.strip_prefix("file://")?);
     let drive = rest.as_bytes().get(2) == Some(&b':')
         && rest.starts_with('/')
@@ -106,21 +61,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn columns_count_in_the_server_s_units() {
-        let line = "a😀é b";
-
-        assert_eq!(Encoding::Utf16.to_units(line, 3), 4);
-        assert_eq!(Encoding::Utf8.to_units(line, 3), 7);
-        assert_eq!(Encoding::Utf32.to_units(line, 3), 3);
-        assert_eq!(Encoding::Utf16.to_column(line, 4), 3);
-        assert_eq!(Encoding::Utf8.to_column(line, 7), 3);
-        assert_eq!(Encoding::Utf16.to_column(line, 99), 5);
-        assert_eq!(Encoding::named(None), Encoding::Utf16);
-        assert_eq!(Encoding::named(Some("utf-32")), Encoding::Utf32);
-    }
-
-    #[test]
-    fn uris_and_paths_match_ox_lsp_s_vectors() {
+    fn paths_round_trip_through_percent_encoded_file_uris() {
         for (local, encoded) in [
             (
                 r"C:\Users\ana\my code\a#b%c.ox",
@@ -131,17 +72,21 @@ mod tests {
                 "file:///home/ana/na%C3%AFve%20%E2%82%AC.ox",
             ),
         ] {
-            assert_eq!(uri(Path::new(local)), encoded);
-            assert_eq!(path(encoded), Some(PathBuf::from(local)));
+            assert_eq!(from_path(Path::new(local)), encoded);
+            assert_eq!(to_path(encoded), Some(PathBuf::from(local)));
         }
+    }
+
+    #[test]
+    fn odd_escapes_decode_as_far_as_they_can() {
         for (encoded, local) in [
             ("file:///c%3A/x/y.ox", r"C:\x\y.ox"),
             ("file:///tmp/100%", "/tmp/100%"),
             ("file:///tmp/%zz%4", "/tmp/%zz%4"),
             ("file:///tmp/%aé%é%41", "/tmp/%aé%éA"),
         ] {
-            assert_eq!(path(encoded), Some(PathBuf::from(local)), "{encoded}");
+            assert_eq!(to_path(encoded), Some(PathBuf::from(local)), "{encoded}");
         }
-        assert_eq!(path("https://example.com"), None);
+        assert_eq!(to_path("https://example.com"), None);
     }
 }

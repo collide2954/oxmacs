@@ -1,7 +1,8 @@
+use oxmacs_files::uri;
 use serde_json::{Value, json};
 
 use super::edits::{files, position};
-use super::{Encoding, ServerId, number, protocol};
+use super::{Encoding, ServerId, number};
 use crate::command::Command;
 use crate::editor::decorations::Owner;
 use crate::editor::{Editor, Lasts, Look, Offer, Picked, Place, Service};
@@ -730,7 +731,7 @@ impl Editor {
         found
             .iter()
             .filter_map(|(uri, range)| {
-                let path = protocol::path(uri)?;
+                let path = uri::to_path(uri)?;
                 let line = number(&range["start"]["line"]);
                 let units = number(&range["start"]["character"]);
                 let column = self
