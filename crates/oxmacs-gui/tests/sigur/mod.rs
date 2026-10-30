@@ -108,11 +108,11 @@ fn bar_number(bars: f64) -> i64 {
     bars as i64
 }
 
-fn listen(film: &mut Film, app: &mut App, seconds: f64) {
+pub(super) fn listen(film: &mut Film, app: &mut App, seconds: f64) {
     film.play(app, seconds);
 }
 
-fn reload(film: &mut Film, app: &mut App, hand: &mut Hand) {
+pub(super) fn reload(film: &mut Film, app: &mut App, hand: &mut Hand) {
     hand.key(film, app, "C-c C-b");
     settle(app);
 }
@@ -255,12 +255,12 @@ fn fade(film: &mut Film, app: &mut App, session: &Session) {
     listen(film, app, 18.0);
 }
 
-fn sigur_home() -> PathBuf {
+pub(super) fn music_home(folder: &str) -> PathBuf {
     let user = std::env::var_os("USERPROFILE")
         .or_else(|| std::env::var_os("HOME"))
         .map(PathBuf::from)
         .unwrap();
-    let home = user.join("oxmacs-sigur-demo");
+    let home = user.join(folder);
     if home.join(".oxmacs-demo").exists() {
         fs::remove_dir_all(&home).unwrap();
     }
@@ -280,7 +280,7 @@ fn sigur_home() -> PathBuf {
     home
 }
 
-fn sigur_app(home: &Path) -> App {
+pub(super) fn music_app(home: &Path) -> App {
     let visit = Visit {
         path: home.join("song.ox"),
         line: None,
@@ -293,7 +293,7 @@ fn sigur_app(home: &Path) -> App {
     app
 }
 
-fn report(stage: &str, film: &Film, app: &App) {
+pub(super) fn report(stage: &str, film: &Film, app: &App) {
     let seconds: f64 = film.frames.iter().map(|(_, seconds)| seconds).sum();
     eprintln!(
         "stage {stage}: {} frames, {seconds:.1}s, in {}, message {:?}",
@@ -311,15 +311,10 @@ fn sigur_video() {
     };
     let out = PathBuf::from(out);
     let dry = std::env::var("OXMACS_SIGUR_DRY").is_ok();
-    let home = sigur_home();
+    let home = music_home("oxmacs-sigur-demo");
     PUMPING.set(true);
-    let mut film = Film::new(out.with_extension("frames"))
-        .sized(Size::new(1280.0, 720.0))
-        .scaled_to(1280, 720)
-        .ticking(Instant::now())
-        .listening()
-        .dry(dry);
-    let mut app = sigur_app(&home);
+    let mut film = music_film(&out, dry);
+    let mut app = music_app(&home);
     let session = bells(&mut film, &mut app);
     report("bells", &film, &app);
     harmonium(&mut film, &mut app);
@@ -335,6 +330,19 @@ fn sigur_video() {
     fade(&mut film, &mut app, &session);
     film.hold(1.0);
     report("end", &film, &app);
+    finish(&mut film, &app, &out, dry);
+}
+
+pub(super) fn music_film(out: &Path, dry: bool) -> Film {
+    Film::new(out.with_extension("frames"))
+        .sized(Size::new(1280.0, 720.0))
+        .scaled_to(1280, 720)
+        .ticking(Instant::now())
+        .listening()
+        .dry(dry)
+}
+
+pub(super) fn finish(film: &mut Film, app: &App, out: &Path, dry: bool) {
     let editor = app.editor();
     let written = editor
         .buffer_named("song.ox")
@@ -357,6 +365,6 @@ fn sigur_video() {
             )
             .unwrap();
         }
-        _ => film.finish_heard(&out),
+        _ => film.finish_heard(out),
     }
 }
