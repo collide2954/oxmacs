@@ -23,4 +23,5 @@ pub(crate) mod provided;
 pub(crate) mod runs;
 pub(crate) mod servers;
 pub(crate) mod settings;
+pub mod sound;
 pub(crate) mod transients;

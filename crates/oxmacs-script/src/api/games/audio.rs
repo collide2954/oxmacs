@@ -538,6 +538,10 @@ impl Audio {
         }
     }
 
+    pub fn stream(&mut self, source: impl Source + Send + 'static) {
+        self.mixer.add(source);
+    }
+
     pub fn music(&self) -> Option<Voice> {
         self.music.filter(|voice| self.voices.contains_key(voice))
     }

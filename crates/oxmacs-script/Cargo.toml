@@ -17,6 +17,7 @@ keepass.workspace = true
 ox-lang.workspace = true
 ox-library.workspace = true
 ox-rodeo.workspace = true
+ox-synth.workspace = true
 oxmacs-api.workspace = true
 oxmacs-core.workspace = true
 oxmacs-pdf.workspace = true

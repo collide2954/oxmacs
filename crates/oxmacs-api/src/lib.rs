@@ -4,6 +4,7 @@ use ox_lang::{Isolate, Stubs};
 
 pub const DOCS: &str = include_str!("docs.ox");
 pub const GAME_DOCS: &str = include_str!("games.ox");
+pub const SOUND_DOCS: &str = include_str!("sound.ox");
 pub const PRELUDE: &str = include_str!("prelude.ox");
 
 pub fn home() -> Option<PathBuf> {
@@ -72,6 +73,7 @@ pub fn plain_isolate() -> Isolate {
     add_editor_modules(&mut isolate);
     isolate.define_stubs(DOCS, Stubs::Modules);
     isolate.define_stubs(GAME_DOCS, Stubs::Modules);
+    isolate.define_stubs(SOUND_DOCS, Stubs::Modules);
     isolate
 }
 
@@ -79,6 +81,7 @@ pub fn editor_isolate() -> Isolate {
     let mut isolate = plain_isolate();
     isolate.define_stubs(DOCS, Stubs::Globals);
     isolate.define_stubs(GAME_DOCS, Stubs::Globals);
+    isolate.define_stubs(SOUND_DOCS, Stubs::Globals);
     extend_with_prelude(&mut isolate);
     isolate
 }

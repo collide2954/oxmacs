@@ -34,6 +34,7 @@ pub struct Meter {
     bar: AtomicU32,
     tempo: AtomicU32,
     playing: AtomicBool,
+    automated: Mutex<Vec<Arc<str>>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -110,6 +111,14 @@ impl Handle {
     pub fn scope(&self) -> Vec<f32> {
         self.meter
             .scope
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    pub fn automated(&self) -> Vec<Arc<str>> {
+        self.meter
+            .automated
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -256,6 +265,7 @@ pub struct Engine {
     count: usize,
     scope: Vec<f32>,
     peak: f32,
+    dirty: bool,
 }
 
 impl fmt::Debug for Engine {
@@ -285,6 +295,7 @@ impl Engine {
             count: 0,
             scope: Vec::with_capacity(BLOCK),
             peak: 0.0,
+            dirty: false,
         }
     }
 
@@ -354,6 +365,7 @@ impl Engine {
 
     fn start(&mut self, song: Arc<Song>, first: usize) {
         let bar = self.bar_samples(&song);
+        self.dirty = true;
         let players = self.players(&song, bar, first * bar);
         self.sequence = Some(Sequence {
             song,
@@ -365,6 +377,7 @@ impl Engine {
     }
 
     pub fn apply(&mut self, command: Command) {
+        self.dirty = true;
         match command {
             Command::Play { id, sound, note } => {
                 self.seed += 1;
@@ -432,6 +445,24 @@ impl Engine {
             }
         }
         self.automate();
+        if self.dirty
+            && let Ok(mut automated) = self.meter.automated.try_lock()
+        {
+            let written = self
+                .sequence
+                .iter()
+                .flat_map(|sequence| &sequence.song.automations);
+            let mut names: Vec<Arc<str>> = self
+                .automations
+                .iter()
+                .chain(written)
+                .map(|automation| Arc::clone(&automation.control))
+                .collect();
+            names.sort();
+            names.dedup();
+            *automated = names;
+            self.dirty = false;
+        }
         if let Ok(mut scope) = self.meter.scope.try_lock() {
             scope.extend(self.scope.drain(..));
             let excess = scope.len().saturating_sub(SCOPE);
