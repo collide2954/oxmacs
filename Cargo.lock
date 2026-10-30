@@ -4040,6 +4040,7 @@ dependencies = [
  "notify",
  "open",
  "ox-lang",
+ "ox-synth",
  "oxmacs-api",
  "oxmacs-core",
  "oxmacs-pdf",

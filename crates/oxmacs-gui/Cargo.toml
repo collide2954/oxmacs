@@ -30,6 +30,7 @@ native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
 ox-lang.workspace = true
+ox-synth.workspace = true
 image.workspace = true
 iced_runtime.workspace = true
 iced_test.workspace = true

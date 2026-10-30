@@ -53,8 +53,8 @@ fn forms(heads: &[&str]) -> String {
 
 type Stage = fn(&mut Film, &mut App);
 
-const RUSH: f64 = 6.0;
-const CALM: f64 = 1.6;
+pub(super) const RUSH: f64 = 6.0;
+pub(super) const CALM: f64 = 1.6;
 
 const KEYBOARD: [&str; 3] = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
 
@@ -86,14 +86,14 @@ fn beside(c: char, pick: f64) -> char {
     c
 }
 
-struct Hand {
+pub(super) struct Hand {
     fast: f64,
     pending: f64,
     since_typo: usize,
 }
 
 impl Hand {
-    fn new(fast: f64) -> Self {
+    pub(super) fn new(fast: f64) -> Self {
         Self {
             fast,
             pending: 0.0,
@@ -101,7 +101,7 @@ impl Hand {
         }
     }
 
-    fn wait(&mut self, film: &mut Film, app: &mut App, seconds: f64) {
+    pub(super) fn wait(&mut self, film: &mut Film, app: &mut App, seconds: f64) {
         self.pending += seconds / self.fast;
         if self.pending >= FRAME {
             settle(app);
@@ -110,13 +110,13 @@ impl Hand {
         }
     }
 
-    fn flush(&mut self, film: &mut Film, app: &mut App) {
+    pub(super) fn flush(&mut self, film: &mut Film, app: &mut App) {
         settle(app);
         film.shot(app, self.pending.max(FRAME));
         self.pending = 0.0;
     }
 
-    fn key(&mut self, film: &mut Film, app: &mut App, notation: &str) {
+    pub(super) fn key(&mut self, film: &mut Film, app: &mut App, notation: &str) {
         for chord in notation.split(' ') {
             keys(app, chord);
             let pause = 0.15 + 0.25 * film.jitter();
@@ -160,7 +160,7 @@ impl Hand {
         self.wait(film, app, pause);
     }
 
-    fn write(&mut self, film: &mut Film, app: &mut App, text: &str) {
+    pub(super) fn write(&mut self, film: &mut Film, app: &mut App, text: &str) {
         let chars: Vec<char> = text.chars().collect();
         let mut at = 0;
         while at < chars.len() {
@@ -192,27 +192,27 @@ impl Hand {
         self.flush(film, app);
     }
 
-    fn seek(&mut self, film: &mut Film, app: &mut App, text: &str) {
+    pub(super) fn seek(&mut self, film: &mut Film, app: &mut App, text: &str) {
         self.key(film, app, "M-<");
         self.key(film, app, "C-s");
         self.write(film, app, text);
         self.key(film, app, "RET");
     }
 
-    fn seek_in(&mut self, film: &mut Film, app: &mut App, anchor: &str, text: &str) {
+    pub(super) fn seek_in(&mut self, film: &mut Film, app: &mut App, anchor: &str, text: &str) {
         self.seek(film, app, anchor);
         self.key(film, app, "C-s");
         self.write(film, app, text);
         self.key(film, app, "RET");
     }
 
-    fn command(&mut self, film: &mut Film, app: &mut App, name: &str) {
+    pub(super) fn command(&mut self, film: &mut Film, app: &mut App, name: &str) {
         self.key(film, app, "M-x");
         self.write(film, app, name);
         self.key(film, app, "RET");
     }
 
-    fn save(&mut self, film: &mut Film, app: &mut App) {
+    pub(super) fn save(&mut self, film: &mut Film, app: &mut App) {
         self.key(film, app, "C-x C-s");
         settle(app);
     }

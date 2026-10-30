@@ -1,6 +1,7 @@
 mod music;
 mod sample_book;
 mod sample_paper;
+mod sigur;
 mod support;
 mod tank;
 
@@ -126,6 +127,13 @@ struct Film {
     pace: f64,
     clock: Option<Instant>,
     dry: bool,
+    listening: Option<Listening>,
+}
+
+struct Listening {
+    capture: oxmacs_script::api::games::audio::Capture,
+    samples: Vec<f32>,
+    heard: f64,
 }
 
 impl Film {
@@ -142,6 +150,7 @@ impl Film {
             pace: 1.0,
             clock: None,
             dry: false,
+            listening: None,
         }
     }
 
@@ -153,6 +162,17 @@ impl Film {
         ox_lang::clock::pin(Some(start));
         Self {
             clock: Some(start),
+            ..self
+        }
+    }
+
+    fn listening(self) -> Self {
+        Self {
+            listening: Some(Listening {
+                capture: oxmacs_script::api::sound::capture(),
+                samples: Vec::new(),
+                heard: 0.0,
+            }),
             ..self
         }
     }
@@ -190,6 +210,12 @@ impl Film {
             }
         }
         self.frames.push((stem, seconds));
+        if let Some(listening) = &mut self.listening {
+            listening.heard += seconds;
+            let wanted = 2 * frames_in(listening.heard);
+            let more = wanted.saturating_sub(listening.samples.len());
+            listening.samples.extend(listening.capture.take(more));
+        }
         if let Some(clock) = &mut self.clock {
             *clock += Duration::from_secs_f64(seconds);
             let now = *clock;
@@ -285,6 +311,10 @@ impl Film {
         self.encode(out, true);
     }
 
+    fn finish_heard(&self, out: &Path) {
+        self.encode(out, true);
+    }
+
     fn encode(&self, out: &Path, scored: bool) {
         let names: Vec<String> = fs::read_dir(&self.folder)
             .unwrap()
@@ -325,7 +355,12 @@ impl Film {
         if scored {
             let length: f64 = self.frames.iter().map(|(_, seconds)| seconds).sum();
             let score = self.folder.join("score.wav");
-            music::vaporwave(length + 1.0, &score);
+            match &self.listening {
+                Some(listening) => {
+                    ox_synth::wav::save(&score, ox_synth::RATE, &listening.samples).unwrap();
+                }
+                None => music::vaporwave(length + 1.0, &score),
+            }
             ffmpeg
                 .arg("-i")
                 .arg(&score)
@@ -354,6 +389,15 @@ impl Film {
             .unwrap();
         assert!(status.success());
     }
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "film lengths are minutes, far inside usize"
+)]
+fn frames_in(seconds: f64) -> usize {
+    (seconds.max(0.0) * f64::from(ox_synth::RATE)).round() as usize
 }
 
 fn keys(app: &mut App, notation: &str) {
