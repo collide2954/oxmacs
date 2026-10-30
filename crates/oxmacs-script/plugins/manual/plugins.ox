@@ -90,6 +90,7 @@ oxmacs ships these plugins. Those on by default load the first time you use them
 
 ```table
 Plugin       Version  Default  What it does
+bellow       0.1.0    opt-in   Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls
 c            0.1.0    opt-in   C with highlighting, indentation and the clangd language server
 calendar     0.2.9    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
 cpp          0.1.0    opt-in   C++ with highlighting, indentation and the clangd language server
@@ -104,7 +105,7 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.90   on       The oxmacs tutorial and the Ox manual
+manual       0.5.91   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.10   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.5    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying

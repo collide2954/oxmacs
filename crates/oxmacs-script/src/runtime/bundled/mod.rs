@@ -34,7 +34,22 @@ pub const BUNDLED: &[Bundle] = &[
     EPUB,
     PDF,
     RODEO,
+    BELLOW,
 ];
+
+const BELLOW: Bundle = Bundle {
+    name: "bellow",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../../../plugins/bellow/plugin.ox"),
+        ),
+        (
+            "bellow.ox",
+            include_str!("../../../plugins/bellow/bellow.ox"),
+        ),
+    ],
+};
 
 const RODEO: Bundle = Bundle {
     name: "rodeo",
@@ -586,6 +601,9 @@ const WEATHER: Bundle = Bundle {
 
 #[cfg(test)]
 mod weather;
+
+#[cfg(test)]
+mod bellow;
 
 #[cfg(test)]
 mod catalog;
