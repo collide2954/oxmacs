@@ -43,24 +43,21 @@ struct Watching {
 fn start(watched: &Watched, sender: mpsc::Sender<()>) -> notify::Result<Watching> {
     let interest = Arc::new(Interest::new(watched));
     let (inside, outside) = by_distro(watched_directories(watched), oxmacs_process::inside_wsl());
-    let mut notifier = {
-        let interest = Arc::clone(&interest);
-        let mut sender = sender.clone();
-        notify::recommended_watcher(move |result: notify::Result<Event>| {
-            if result.is_ok_and(|event| interest.concerns(&event)) {
-                let _ = sender.try_send(());
-            }
-        })?
-    };
-    for directory in outside {
-        let _ = notifier.watch(directory, RecursiveMode::NonRecursive);
-    }
     let distros = inside
         .into_iter()
         .map(|(distro, folders)| {
             distros::Watch::start(distro, folders, Arc::clone(&interest), sender.clone())
         })
         .collect();
+    let mut sender = sender;
+    let mut notifier = notify::recommended_watcher(move |result: notify::Result<Event>| {
+        if result.is_ok_and(|event| interest.concerns(&event)) {
+            let _ = sender.try_send(());
+        }
+    })?;
+    for directory in outside {
+        let _ = notifier.watch(directory, RecursiveMode::NonRecursive);
+    }
     Ok(Watching {
         _notifier: notifier,
         _distros: distros,

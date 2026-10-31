@@ -57,34 +57,34 @@ pub fn named(text: &str) -> Option<Place> {
 mod tests {
     use super::*;
 
-    fn at(distro: &str, path: &str) -> Option<Place> {
-        Some(Place {
+    fn at(distro: &str, path: &str) -> Place {
+        Place {
             distro: distro.to_owned(),
             path: path.to_owned(),
-        })
+        }
     }
 
     #[test]
     fn shares_of_either_host_name_are_places_in_a_distro() {
         assert_eq!(
             place(Path::new(r"\\wsl.localhost\Fedora\home\ana\src\main.rs")),
-            at("Fedora", "/home/ana/src/main.rs")
+            Some(at("Fedora", "/home/ana/src/main.rs"))
         );
         assert_eq!(
             place(Path::new(r"\\wsl$\Ubuntu-24.04\etc\")),
-            at("Ubuntu-24.04", "/etc")
+            Some(at("Ubuntu-24.04", "/etc"))
         );
         assert_eq!(
             place(Path::new(r"\\?\UNC\WSL.LOCALHOST\Fedora\tmp")),
-            at("Fedora", "/tmp")
+            Some(at("Fedora", "/tmp"))
         );
         assert_eq!(
             place(Path::new(r"\\wsl.localhost\Fedora")),
-            at("Fedora", "/")
+            Some(at("Fedora", "/"))
         );
         assert_eq!(
             place(Path::new("//wsl.localhost/Fedora/x y")),
-            at("Fedora", "/x y")
+            Some(at("Fedora", "/x y"))
         );
         assert_eq!(place(Path::new(r"\\server\share\x")), None);
         assert_eq!(place(Path::new(r"C:\Users\ana")), None);
@@ -103,12 +103,16 @@ mod tests {
         );
         assert_eq!(
             place(&share("Fedora", "/home/ana")),
-            at("Fedora", "/home/ana")
+            Some(at("Fedora", "/home/ana"))
         );
     }
 
     #[cfg(windows)]
     #[test]
+    #[expect(
+        clippy::join_absolute_paths,
+        reason = "tools print Linux paths that Windows joins onto the share's prefix"
+    )]
     fn linux_paths_in_tool_output_join_onto_their_share() {
         assert_eq!(
             share("Fedora", "/home/ana/x").join("/home/ana/x/src/main.rs"),
@@ -122,12 +126,18 @@ mod tests {
             names("FedoraLinux-44\r\ndocker-desktop\r\n\r\n"),
             ["FedoraLinux-44", "docker-desktop"]
         );
-        assert!(names("Windows Subsystem for Linux has no installed distributions.\n").is_empty());
+        assert_eq!(
+            names("Windows Subsystem for Linux has no installed distributions.\n"),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
     fn wsl_names_reach_any_distro() {
-        assert_eq!(named("wsl:Fedora:/etc/hosts"), at("Fedora", "/etc/hosts"));
+        assert_eq!(
+            named("wsl:Fedora:/etc/hosts"),
+            Some(at("Fedora", "/etc/hosts"))
+        );
         assert_eq!(named("wsl:Fedora:etc"), None);
         assert_eq!(named("wsl::/etc"), None);
         assert_eq!(named(r"C:\x"), None);
