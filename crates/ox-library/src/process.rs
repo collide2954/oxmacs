@@ -1,5 +1,5 @@
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -279,16 +279,46 @@ pub fn install(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "which")
-        .arity(1, Some(1))
+        .arity(1, Some(2))
         .outside()
         .function(|heap, arguments| {
             let program = text(heap, "process/which", arguments[0])?.to_owned();
-            match oxmacs_process::which(&program) {
+            let found = match arguments.get(1) {
+                Some(folder) => {
+                    let folder = text(heap, "process/which", *folder)?.to_owned();
+                    oxmacs_process::which_in(&program, Path::new(&folder))
+                }
+                None => oxmacs_process::which(&program),
+            };
+            match found {
                 Some(path) => heap
                     .string(&path.display().to_string())
                     .map_err(Error::from),
                 None => Ok(Value::Nil),
             }
+        });
+    isolate
+        .native(MODULE, "environment!")
+        .arity(2, Some(2))
+        .outside()
+        .function(|heap, arguments| {
+            let folder = PathBuf::from(text(heap, "process/environment!", arguments[0])?);
+            if matches!(arguments[1], Value::Nil) {
+                oxmacs_process::clear_environment(&folder);
+                return Ok(Value::Nil);
+            }
+            let entries = heap.entries(arguments[1]).ok_or_else(|| {
+                Error::new(format!(
+                    "process/environment! expects a map of variable names to values, or nil, got {}",
+                    print::brief(heap, arguments[1])
+                ))
+            })?;
+            let variables = entries
+                .into_iter()
+                .map(|(name, value)| (name_of(heap, name), print::display(heap, value)))
+                .collect();
+            oxmacs_process::set_environment(&folder, variables);
+            Ok(Value::Nil)
         });
     isolate
         .native(MODULE, "os")

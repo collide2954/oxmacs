@@ -109,11 +109,11 @@ pub(in crate::editor) struct Lsp {
     missing: Vec<(String, Instant)>,
     out: Vec<Out>,
     assist: Assist,
-    pub(in crate::editor) find: fn(&str) -> Option<PathBuf>,
+    pub(in crate::editor) find: fn(&str, &Path) -> Option<PathBuf>,
 }
 
-fn on_path(program: &str) -> Option<PathBuf> {
-    oxmacs_process::which(program)
+fn on_path(program: &str, root: &Path) -> Option<PathBuf> {
+    oxmacs_process::which_in(program, root)
 }
 
 impl Default for Lsp {
@@ -433,7 +433,7 @@ impl Lsp {
             None => spec
                 .programs
                 .iter()
-                .find_map(|(program, args)| find(program).map(|found| (found, args.clone()))),
+                .find_map(|(program, args)| find(program, root).map(|found| (found, args.clone()))),
         };
         let Some((program, args)) = found else {
             self.missing.push((spec.name.clone(), now));
@@ -848,7 +848,7 @@ impl Lsp {
     fn found(&self, spec: &ServerSpec) -> Option<PathBuf> {
         spec.programs
             .iter()
-            .find_map(|(program, _)| (self.find)(program))
+            .find_map(|(program, _)| (self.find)(program, Path::new("")))
     }
 
     fn runs(&self, spec: &ServerSpec) -> bool {

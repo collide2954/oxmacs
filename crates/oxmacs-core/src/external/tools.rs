@@ -41,7 +41,7 @@ pub fn rustfmt(text: &str, directory: &Path, edition: &str) -> Result<String, St
     let launch = if launch.distro().is_some() {
         launch
     } else {
-        let program = oxmacs_process::which("rustfmt")
+        let program = oxmacs_process::which_in("rustfmt", directory)
             .ok_or_else(|| "not found; rustup component add rustfmt".to_owned())?;
         Launch::new(program).directory(directory)
     };

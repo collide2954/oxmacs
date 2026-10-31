@@ -74,6 +74,47 @@ fn run_collects_the_output_and_status() {
 }
 
 #[test]
+fn programs_started_in_a_folder_get_the_environment_given_to_it() {
+    let mut isolate = ox_library::isolate();
+    let folder = tempfile::tempdir().unwrap();
+    let inside = folder.path().join("src");
+    std::fs::create_dir(&inside).unwrap();
+    let place = folder.path().display().to_string();
+    let (program, args) = if cfg!(windows) {
+        ("cmd", r#"["/C" "echo %OX_FOLDER_TEST%"]"#)
+    } else {
+        ("sh", r#"["-c" "echo $OX_FOLDER_TEST"]"#)
+    };
+    let shown = format!(
+        r#"(module (import (ox process) (ox string))) (string/trim (get (await (process/run "{program}" {args} :cwd {:?})) :stdout))"#,
+        inside.display().to_string()
+    );
+
+    evaluated(
+        &mut isolate,
+        &format!(
+            r#"(module (import (ox process))) (process/environment! {place:?} {{OX_FOLDER_TEST: "from the folder"}})"#
+        ),
+    );
+    let given = evaluated(&mut isolate, &shown);
+    evaluated(
+        &mut isolate,
+        &format!("(module (import (ox process))) (process/environment! {place:?} nil)"),
+    );
+    let taken = evaluated(&mut isolate, &shown);
+
+    assert_eq!(given, r#""from the folder""#);
+    assert_ne!(taken, given);
+    assert!(
+        evaluated(
+            &mut isolate,
+            "(module (import (ox process))) (process/environment! \"x\" [1])"
+        )
+        .contains("process/environment! expects a map of variable names to values, or nil")
+    );
+}
+
+#[test]
 fn started_processes_take_input_and_stream_lines() {
     let mut isolate = ox_library::isolate();
 

@@ -108,19 +108,27 @@ impl Launch {
     }
 
     fn command_with(&self, inside_wsl: bool) -> Command {
+        let folder: Vec<(OsString, Option<OsString>)> = self
+            .directory
+            .as_deref()
+            .map(crate::environment_for)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(key, value)| (key.into(), Some(value.into())))
+            .collect();
         match self.distro_with(inside_wsl) {
-            Some(place) => self.inside(&place),
-            None => self.outside(),
+            Some(place) => self.inside(&place, &folder),
+            None => self.outside(&folder),
         }
     }
 
-    fn outside(&self) -> Command {
+    fn outside(&self, folder: &[(OsString, Option<OsString>)]) -> Command {
         let mut command = Command::new(&self.program);
         command.args(&self.args);
         if let Some(directory) = &self.directory {
             command.current_dir(directory);
         }
-        for (key, value) in &self.env {
+        for (key, value) in folder.iter().chain(&self.env) {
             match value {
                 Some(value) => command.env(key, value),
                 None => command.env_remove(key),
@@ -129,7 +137,7 @@ impl Launch {
         command
     }
 
-    fn inside(&self, place: &Place) -> Command {
+    fn inside(&self, place: &Place, folder: &[(OsString, Option<OsString>)]) -> Command {
         let mut command = Command::new("wsl.exe");
         command
             .args([
@@ -141,9 +149,9 @@ impl Launch {
                 "/bin/sh",
             ])
             .args(["-c", LOGIN, "sh"]);
-        if !self.env.is_empty() {
+        if !(folder.is_empty() && self.env.is_empty()) {
             command.arg("env");
-            for (key, value) in &self.env {
+            for (key, value) in folder.iter().chain(&self.env) {
                 match value {
                     Some(value) => {
                         let mut pair = key.clone();
@@ -245,6 +253,71 @@ mod tests {
             ]
         );
         assert_eq!(outside.get_program(), r"C:\Users\ana\.cargo\bin\cargo.exe");
+    }
+
+    #[test]
+    fn programs_in_a_folder_with_an_environment_start_in_it() {
+        let project = tempfile::tempdir().unwrap();
+        crate::set_environment(
+            project.path(),
+            vec![
+                ("CONDA_PREFIX".to_owned(), "/envs/default".to_owned()),
+                ("RUST_LOG".to_owned(), "info".to_owned()),
+            ],
+        );
+        let launch = Launch::new("python")
+            .directory(project.path().join("src"))
+            .env("RUST_LOG", "debug");
+
+        let envs: Vec<_> = launch
+            .command_with(false)
+            .get_envs()
+            .map(|(key, value)| (key.to_owned(), value.map(OsStr::to_owned)))
+            .collect();
+        let inside = shown(
+            &Launch::new("python")
+                .directory(project.path())
+                .command_with(false),
+        );
+        crate::clear_environment(project.path());
+
+        assert!(envs.contains(&("CONDA_PREFIX".into(), Some("/envs/default".into()))));
+        assert_eq!(
+            envs.iter()
+                .filter(|(key, _)| key == "RUST_LOG")
+                .map(|(_, value)| value.clone())
+                .collect::<Vec<_>>(),
+            [Some("debug".into())]
+        );
+        assert_eq!(inside, ["python"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn bare_programs_are_found_on_the_folders_own_path() {
+        let project = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let system = PathBuf::from(std::env::var_os("SystemRoot").unwrap()).join("System32");
+        std::fs::copy(
+            system.join("whoami.exe"),
+            bin.path().join("oxmacs-only-here.exe"),
+        )
+        .unwrap();
+        crate::set_environment(
+            project.path(),
+            vec![(
+                "PATH".to_owned(),
+                format!("{};{}", bin.path().display(), system.display()),
+            )],
+        );
+
+        let ran = Launch::new("oxmacs-only-here")
+            .directory(project.path())
+            .command()
+            .output();
+        crate::clear_environment(project.path());
+
+        assert!(ran.unwrap().status.success());
     }
 
     #[test]

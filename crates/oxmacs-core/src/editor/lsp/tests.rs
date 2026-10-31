@@ -60,7 +60,7 @@ fn project() -> tempfile::TempDir {
 
 fn editor() -> Editor {
     let mut editor = kits();
-    editor.lsp.find = |program| Some(PathBuf::from(program));
+    editor.lsp.find = |program, _| Some(PathBuf::from(program));
     editor.add_language_servers(&servers());
     editor
 }
@@ -217,7 +217,7 @@ fn missing_servers_are_named_once_with_how_to_get_them() {
     let dir = project();
     fs::write(dir.path().join("src/lib.rs"), "").unwrap();
     let mut editor = editor();
-    editor.lsp.find = |_| None;
+    editor.lsp.find = |_, _| None;
 
     editor.open_file(&dir.path().join("src/main.rs"));
     editor.take_effects();
@@ -936,7 +936,7 @@ fn marksman() -> ServerSpec {
 #[test]
 fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
     let mut editor = kits();
-    editor.lsp.find = |_| None;
+    editor.lsp.find = |_, _| None;
     editor.add_language_servers(&servers());
     editor.add_language_servers(&[marksman()]);
     let listed = |editor: &mut Editor| {
@@ -963,7 +963,7 @@ fn list_tools_lists_only_the_servers_of_languages_oxmacs_knows() {
 #[test]
 fn list_tools_names_the_language_servers_and_offers_to_install_them() {
     let mut editor = kits();
-    editor.lsp.find = |program| (program == "taplo").then(|| PathBuf::from("taplo"));
+    editor.lsp.find = |program, _| (program == "taplo").then(|| PathBuf::from("taplo"));
     editor.add_language_servers(&servers());
 
     press(&mut editor, "M-x");
@@ -1015,7 +1015,7 @@ fn missing_servers_are_not_searched_for_on_every_keystroke() {
     static SEARCHES: AtomicUsize = AtomicUsize::new(0);
     let dir = project();
     let mut editor = editor();
-    editor.lsp.find = |_| {
+    editor.lsp.find = |_, _| {
         SEARCHES.fetch_add(1, Ordering::Relaxed);
         None
     };

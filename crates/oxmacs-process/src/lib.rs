@@ -7,12 +7,16 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod environment;
 mod launch;
 mod lookup;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod tree;
 
+pub use environment::{
+    clear_environment, environment_for, search_path_for, set_environment, which_in,
+};
 pub use launch::{Launch, home_inside, inside_wsl, run_inside_wsl};
 pub use lookup::{find, which};
 
