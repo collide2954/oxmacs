@@ -15,6 +15,7 @@ mod net;
 mod process;
 pub mod random;
 pub mod tiled;
+mod wsl;
 mod zip;
 
 use ox_lang::Isolate;
@@ -74,6 +75,10 @@ const MODULES: &[(&str, &str)] = &[
         "ox/lexer",
         "Line lexers that highlight code from a token regex, blocks that run across lines and word lists",
     ),
+    (
+        "ox/wsl",
+        "WSL distributions: where a path lies inside one, share paths for Linux paths, and running programs inside them",
+    ),
 ];
 
 pub(crate) fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
@@ -106,6 +111,7 @@ pub fn install(isolate: &mut Isolate) {
     process::install(isolate);
     image::install(isolate);
     zip::install(isolate);
+    wsl::install(isolate);
     random::install(isolate);
     geometry::install(isolate);
     ease::install(isolate);

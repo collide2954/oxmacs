@@ -175,3 +175,6 @@
 (tiled/objects map) "Every object in map's object layers, groups included, in order."
 (tiled/tile layer column row) "The tile at column and row of a tile layer, as a map of :gid, :flip-horizontal, :flip-vertical and :flip-diagonal, or nil when that cell is empty."
 (tiled/region map gid) "Where tile gid is drawn from: a map of its tileset's :image path and the [x y w h] :rect inside it, or nil for an empty tile."
+(wsl/place path) "Where path lies inside a WSL distribution, as a map of :distro and its Linux :path, for a \\\\wsl.localhost\\ or \\\\wsl$\\ share path or a wsl:Distro:/path name; nil for any other path."
+(wsl/share distro path) "The Windows share path, under \\\\wsl.localhost\\, of the Linux path in distro."
+(wsl/route! on) "With on true, every program started with its working folder inside a WSL distribution runs there, through your login shell, with share paths among its arguments made Linux paths: jobs, language servers, formatters, consoles and process/run alike."

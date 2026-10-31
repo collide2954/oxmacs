@@ -22,4 +22,5 @@ mod tiled_data;
 mod tiled_files;
 mod tiled_objects;
 mod tiles;
+mod wsl;
 mod zip;
