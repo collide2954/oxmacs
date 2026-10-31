@@ -51,7 +51,7 @@ fn shown_in(editor: &Editor, name: &str) -> String {
     editor
         .buffer_named(name)
         .and_then(|id| editor.buffer_by_id(id))
-        .map(|buffer| buffer.contents())
+        .map(oxmacs_core::text::Buffer::contents)
         .unwrap_or_default()
 }
 
