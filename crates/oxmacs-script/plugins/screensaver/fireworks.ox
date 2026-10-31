@@ -4,7 +4,7 @@
 
 (def background "#04040c")
 (def palette ["#ff5d73" "#ffd166" "#06d6a0" "#4cc9f0" "#f72585" "#b8f2e6" "#ff9f1c" "#c77dff"])
-(def period 0.85)
+(def period 0.6)
 (def rise 1.2)
 (def burn 2.4)
 (def gravity 110.0)
@@ -17,8 +17,8 @@
    ground: height
    peak: (* height (+ 0.12 (* 0.33 (noise/of [i :peak]))))
    color: (nth palette (int (* (count palette) (noise/of [i :color]))))
-   sparks: (+ 26 (int (* 22 (noise/of [i :sparks]))))
-   speed: (* height (+ 0.2 (* 0.14 (noise/of [i :speed]))))})
+   sparks: (+ 48 (int (* 30 (noise/of [i :sparks]))))
+   speed: (* height (+ 0.26 (* 0.16 (noise/of [i :speed]))))})
 
 (def (place r k dt)
   (let [angle (+ (* 2 math/pi (/ k r.sparks)) (* 0.3 (noise/of [r.id k :angle])))
@@ -29,10 +29,10 @@
 
 (def (spark r k dt fade)
   (let [[x y] (place r k dt)
-        [tx ty] (place r k (max 0 (- dt 0.09)))
+        [tx ty] (place r k (max 0 (- dt 0.2)))
         twinkle (+ 0.65 (* 0.35 (math/sin (+ (* 37 dt) k))))]
-    [[:line tx ty x y [r.color (* 0.45 fade)] 1.3]
-     [:circle x y 1.5 [r.color (* fade twinkle)]]]))
+    [[:line tx ty x y [r.color (* 0.6 fade)] 1.8]
+     [:circle x y 2.2 [r.color (* fade twinkle)]]]))
 
 (def (shell r seconds)
   (let [age (- seconds r.launch)]
@@ -47,7 +47,7 @@
       [(< age (+ rise burn))
        (let [dt (- age rise)
              fade (math/pow (- 1 (/ dt burn)) 1.3)
-             flash (if (< dt 0.15) [[:circle r.x r.peak (* 70 (- 1 (/ dt 0.15))) [r.color 0.12]]] [])]
+             flash (if (< dt 0.15) [[:circle r.x r.peak (* 70 (- 1 (/ dt 0.15))) [r.color 0.18]]] [])]
          (vec (concat flash (mapcat (fn [k] (spark r k dt fade)) (range r.sparks)))))]
       [else []])))
 

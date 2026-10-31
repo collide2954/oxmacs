@@ -3,7 +3,7 @@
   (export background star draw))
 
 (def background "#020208")
-(def stars 700)
+(def stars 900)
 (def tilt 0.45)
 (def tints ["#cfe3ff" "#ffffff" "#bcd4ff" "#fff2d6" "#ffb3c7"])
 
@@ -11,8 +11,8 @@
   "Star i: on one of two arms, closer stars turning faster, as x y in the galaxy's plane."
   (let [out (math/pow (noise/of [i :out]) 1.6)
         arm (* math/pi (mod i 2))
-        wound (+ arm (* 4.2 (math/log (+ 0.05 out))))
-        scatter (* (- (noise/of [i :scatter]) 0.5) (+ 0.25 (* 0.6 (- 1 out))))
+        wound (+ arm (* 2.6 (math/log (+ 0.05 out))))
+        scatter (* (- (noise/of [i :scatter]) 0.5) (if (< (noise/of [i :disk]) 0.35) (* 2 math/pi) (+ 0.18 (* 0.3 (- 1 out)))))
         turn (/ (* 0.18 seconds) (+ 0.25 out))
         angle (+ wound scatter turn)
         r (+ 0.02 out)]

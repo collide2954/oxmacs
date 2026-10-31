@@ -5,8 +5,8 @@
 (def background "#0a0912")
 (def cycle 26.0)
 (def drawing 20.0)
-(def steps 900)
-(def reach 110.0)
+(def steps 1600)
+(def reach 85.0)
 (def ratios [[2 3] [3 2] [3 4] [4 3] [1 2] [2 1] [5 4] [4 5] [3 5]])
 (def colors ["#ff7aa2" "#ffb86b" "#ffe66d" "#7bdff2" "#b28dff"])
 
@@ -67,7 +67,7 @@
   (let [points (curve 4)
         size (fn [[x y]] (+ (abs x) (abs y)))]
     (expect (= (count points) (inc steps)))
-    (expect (< (reduce + (map size (take 50 (drop 850 points))))
+    (expect (< (reduce + (map size (take 50 (drop 1500 points))))
                (reduce + (map size (take 50 points)))))))
 
 (test "each drawing swings differently"

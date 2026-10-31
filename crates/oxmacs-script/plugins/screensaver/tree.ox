@@ -29,7 +29,7 @@
 
 (def (leaf at path season along height)
   (let [[x y] at
-        falls (+ 15 (* 4 (noise/of [season path :falls])))
+        falls (+ 11 (* 5 (noise/of [season path :falls])))
         fallen (max 0 (- along falls))
         color (nth ["#ff8fab" "#ffb3c6" "#fb6f92" "#c9f2c7"] (mod path 4))
         fade (max 0 (- 1 (/ (max 0 (- along 21)) 3)))]
@@ -41,8 +41,8 @@
   (let [seconds (/ frame.time 1000.0)
         season (int (/ seconds cycle))
         along (- seconds (* season cycle))
-        grown (min 1 (/ along 7.0))
-        parts (branches season (/ frame.width 2.0) frame.height (- (/ math/pi 2)) (* 0.2 frame.height) 0 grown seconds 1)
+        grown (min 1 (/ along 5.0))
+        parts (branches season (/ frame.width 2.0) frame.height (- (/ math/pi 2)) (* 0.24 frame.height) 0 grown seconds 1)
         lines (filter vector? parts)
         leaves (filter map? parts)]
     (vec (concat lines

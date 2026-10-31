@@ -1,6 +1,6 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
-  (export background swell draw))
+  (import (ox math) (screensaver noise :as noise) (screensaver plasma :as plasma))
+  (export background swell dusk draw))
 
 (def background "#1b1d3a")
 (def step 6)
@@ -18,11 +18,22 @@
        (* size (math/sin (- (* k x) (* pace seconds) (* 1.7 layer))))
        (* 0.35 size (math/sin (- (* 2.3 k x) (* 1.7 pace seconds) layer))))))
 
+(def bands 48)
+(def stops [[43 35 80] [74 44 94] [122 59 94] [176 81 91] [226 114 91] [245 158 91] [249 197 107] [253 227 167]])
+
+(def (dusk t)
+  "The sky's color a fraction t of the way down to the horizon."
+  (let [at (* t (dec (count stops)))
+        k (min (- (count stops) 2) (int at))
+        f (- at k)
+        [r1 g1 b1] (nth stops k)
+        [r2 g2 b2] (nth stops (inc k))]
+    (str "#" (plasma/hex (+ r1 (* f (- r2 r1)))) (plasma/hex (+ g1 (* f (- g2 g1)))) (plasma/hex (+ b1 (* f (- b2 b1)))))))
+
 (def (sky width height)
-  (vec (map (fn [band]
-              [:rect 0 (* band height 0.05) width (+ 1 (* height 0.05))
-               [(nth ["#2b2350" "#4a2c5e" "#7a3b5e" "#b0515b" "#e2725b" "#f59e5b" "#f9c56b" "#fde3a7" "#fde3a7" "#fde3a7"] band) 1]])
-            (range 10))))
+  (let [tall (/ (* 0.52 height) bands)]
+    (vec (map (fn [band] [:rect 0 (* band tall) width (+ 1 tall) (dusk (/ band (dec bands)))])
+              (range bands)))))
 
 (def (sun width height)
   (let [x (* 0.62 width) y (* 0.47 height)]
@@ -52,6 +63,10 @@
                  (sun w h)
                  (mapcat (fn [layer] (water layer seconds w h)) (range layers))
                  (glints seconds w h)))))
+
+(test "the sky blends from dusk above to the glow at the horizon"
+  (expect (= (dusk 0) "#2b2350"))
+  (expect (= (dusk 1) "#fde3a7")))
 
 (test "near swells are bigger than far ones"
   (let [range-of (fn [layer]

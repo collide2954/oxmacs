@@ -6,13 +6,13 @@
 (def tilt 0.36)
 
 (def planets
-  [{size: 0.09 eccentric: 0.2 turn: 0.4 period: 9 radius: 2.5 color: "#b8b2a7" moons: 0}
-   {size: 0.15 eccentric: 0.05 turn: 1.9 period: 16 radius: 4 color: "#e8c07a" moons: 0}
-   {size: 0.22 eccentric: 0.03 turn: 3.1 period: 26 radius: 4.5 color: "#5fa8e8" moons: 1}
-   {size: 0.3 eccentric: 0.09 turn: 5.0 period: 38 radius: 3.5 color: "#d9654b" moons: 0}
-   {size: 0.45 eccentric: 0.05 turn: 0.9 period: 70 radius: 9 color: "#d8b68b" moons: 3}
-   {size: 0.6 eccentric: 0.06 turn: 2.6 period: 110 radius: 7.5 color: "#e3d39c" moons: 2}
-   {size: 0.78 eccentric: 0.04 turn: 4.2 period: 170 radius: 5.5 color: "#9fd8e0" moons: 1}])
+  [{size: 0.09 eccentric: 0.2 turn: 0.4 period: 4 radius: 2.5 color: "#b8b2a7" moons: 0}
+   {size: 0.15 eccentric: 0.05 turn: 1.9 period: 7 radius: 4 color: "#e8c07a" moons: 0}
+   {size: 0.22 eccentric: 0.03 turn: 3.1 period: 11 radius: 4.5 color: "#5fa8e8" moons: 1}
+   {size: 0.3 eccentric: 0.09 turn: 5.0 period: 16 radius: 3.5 color: "#d9654b" moons: 0}
+   {size: 0.45 eccentric: 0.05 turn: 0.9 period: 28 radius: 9 color: "#d8b68b" moons: 3}
+   {size: 0.6 eccentric: 0.06 turn: 2.6 period: 45 radius: 7.5 color: "#e3d39c" moons: 2}
+   {size: 0.78 eccentric: 0.04 turn: 4.2 period: 70 radius: 5.5 color: "#9fd8e0" moons: 1}])
 
 (def (anomaly mean eccentric)
   "Kepler's equation, solved by a few Newton steps."

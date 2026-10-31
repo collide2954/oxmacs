@@ -4,7 +4,7 @@
 
 (def background "#1a0624")
 (def blobs 7)
-(def cell 26)
+(def cell 18)
 
 (def (blob i seconds width height)
   "Blob i: drifting up and down the lamp, swelling and shrinking as it goes."
@@ -38,7 +38,7 @@
                        y (* cell (+ 0.5 (int (/ index columns))))
                        level (field found x y)]
                    (when (> level 0.7)
-                     [:circle x y (* 0.68 cell) [(warmth level) (min 1 (* 1.8 (- level 0.7)))]])))
+                     [:circle x y (* 0.95 cell) [(warmth level) (min 1 (* 1.4 (- level 0.7)))]])))
                (range (* columns rows))))))
 
 (test "each blob is solid at its middle and gone far away"

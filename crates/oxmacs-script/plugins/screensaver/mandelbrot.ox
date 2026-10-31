@@ -3,7 +3,7 @@
   (export background escape draw))
 
 (def background "#000000")
-(def tile 16)
+(def tile 12)
 (def target [-0.743643887037151 0.13182590420533])
 (def dive 50.0)
 
@@ -16,32 +16,32 @@
         [(>= k most) nil]
         [else (again (+ (- xx yy) cx) (+ (* 2 x y) cy) (inc k))]))))
 
-(defonce screen (atom {key: nil colors: {} turn: 0}))
+(defonce screen (atom {key: nil steps: {} turn: 0}))
 
 (def (draw frame)
   (let [seconds (/ frame.time 1000.0)
         along (mod seconds dive)
-        scale (* 3.2 (math/exp (* -0.2 along)))
-        most (+ 40 (int (* 3 along)))
+        scale (* 0.025 (math/exp (* -0.1 along)))
+        most (+ 60 (int (* 4 along)))
         columns (+ 1 (int (/ frame.width tile)))
         rows (+ 1 (int (/ frame.height tile)))
         known @screen
         key [columns rows (int (/ seconds dive))]
-        state (if (= known.key key) known {key: key colors: {} turn: 0})
+        state (if (= known.key key) known {key: key steps: {} turn: 0})
         [tx ty] target
         per (/ scale frame.width)
         cycle (int (* 12 seconds))
-        fresh (reduce (fn [colors index]
+        fresh (reduce (fn [found index]
                         (let [x (+ tx (* per (- (* tile (mod index columns)) (/ frame.width 2))))
-                              y (+ ty (* per (- (* tile (int (/ index columns))) (/ frame.height 2))))
-                              steps (escape x y most)]
-                          (assoc colors index (when steps (nth plasma/palette (mod (+ (* 3 steps) cycle) 64))))))
-                      state.colors
+                              y (+ ty (* per (- (* tile (int (/ index columns))) (/ frame.height 2))))]
+                          (assoc found index (escape x y most))))
+                      state.steps
                       (filter (fn [index] (= (mod index 3) (mod state.turn 3))) (range (* columns rows))))]
-    (reset! screen {key: key colors: fresh turn: (inc state.turn)})
+    (reset! screen {key: key steps: fresh turn: (inc state.turn)})
     (vec (keep (fn [index]
-                 (when-let [color (get fresh index)]
-                   [:rect (* tile (mod index columns)) (* tile (int (/ index columns))) tile tile color]))
+                 (when-let [steps (get fresh index)]
+                   [:rect (* tile (mod index columns)) (* tile (int (/ index columns))) tile tile
+                    (nth plasma/palette (mod (+ (int (* 18 (math/log (inc steps)))) cycle) 64))]))
                (keys fresh)))))
 
 (test "points in the set stay and others leave"

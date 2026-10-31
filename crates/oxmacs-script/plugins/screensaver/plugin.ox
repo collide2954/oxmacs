@@ -1,5 +1,5 @@
 (plugin screensaver
-  :version "0.3.0"
+  :version "0.3.1"
   :opt-in true
   :summary "Twenty-nine screensavers after a while without input, from a starfield and matrix rain to fireworks, an aurora, a lava lamp and a Mandelbrot dive"
   :commands [screensaver-preview]
