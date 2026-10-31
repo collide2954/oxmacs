@@ -311,6 +311,7 @@ impl Ox {
         view::takeover::run_endings(&mut self.isolate, editor);
         api::prompts::deliver(&mut self.isolate, &self.answers);
         ide::manual::deliver(&mut self.isolate, editor);
+        api::evaluations::start(&mut self.isolate, editor);
         let deadline = Instant::now() + BUDGET;
         while self.isolate.pending() > 0 {
             let before = self.evaluating();
@@ -324,6 +325,7 @@ impl Ox {
                 ide::log::report(editor, &error, None);
             }
             self.advance(editor);
+            api::evaluations::start(&mut self.isolate, editor);
             let after = self.evaluating();
             if after.is_none() || after == before || Instant::now() >= deadline {
                 break;
@@ -342,6 +344,7 @@ impl Ox {
                 ide::log::report(editor, &error, None);
             }
             self.advance(editor);
+            api::evaluations::start(&mut self.isolate, editor);
         }
         self.outside.deliver(editor, ide::repl::printed);
         api::evaluations::run(&mut self.isolate, editor);

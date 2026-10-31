@@ -1,6 +1,7 @@
 use std::ops::Range;
 
-use ox_lang::heap::Heap;
+use ox_lang::heap::{Heap, Hold};
+use ox_lang::native::expected;
 use ox_lang::value::Value;
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
@@ -28,6 +29,52 @@ struct Sent {
 struct Evaluations {
     waiting: Vec<Ran>,
     sent: Vec<Sent>,
+}
+
+#[derive(Debug, Default)]
+struct Asked {
+    waiting: Vec<(String, Hold)>,
+}
+
+fn asked(editor: &mut Editor) -> &mut Asked {
+    if editor.plugin_state::<Asked>().is_none() {
+        editor.set_plugin_state(Asked::default());
+    }
+    editor
+        .plugin_state_mut::<Asked>()
+        .unwrap_or_else(|| unreachable!("the evaluations were just added"))
+}
+
+fn evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    let code = heap
+        .text(arguments[0])
+        .ok_or_else(|| expected(heap, "evaluate", "a string of Ox code", arguments[0]))?
+        .to_owned();
+    let promise = heap.new_promise()?;
+    let hold = heap.hold(promise);
+    asked(editor).waiting.push((code, hold));
+    Ok(promise)
+}
+
+fn settle(isolate: &mut Isolate, hold: Hold, result: Result<Value, Error>) {
+    let Some(promise) = isolate.release(hold) else {
+        return;
+    };
+    match result {
+        Ok(value) => isolate.resolve(promise, value),
+        Err(error) => isolate.reject(promise, &error),
+    };
+}
+
+pub(crate) fn start(isolate: &mut Isolate, editor: &mut Editor) {
+    let waiting = editor
+        .plugin_state_mut::<Asked>()
+        .map(|asked| std::mem::take(&mut asked.waiting))
+        .unwrap_or_default();
+    for (code, hold) in waiting {
+        let result = isolate.within(crate::PATIENT, |isolate| isolate.eval_with(editor, &code));
+        settle(isolate, hold, result);
+    }
 }
 
 fn listening(editor: &Editor) -> bool {
@@ -110,6 +157,11 @@ fn on_evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
 
 pub fn install(isolate: &mut Isolate) {
     isolate
+        .native("ox", "evaluate")
+        .suspends()
+        .arity(1, Some(1))
+        .host::<Editor>(evaluate);
+    isolate
         .native("ox", "zap")
         .arity(2, Some(2))
         .keywords(&["error"])
@@ -180,6 +232,22 @@ mod tests {
         assert_eq!(
             eval(&mut editor, &mut ox, "@heard"),
             r#"[["*scratch*" 4 7 false] ["*scratch*" 0 3 true]]"#
+        );
+    }
+
+    #[test]
+    fn evaluate_runs_code_in_the_user_module_and_waits_for_its_value() {
+        let (mut editor, mut ox) = written("");
+        eval(
+            &mut editor,
+            &mut ox,
+            r#"(def got (atom nil)) (spawn (reset! got [(evaluate "(def twice (fn [x] (* 2 x))) (twice 21)") (try (evaluate "(car)") (catch error e e.message))]))"#,
+        );
+        settle(&mut editor, &mut ox);
+
+        assert_eq!(
+            eval(&mut editor, &mut ox, "[@got (twice 2)]"),
+            r#"[[42 "car is not defined"] 4]"#
         );
     }
 
