@@ -1,8 +1,16 @@
 (module
-  (import (screensaver noise :as noise))
-  (export background algorithms shuffled replay draw))
+  (import (ox math) (screensaver noise :as noise) (screensaver tones :as tones))
+  (export algorithms shuffled replay draw))
 
-(def background "#0c0d12")
+(def hues
+  (vec (map (fn [k]
+              (let [t (/ k 64.0)
+                    angle (* 2 math/pi (+ 0.55 (* 0.75 t)))]
+                (tones/rgb [(+ 0.5 (* 0.42 (math/cos angle)))
+                            (+ 0.5 (* 0.42 (math/cos (- angle 2.1))))
+                            (+ 0.5 (* 0.42 (math/cos (- angle 4.2))))])))
+            (range 65))))
+
 (def bars 64)
 (def playing 9.0)
 (def resting 1.5)
@@ -98,19 +106,28 @@
         done (int (* (count play.swaps) (min 1 (/ along playing))))
         values (reduce (fn [v [i j]] (swap v i j)) play.values (take done play.swaps))
         [hi hj] (if (and (> done 0) (< done (count play.swaps))) (nth play.swaps (dec done)) [-1 -1])
-        wide (/ frame.width bars)
-        tall (* 0.8 frame.height)]
+        margin (* 0.08 frame.width)
+        wide (/ (- frame.width (* 2 margin)) bars)
+        floor (* 0.80 frame.height)
+        tall (* 0.62 frame.height)
+        sorted (>= along playing)
+        wave (if sorted (- along playing) -1)]
     (vec (concat
-          (map (fn [k]
-                 (let [h (* tall (/ (nth values k) bars))
-                       color (cond
-                               [(or (= k hi) (= k hj)) "#ff6b6b"]
-                               [(>= along playing) "#06d6a0"]
-                               [else "#8ecae6"])]
-                   [:rect (+ (* k wide) 1) (- frame.height h) (- wide 2) h color]))
-               (range bars))
-          [[:text 24 20 play.name :foreground (* 0.045 frame.height)]
-           [:text 24 (+ 24 (* 0.06 frame.height)) $"{done} of {(count play.swaps)} steps" :comment (* 0.028 frame.height)]]))))
+          (mapcat (fn [k]
+                    (let [value (nth values k)
+                          h (* tall (/ value bars))
+                          x (+ margin (* k wide))
+                          hot (or (= k hi) (= k hj))
+                          lit (and sorted (< (abs (- (* 40 wave) k)) 3))
+                          color (if hot "#ffffff" (nth hues value))]
+                      (vec (concat
+                            [[:rect (+ x 1) (- floor h) (- wide 2) h color]
+                             [:rect (+ x 1) (- floor h) (- wide 2) 2 ["#ffffff" 0.35]]
+                             [:rect (+ x 1) floor (- wide 2) (* 0.35 h) [color 0.12]]]
+                            (if (or hot lit) [[:glow (+ x (/ wide 2)) (- floor (/ h 2)) (* 0.6 h) [(if hot "#ffffff" color) 0.35]]] [])))))
+                  (range bars))
+          [[:text margin (* 0.07 frame.height) play.name ["#e8ecf4" 0.9] (* 0.045 frame.height)]
+           [:text margin (+ (* 0.07 frame.height) (* 0.06 frame.height)) $"{done} of {(count play.swaps)} steps" ["#8d97ab" 0.9] (* 0.028 frame.height)]]))))
 
 (test "every algorithm sorts the bars"
   (let [values (shuffled 3)

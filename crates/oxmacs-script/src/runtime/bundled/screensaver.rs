@@ -182,19 +182,21 @@ fn every_screensaver_starts_and_keeps_drawing_through_its_first_minute() {
     let (_home, mut editor, mut ox) = started("");
 
     for kind in KINDS {
+        let mut shader = false;
         for millis in [0, 700, 3500, 9000, 31_000, 61_000] {
             let drawn = ox.eval(
                 &mut editor,
                 &format!(
-                    "(module (import (screensaver savers :as savers))) (count ((get (find (fn [s] (= s.kind :{kind})) savers/savers) :draw) {{time: {millis} width: 960 height: 540 font-size: 16}}))"
+                    "(module (import (screensaver savers :as savers))) (let [saver (find (fn [s] (= s.kind :{kind})) savers/savers)] (if saver.draw (count (saver.draw {{time: {millis} width: 960 height: 540 font-size: 16}})) -1))"
                 ),
             );
-            let shapes: usize = drawn
+            let shapes: i64 = drawn
                 .unwrap_or_else(|error| panic!("{kind} at {millis} ms: {}", error.message))
                 .parse()
                 .unwrap();
+            shader = shapes < 0;
             assert!(
-                millis < 3000 || shapes > 0,
+                millis < 3000 || shapes != 0,
                 "{kind} drew nothing at {millis} ms"
             );
         }
@@ -202,8 +204,13 @@ fn every_screensaver_starts_and_keeps_drawing_through_its_first_minute() {
             &mut editor,
             &format!("(module (import (screensaver savers :as savers))) (savers/start :{kind})"),
         )
-        .unwrap();
-        assert!(takeover::current(&editor).is_some(), "{kind} didn't start");
+        .unwrap_or_else(|error| panic!("{kind} didn't start: {}", error.message));
+        let shown = takeover::current(&editor);
+        assert!(shown.is_some(), "{kind} didn't start");
+        assert!(
+            !shader || shown.is_some_and(|shown| shown.backdrop.is_some()),
+            "{kind} has neither a drawing nor a shader"
+        );
         ox.event(&mut editor, UiEvent::EndTakeOver);
         settle(&mut editor, &mut ox);
     }

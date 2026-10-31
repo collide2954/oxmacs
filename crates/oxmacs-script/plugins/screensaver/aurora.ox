@@ -1,60 +1,112 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
-  (export background curtain draw))
+  (import (screensaver shading :as shading))
+  (export shader))
 
-(def background "#020611")
-(def step 8)
+(def shader
+  (str shading/library
+       """
+       fn ridge(azimuth: f32) -> f32 {
+           let far = 0.035 + 0.05 * fbm2(vec2f(azimuth * 2.2, 3.0), 5);
+           let near = 0.012 + 0.07 * pow(fbm2(vec2f(azimuth * 4.5 + 9.0, 1.0), 5), 1.6);
+           return max(far, near - 0.02);
+       }
 
-(def ribbons
-  [{color: "#5cffb0" base: 0.42 swell: 0.07 k1: 0.006 w1: 0.18 k2: 0.017 w2: 0.11 phase: 0.0}
-   {color: "#3ce6c8" base: 0.5 swell: 0.05 k1: 0.008 w1: 0.13 k2: 0.013 w2: 0.21 phase: 1.7}
-   {color: "#a77bff" base: 0.33 swell: 0.06 k1: 0.005 w1: 0.09 k2: 0.021 w2: 0.15 phase: 3.1}])
+       fn trees(azimuth: f32, elevation: f32) -> f32 {
+           let x = azimuth * 140.0;
+           let cell = floor(x);
+           let local = fract(x) - 0.5;
+           let tall = 0.010 + 0.022 * cell2(vec2f(cell, 4.0));
+           let crown = tall * (1.0 - abs(local) * 2.2) - 0.003 * sin(x * 9.0);
+           return step(elevation, 0.004 + max(crown, 0.0) * step(0.35, cell2(vec2f(cell, 7.0))));
+       }
 
-(def (curtain ribbon x seconds height)
-  "Where a ribbon's lower edge is at x, how tall it hangs above it and how bright it is."
-  (let [p ribbon.phase]
-    {edge: (+ (* height ribbon.base)
-              (* height ribbon.swell (math/sin (+ (* ribbon.k1 x) (* ribbon.w1 seconds) p)))
-              (* height 0.5 ribbon.swell (math/sin (- (* ribbon.k2 x) (* ribbon.w2 seconds) p))))
-     tall: (* height (+ 0.1 (* 0.16 (+ 0.5 (* 0.5 (math/sin (+ (* 0.011 x) (* 0.07 seconds) (* 2 p))))))))
-     glow: (+ 0.5 (* 0.5 (math/sin (- (* 0.023 x) (* 0.33 seconds) p))))}))
+       fn stars(ray: vec3f) -> vec3f {
+           let azimuth = atan2(ray.x, ray.z);
+           let elevation = asin(clamp(ray.y, -1.0, 1.0));
+           let grid = vec2f(azimuth, elevation) * 260.0;
+           let cell = floor(grid);
+           let spot = cell22(cell);
+           let offset = fract(grid) - spot;
+           let bright = pow(cell2(cell + 31.0), 22.0);
+           let twinkle = 0.7 + 0.3 * sin(frame.time * (1.0 + 3.0 * spot.x) + spot.y * 40.0);
+           let tint = mix(vec3f(0.7, 0.8, 1.0), vec3f(1.0, 0.85, 0.7), spot.y);
+           let band = exp(-pow((elevation - 0.55 - 0.25 * sin(azimuth)) * 3.0, 2.0));
+           let haze = vec3f(0.020, 0.022, 0.032) * band * smoothstep(0.3, 0.8, fbm2(vec2f(azimuth, elevation) * 5.0, 6));
+           return tint * bright * twinkle * exp(-dot(offset, offset) * 900.0) * 6.0 + haze;
+       }
 
-(def (ribbon-lines ribbon seconds width height)
-  (mapcat (fn [x]
-            (let [c (curtain ribbon x seconds height)
-                  top (- c.edge c.tall)
-                  bright (- c.edge (* 0.25 c.tall))]
-              [[:line x top x c.edge [ribbon.color (+ 0.04 (* 0.14 c.glow))] step]
-               [:line x bright x c.edge [ribbon.color (* 0.32 c.glow)] step]]))
-          (range 0 (+ width step) step)))
+       fn lights(origin: vec3f, ray: vec3f) -> vec3f {
+           if (ray.y <= 0.0) {
+               return vec3f(0.0);
+           }
+           var glow = vec3f(0.0);
+           let steps = 72;
+           let jitter = cell2(floor(ray.xy * 4000.0));
+           for (var i = 0; i < steps; i++) {
+               let along = (f32(i) + jitter) / f32(steps);
+               let height = 1.0 + along * 2.4;
+               let t = (height - origin.y) / ray.y;
+               if (t > 60.0) {
+                   break;
+               }
+               let p = origin.xz + ray.xz * t;
+               let drift = frame.time * 0.035;
+               let warp = vec2f(fbm2(p * 0.09 + vec2f(drift, 0.0), 4), fbm2(p * 0.09 + vec2f(3.1, drift), 4));
+               let q = p + (warp - 0.5) * 9.0;
+               let line = q.y - 10.0 - 3.0 * sin(q.x * 0.10 + frame.time * 0.05) - 1.5 * sin(q.x * 0.27 - frame.time * 0.08);
+               let fold = exp(-line * line * 7.0) + 0.6 * exp(-pow(line + 5.0, 2.0) * 5.0) + 0.4 * exp(-pow(line - 7.0, 2.0) * 3.0);
+               let rays = 0.15 + 0.85 * pow(noise2(vec2f(q.x * 3.2 + line * 0.3, frame.time * 0.35)), 3.0) + 0.3 * pow(noise2(vec2f(q.x * 9.0, frame.time * 0.6)), 4.0);
+               let lift = along;
+               let edge = smoothstep(0.0, 0.025, lift) * exp(-lift * 3.2);
+               let color = mix(vec3f(0.08, 1.0, 0.32), vec3f(0.65, 0.12, 0.70), smoothstep(0.30, 0.95, lift));
+               glow += color * fold * rays * edge * (0.8 + 0.5 * sin(frame.time * 0.4 + q.x * 0.05));
+           }
+           return glow * 0.22;
+       }
 
-(def (stars seconds width height)
-  (vec (map (fn [i]
-              (let [twinkle (+ 0.3 (* 0.6 (+ 0.5 (* 0.5 (math/sin (+ (* seconds (+ 0.5 (noise/of [i :rate])))
-                                                                     (* 7 (noise/of [i :phase]))))))))]
-                [:circle (* width (noise/of [i :x])) (* height 0.8 (noise/of [i :y]))
-                 (+ 0.5 (* 0.9 (noise/of [i :size]))) ["#dfe8ff" twinkle]]))
-            (range 150))))
+       fn sky(origin: vec3f, ray: vec3f) -> vec3f {
+           let elevation = asin(clamp(ray.y, -1.0, 1.0));
+           var color = mix(vec3f(0.010, 0.022, 0.040), vec3f(0.002, 0.004, 0.012), smoothstep(0.0, 0.6, elevation));
+           color += stars(ray);
+           color += lights(origin, ray);
+           return color;
+       }
 
-(def (glow width height)
-  (vec (map (fn [band]
-              [:rect 0 (* height (+ 0.45 (* 0.055 band))) width (+ 1 (* height 0.055)) ["#0c3b4f" (* 0.05 band)]])
-            (range 10))))
+       fn above(origin: vec3f, ray: vec3f, glow: vec3f) -> vec3f {
+           let azimuth = atan2(ray.x, ray.z);
+           let elevation = asin(clamp(ray.y, -1.0, 1.0));
+           if (trees(azimuth, elevation) > 0.5) {
+               return vec3f(0.002, 0.003, 0.005);
+           }
+           let mountain = ridge(azimuth);
+           if (elevation < mountain) {
+               let rock = fbm2(vec2f(azimuth * 140.0, elevation * 500.0), 5);
+               let snow = smoothstep(0.5, 0.7, rock) * smoothstep(0.2 * mountain, mountain, elevation);
+               let rim = smoothstep(mountain - 0.006, mountain, elevation);
+               return vec3f(0.003, 0.004, 0.007) + glow * (0.015 + 0.05 * snow + 0.08 * rim) + vec3f(0.004, 0.005, 0.008) * snow;
+           }
+           return sky(origin, ray);
+       }
 
-(def (ridge x height)
-  (- height (* height (+ 0.1 (* 0.05 (math/sin (* 0.004 x))) (* 0.03 (math/sin (+ 1 (* 0.013 x))))))))
-
-(def (mountains width height)
-  (vec (map (fn [x] [:line x (ridge x height) x height "#01030a" 7]) (range 0 (+ width 6) 6))))
-
-(def (draw frame)
-  (let [seconds (/ frame.time 1000.0)]
-    (vec (concat (glow frame.width frame.height)
-                 (stars seconds frame.width frame.height)
-                 (mapcat (fn [ribbon] (ribbon-lines ribbon seconds frame.width frame.height)) ribbons)
-                 (mountains frame.width frame.height)))))
-
-(test "curtains wave as time passes"
-  (let [ribbon (first ribbons)]
-    (expect (not= (get (curtain ribbon 100 0 600) :edge) (get (curtain ribbon 100 5 600) :edge)))
-    (expect (every? (fn [x] (< 0 (get (curtain ribbon x 3 600) :edge) 600)) (range 0 800 20)))))
+       fn shade(at: vec2f) -> vec4f {
+           let uv = (at - frame.size * 0.5) / frame.size.y * vec2f(1.0, -1.0);
+           let yaw = 0.15 * sin(frame.time * 0.01);
+           let forward = normalize(vec3f(sin(yaw), 0.17, cos(yaw)));
+           let side = normalize(cross(vec3f(0.0, 1.0, 0.0), forward));
+           let up = cross(forward, side);
+           let origin = vec3f(0.0, 0.0, 0.0);
+           let ray = normalize(forward + side * uv.x * 1.1 + up * uv.y * 1.1);
+           let glow = lights(origin, normalize(vec3f(forward.x, 0.35, forward.z))) * 2.0;
+           if (ray.y >= 0.0) {
+               return shown(above(origin, ray, glow), at);
+           }
+           let depth = -ray.y;
+           let ripple = vec2f(
+               fbm2(vec2f(ray.x / depth * 3.0, 1.0 / depth * 8.0 + frame.time * 0.3), 3),
+               fbm2(vec2f(ray.x / depth * 3.0 + 5.0, 1.0 / depth * 8.0 - frame.time * 0.2), 3)) - 0.5;
+           let mirrored = normalize(vec3f(ray.x + ripple.x * 0.012, depth + ripple.y * 0.006, ray.z));
+           let fresnel = 0.02 + 0.98 * pow(1.0 - depth, 5.0);
+           let reflected = above(origin, mirrored, glow) * mix(0.5, 0.85, fresnel);
+           return shown(reflected, at);
+       }
+       """))

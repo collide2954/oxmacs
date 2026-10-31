@@ -1,11 +1,9 @@
 (module
   (import (screensaver noise :as noise))
-  (export background walk draw))
-
-(def background "#0e0e12")
+  (export walk draw))
 (def cell 9)
 (def pace 1500)
-(def most 2500)
+(def most 400)
 (def colors ["#ff6b6b" "#4ecdc4" "#ffe66d"])
 (def turns [[0 -1] [1 0] [0 1] [-1 0]])
 
@@ -50,11 +48,16 @@
         moved (walk state (int (* pace seconds)))]
     (reset! world moved)
     (vec (concat (map (fn [key]
-                        [:rect (* cell (mod key columns)) (* cell (int (/ key columns))) (- cell 1) (- cell 1)
-                         [(nth colors (get moved.cells key)) 0.85]])
+                        [:rect (+ 1 (* cell (mod key columns))) (+ 1 (* cell (int (/ key columns)))) (- cell 2) (- cell 2)
+                         [(nth colors (get moved.cells key)) 0.7]])
                       (keys moved.cells))
-                 (map (fn [ant] [:rect (- (* cell ant.x) 1) (- (* cell ant.y) 1) (+ cell 1) (+ cell 1) "#ffffff"])
-                      moved.ants)))))
+                 (mapcat (fn [ant]
+                           (let [x (+ (* cell ant.x) (/ cell 2))
+                                 y (+ (* cell ant.y) (/ cell 2))
+                                 color (nth colors ant.id)]
+                             [[:glow x y (* 3 cell) [color 0.45]]
+                              [:circle x y (* 0.45 cell) "#ffffff"]]))
+                         moved.ants)))))
 
 (test "an ant walks a square out of its first four steps"
   (let [start (assoc (fresh 20 20) :ants [{x: 10 y: 10 facing: 0 id: 0}])

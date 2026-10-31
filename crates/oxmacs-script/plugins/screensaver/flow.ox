@@ -1,10 +1,8 @@
 (module
   (import (ox math) (screensaver noise :as noise))
-  (export background heading draw))
-
-(def background "#05060a")
-(def streams 90)
-(def length 22)
+  (export heading draw))
+(def streams 150)
+(def length 24)
 (def stride 9.0)
 (def life 9.0)
 (def palette ["#7fdbff" "#b19cd9" "#ffadad" "#9bf6ff" "#caffbf"])
@@ -25,14 +23,18 @@
     (loop [k 0
            x (* width (noise/of [i round :x]))
            y (* height (noise/of [i round :y]))
-           out []]
+           out [[x y]]]
       (if (= k length)
-        out
+        (let [split (max 2 (int (* length (min 1 (max 0 head)))))
+              behind (vec (take (inc split) out))
+              [hx hy] (last behind)]
+          [[:curve out [color (* 0.16 fade)] 1.2]
+           [:curve behind [color (* 0.8 fade)] 1.6 1.0]
+           [:glow hx hy 6 [color (* 0.5 fade)]]])
         (let [angle (heading x y seconds)
               nx (+ x (* stride (math/cos angle)))
-              ny (+ y (* stride (math/sin angle)))
-              pulse (+ 0.12 (* 0.88 (max 0 (- 1 (* 4 (abs (- (/ k length) head)))))))]
-          (again (inc k) nx ny (conj out [:line x y nx ny [color (* 0.7 fade pulse)] 1.4])))))))
+              ny (+ y (* stride (math/sin angle)))]
+          (again (inc k) nx ny (conj out [nx ny])))))))
 
 (def (draw frame)
   (let [seconds (/ frame.time 1000.0)]
@@ -43,6 +45,6 @@
         b (heading 300 200 10.1)]
     (expect (< (abs (- a b)) 0.05))))
 
-(test "every stream draws its whole length"
+(test "every stream draws a faint path, a bright stretch and a head"
   (expect (= (count (draw {time: 4000 width: 960 height: 540 font-size: 14}))
-             (* streams length))))
+             (* streams 3))))

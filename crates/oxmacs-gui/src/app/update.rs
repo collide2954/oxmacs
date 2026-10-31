@@ -17,6 +17,7 @@ use oxmacs_script::api::games;
 
 use super::{App, Message, transition};
 use crate::keys::{self, Platform};
+use crate::widgets::backdrop;
 use crate::widgets::buffer_view::ViewEvent;
 use crate::widgets::tab_bar::TabMessage;
 use crate::{animation, fetch, fonts, units};
@@ -102,6 +103,11 @@ impl App {
                 now,
                 (size.width, size.height),
                 self.text_size,
+            );
+        }
+        if backdrop::newly_unavailable() {
+            self.editor.show_message(
+                "Shaders need a graphics device and none was found, so only shapes are drawn",
             );
         }
     }

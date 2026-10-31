@@ -1,46 +1,66 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
-  (export background star draw))
+  (import (screensaver shading :as shading))
+  (export shader))
 
-(def background "#020208")
-(def stars 900)
-(def tilt 0.45)
-(def tints ["#cfe3ff" "#ffffff" "#bcd4ff" "#fff2d6" "#ffb3c7"])
+(def shader
+  (str shading/library
+       """
+       const TILT: f32 = 1.05;
+       const ARMS: f32 = 2.0;
+       const PITCH: f32 = 0.30;
 
-(def (star i seconds)
-  "Star i: on one of two arms, closer stars turning faster, as x y in the galaxy's plane."
-  (let [out (math/pow (noise/of [i :out]) 1.6)
-        arm (* math/pi (mod i 2))
-        wound (+ arm (* 2.6 (math/log (+ 0.05 out))))
-        scatter (* (- (noise/of [i :scatter]) 0.5) (if (< (noise/of [i :disk]) 0.35) (* 2 math/pi) (+ 0.18 (* 0.3 (- 1 out)))))
-        turn (/ (* 0.18 seconds) (+ 0.25 out))
-        angle (+ wound scatter turn)
-        r (+ 0.02 out)]
-    [(* r (math/cos angle)) (* r (math/sin angle)) out]))
+       fn background(uv: vec2f) -> vec3f {
+           var color = vec3f(0.0015, 0.0018, 0.003);
+           for (var layer = 0; layer < 3; layer++) {
+               let scale = 90.0 + f32(layer) * 110.0;
+               let grid = uv * scale + f32(layer) * 13.0;
+               let cell = floor(grid);
+               let spot = cell22(cell);
+               let offset = fract(grid) - spot;
+               let bright = pow(cell2(cell + 7.0), 28.0 - f32(layer) * 6.0);
+               let tint = mix(vec3f(0.65, 0.75, 1.0), vec3f(1.0, 0.82, 0.6), cell2(cell + 3.0));
+               color += tint * bright * exp(-dot(offset, offset) * scale * 6.0) * 2.0;
+           }
+           let far = uv * 6.0 + 30.0;
+           let fuzz = exp(-length(fract(far) - 0.5) * 30.0) * step(0.93, cell2(floor(far)));
+           color += vec3f(0.6, 0.55, 0.5) * fuzz * 0.05;
+           return color;
+       }
 
-(def (draw frame)
-  (let [seconds (/ frame.time 1000.0)
-        cx (/ frame.width 2.0)
-        cy (/ frame.height 2.0)
-        reach (* 0.46 (min frame.width (* 1.8 frame.height)))
-        view (* 0.05 seconds)
-        c (math/cos view)
-        s (math/sin view)]
-    (vec (concat
-          (map (fn [k] [:circle cx cy (* reach (- 0.22 (* 0.035 k))) ["#ffe7b3" (+ 0.03 (* 0.05 k))]]) (range 6))
-          (map (fn [i]
-                 (let [[x y out] (star i seconds)
-                       vx (- (* x c) (* y s))
-                       vy (+ (* x s) (* y c))
-                       tint (if (< out 0.08) "#ffe7b3" (nth tints (mod i (count tints))))]
-                   [:circle (+ cx (* reach vx)) (+ cy (* reach tilt vy))
-                    (+ 0.5 (* 1.1 (noise/of [i :size])))
-                    [tint (+ 0.35 (* 0.6 (- 1 out)))]]))
-               (range stars))))))
+       fn disk(p: vec2f, t: f32) -> vec4f {
+           let r = length(p);
+           let theta = atan2(p.y, p.x);
+           let spin = t * 0.04 / (0.3 + r);
+           let winding = log(max(r, 0.02)) / PITCH;
+           let arm = cos(ARMS * (theta - winding + spin));
+           let arms = pow(0.5 + 0.5 * arm, 3.0);
+           let swirl = rotation(spin * 0.5) * p;
+           let clumps = fbm2(swirl * 9.0, 5);
+           let lane = pow(0.5 + 0.5 * cos(ARMS * (theta - winding + spin) - 0.65), 6.0);
+           let disk_light = exp(-r * 3.2);
+           let bulge = exp(-pow(r / 0.07, 0.8)) * 2.5 + exp(-r * 12.0) * 0.8;
+           let stars = disk_light * (0.18 + 1.3 * arms * (0.5 + clumps));
+           let young = disk_light * arms * smoothstep(0.62, 0.8, fbm2(swirl * 22.0 + 3.0, 4)) * 2.2;
+           let dust = smoothstep(0.35, 0.75, fbm2(swirl * 14.0 + 9.0, 5)) * lane * smoothstep(0.06, 0.2, r) * smoothstep(0.9, 0.35, r);
+           var color = vec3f(1.0, 0.86, 0.66) * bulge + vec3f(0.95, 0.88, 0.80) * stars + vec3f(0.55, 0.70, 1.0) * young;
+           color += vec3f(1.0, 0.35, 0.55) * young * smoothstep(0.7, 0.85, fbm2(swirl * 30.0, 3)) * 0.8;
+           return vec4f(color, dust);
+       }
 
-(test "inner stars go round faster than outer ones"
-  (let [angle (fn [[x y]] (math/atan2 y x))
-        turned (fn [i] (abs (- (angle (star i 1.0)) (angle (star i 1.1)))))
-        inner (first (filter (fn [i] (< (nth (star i 0) 2) 0.1)) (range stars)))
-        outer (first (filter (fn [i] (> (nth (star i 0) 2) 0.8)) (range stars)))]
-    (expect (> (turned inner) (turned outer)))))
+       fn shade(at: vec2f) -> vec4f {
+           let uv = (at - frame.size * 0.5) / frame.size.y;
+           var color = background(uv);
+           let view = rotation(0.45) * uv;
+           let plane = vec2f(view.x, view.y / cos(TILT)) * 1.7;
+           let found = disk(plane, frame.time);
+           let r = length(plane);
+           let fade = smoothstep(1.3, 0.6, r);
+           let near_side = smoothstep(0.0, -0.2, plane.y);
+           let absorbed = found.a * (0.55 + 0.4 * near_side);
+           color = color * (1.0 - fade * 0.8) + found.rgb * fade * 0.9;
+           color *= 1.0 - absorbed * 0.85;
+           let halo = exp(-length(uv) * 4.0) * 0.05;
+           color += vec3f(0.9, 0.8, 0.7) * halo;
+           return shown(color * 1.1, at);
+       }
+       """))

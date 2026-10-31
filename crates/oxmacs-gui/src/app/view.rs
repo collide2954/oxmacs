@@ -10,9 +10,10 @@ use oxmacs_core::view::{Node, ViewBuffer};
 use oxmacs_core::view::{overlays, tabbar};
 
 use super::{App, Message};
+use crate::widgets::backdrop::Backdrop;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
-use crate::widgets::drawing::Drawing;
+use crate::widgets::drawing::{self, Drawing};
 use crate::widgets::mode_line::{self, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
@@ -77,16 +78,30 @@ impl App {
     }
 
     fn takeover<'a>(&'a self, shown: &'a Takeover, faces: Faces) -> Element<'a, Message> {
-        let drawing = canvas(Drawing {
+        let shapes = canvas(Drawing {
             shapes: &shown.shapes,
             relative: false,
-            background: Some(shown.background),
+            background: shown.backdrop.is_none().then_some(shown.background),
             faces,
             font: self.font,
             size: self.text_size,
         })
         .width(Length::Fill)
         .height(Length::Fill);
+        let drawing: Element<'a, Message> = match &shown.backdrop {
+            Some(backdrop) => {
+                let fill = drawing::color(shown.background, &faces);
+                container(stack![Backdrop::new(backdrop), shapes])
+                    .style(move |_| container::Style {
+                        background: Some(fill.into()),
+                        ..container::Style::default()
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into()
+            }
+            None => shapes.into(),
+        };
         let covered = mouse_area(
             sensor(drawing)
                 .on_show(Message::TakeoverSized)

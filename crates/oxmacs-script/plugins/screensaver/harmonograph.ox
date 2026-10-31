@@ -1,14 +1,13 @@
 (module
   (import (ox math) (screensaver noise :as noise))
-  (export background swing curve draw))
+  (export swing curve draw))
 
-(def background "#0a0912")
 (def cycle 26.0)
 (def drawing 20.0)
 (def steps 1600)
 (def reach 85.0)
 (def ratios [[2 3] [3 2] [3 4] [4 3] [1 2] [2 1] [5 4] [4 5] [3 5]])
-(def colors ["#ff7aa2" "#ffb86b" "#ffe66d" "#7bdff2" "#b28dff"])
+(def inks ["#14213d" "#3a1c2b" "#0f3326" "#2a1f45" "#3b2a14"])
 
 (def (swing k)
   "The pendulums of drawing k: frequencies near a simple ratio, phases and how fast they die down."
@@ -31,12 +30,17 @@
                    (+ (* decay (math/sin (+ (* s.fy t) s.py))) (* 0.5 slower (math/sin (+ (* s.gy t) s.qy))))]))
               (range (inc steps))))))
 
-(defonce drawn (atom {k: nil points: []}))
+(defonce drawn (atom {key: nil points: []}))
 
-(def (points k)
-  (when (not= (get @drawn :k) k)
-    (reset! drawn {k: k points: (curve k)}))
-  (get @drawn :points))
+(def (points k width height)
+  (let [key [k width height]]
+    (when (not= (get @drawn :key) key)
+      (let [scale (/ (* 0.42 (min width height)) 1.5)
+            cx (/ width 2.0)
+            cy (/ height 2.0)]
+        (reset! drawn {key: key
+                       points: (vec (map (fn [[x y]] [(+ cx (* scale x)) (+ cy (* scale y))]) (curve k)))})))
+    (get @drawn :points)))
 
 (def (draw frame)
   (let [seconds (/ frame.time 1000.0)
@@ -44,24 +48,16 @@
         into-cycle (- seconds (* k cycle))
         shown (int (* steps (min 1 (/ into-cycle drawing))))
         fade (min 1 (/ (- cycle into-cycle) 2.0))
-        scale (/ (* 0.42 (min frame.width frame.height)) 1.5)
-        cx (/ frame.width 2.0)
-        cy (/ frame.height 2.0)
-        spin (* 0.04 seconds)
-        turned (fn [[x y]]
-                 [(+ cx (* scale (- (* x (math/cos spin)) (* y (math/sin spin)))))
-                  (+ cy (* scale (+ (* x (math/sin spin)) (* y (math/cos spin)))))])
-        pen (vec (map turned (take (inc shown) (points k))))]
-    (vec (concat
-          (map (fn [i]
-                 (let [[x1 y1] (nth pen i)
-                       [x2 y2] (nth pen (inc i))
-                       color (nth colors (int (/ (* i (count colors)) (inc steps))))]
-                   [:line x1 y1 x2 y2 [color (* 0.85 fade)] 1.2]))
-               (range (max 0 (dec (count pen)))))
-          (if (and (< into-cycle drawing) (> (count pen) 0))
-            (let [[x y] (last pen)] [[:circle x y 3 ["#ffffff" 0.9]]])
-            [])))))
+        ink (nth inks (mod k (count inks)))
+        pen (vec (take (inc shown) (points k frame.width frame.height)))
+        tip (if (and (< into-cycle drawing) (> (count pen) 1))
+              (let [[x y] (last pen)] [[:circle x y 2.2 [ink 0.9]] [:glow x y 7 [ink 0.25]]])
+              [])]
+    (if (< (count pen) 2)
+      []
+      (vec (concat [[:curve pen [ink (* 0.07 fade)] 3.2]
+                    [:curve pen [ink (* 0.8 fade)] 1.0]]
+                   tip)))))
 
 (test "the pendulums die down"
   (let [points (curve 4)

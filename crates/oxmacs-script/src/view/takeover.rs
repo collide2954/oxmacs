@@ -5,10 +5,12 @@ use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
+use naga::valid::{Capabilities, ValidationFlags, Validator};
+
 use crate::ide::log;
 use crate::view::shapes;
-use oxmacs_core::view::shapes::{Ink, Paint};
-use oxmacs_core::view::takeover::Takeover;
+use oxmacs_core::view::shapes::{Ink, Paint, Shape};
+use oxmacs_core::view::takeover::{Backdrop, INPUTS, Shader, Takeover};
 
 const FASTEST: i64 = 30;
 
@@ -57,6 +59,11 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
         }
     };
     let every = Duration::from_millis(1000 / fps.unsigned_abs());
+    let backdrop = shader(heap, arguments[4])?.map(|shader| Backdrop {
+        shader,
+        time: 0.0,
+        inputs: [0.0; INPUTS],
+    });
     end(heap, editor);
     let running = Running {
         draw: heap.hold(arguments[0]),
@@ -68,16 +75,111 @@ fn take_over(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
     editor.set_plugin_state(running);
     editor.set_plugin_state(Takeover {
         background,
+        backdrop,
         shapes: Vec::new(),
     });
     Ok(Value::Nil)
+}
+
+fn shader(heap: &Heap, value: Value) -> Result<Option<Shader>, Error> {
+    if value == Value::Nil {
+        return Ok(None);
+    }
+    let text = heap.text(value).ok_or_else(|| {
+        Error::new(format!(
+            "take-over :shader takes WGSL text defining fn shade(at: vec2<f32>) -> vec4<f32>, got {}",
+            print::brief(heap, value)
+        ))
+    })?;
+    let shader = Shader::new(text);
+    checked(&shader)?;
+    Ok(Some(shader))
+}
+
+fn checked(shader: &Shader) -> Result<(), Error> {
+    let source: &str = &shader.source;
+    let failure = |line: Option<u32>, message: String| {
+        let at = line
+            .and_then(|line| Shader::line_of(line as usize))
+            .map_or(String::new(), |line| format!(" on line {line}"));
+        Error::new(format!("The take-over shader has an error{at}: {message}"))
+    };
+    let module = naga::front::wgsl::parse_str(source).map_err(|error| {
+        failure(
+            error.location(source).map(|at| at.line_number),
+            error.message().to_owned(),
+        )
+    })?;
+    Validator::new(ValidationFlags::all(), Capabilities::empty())
+        .validate(&module)
+        .map_err(|error| {
+            let line = error
+                .spans()
+                .last()
+                .map(|(span, _)| span.location(source).line_number);
+            let mut message = error.as_inner().to_string();
+            let mut cause = std::error::Error::source(error.as_inner());
+            while let Some(inner) = cause {
+                message = format!("{message}: {inner}");
+                cause = inner.source();
+            }
+            failure(line, message)
+        })?;
+    Ok(())
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "shader inputs are single precision"
+)]
+fn drawn(heap: &Heap, value: Value) -> Result<(Vec<Shape>, Option<[f32; INPUTS]>), Error> {
+    let Some(entries) = heap.entries(value) else {
+        return Ok((shapes::shapes(heap, value)?, None));
+    };
+    let field = |name: &str| {
+        entries
+            .iter()
+            .find(|(key, _)| *key == Value::keyword(name))
+            .map(|(_, value)| *value)
+    };
+    let shapes = match field("shapes") {
+        Some(found) => shapes::shapes(heap, found)?,
+        None => Vec::new(),
+    };
+    let Some(given) = field("inputs") else {
+        return Ok((shapes, None));
+    };
+    let numbers = heap
+        .elements(given)
+        .filter(|numbers| numbers.len() <= INPUTS)
+        .ok_or_else(|| {
+            Error::new(format!(
+                "A drawing's :inputs are up to {INPUTS} numbers, got {}",
+                print::brief(heap, given)
+            ))
+        })?;
+    let mut inputs = [0.0; INPUTS];
+    for (slot, number) in inputs.iter_mut().zip(numbers) {
+        *slot = match number {
+            Value::Int(number) => number as f32,
+            Value::Float(number) => number as f32,
+            other => {
+                return Err(Error::new(format!(
+                    "A drawing's :inputs are numbers, got {}",
+                    print::brief(heap, other)
+                )));
+            }
+        };
+    }
+    Ok((shapes, Some(inputs)))
 }
 
 pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "take-over")
         .arity(1, Some(1))
-        .keywords(&["background", "on-end", "fps"])
+        .keywords(&["background", "on-end", "fps", "shader"])
         .host::<Editor>(take_over);
     isolate
         .native("ox", "end-take-over")
@@ -153,25 +255,30 @@ pub fn frame(
     let started = *takeover.started.get_or_insert(now);
     takeover.drawn = Some(now);
     let draw = takeover.draw;
-    let drawn = isolate
+    let elapsed = now.saturating_duration_since(started);
+    let result = isolate
         .held(draw)
         .ok_or_else(|| Error::new("The takeover lost its drawing function"))
         .and_then(|function| {
-            let frame = frame_map(
-                isolate,
-                now.saturating_duration_since(started),
-                size,
-                font_size,
-            )?;
+            if function == Value::Nil {
+                return Ok((Vec::new(), None));
+            }
+            let frame = frame_map(isolate, elapsed, size, font_size)?;
             let value = isolate.within(crate::QUICK, |isolate| {
                 isolate.call_with(editor, function, &[frame])
             })?;
-            shapes::shapes(isolate.heap(), value)
+            drawn(isolate.heap(), value)
         });
-    match drawn {
-        Ok(shapes) => {
+    match result {
+        Ok((shapes, inputs)) => {
             if let Some(takeover) = editor.plugin_state_mut::<Takeover>() {
                 takeover.shapes = shapes;
+                if let Some(backdrop) = takeover.backdrop.as_mut() {
+                    backdrop.time = elapsed.as_secs_f32();
+                    if let Some(inputs) = inputs {
+                        backdrop.inputs = inputs;
+                    }
+                }
             }
         }
         Err(error) => {
@@ -317,6 +424,115 @@ mod tests {
         settle(&mut editor, &mut ox);
         assert!(current(&editor).is_none());
         assert_eq!(ox.eval(&mut editor, "@ended").unwrap(), "true");
+    }
+
+    #[test]
+    fn takeovers_can_draw_over_a_shader_fed_with_time_and_inputs() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            r#"(take-over (fn [frame] {shapes: [[:circle 1 2 3 :link]] inputs: [frame.width 0.5]})
+           :shader """
+             fn shade(at: vec2<f32>) -> vec4<f32> {
+               return vec4<f32>(at / frame.size, input(1), 1.0);
+             }
+             """)"#,
+        )
+        .unwrap();
+        let start = Instant::now();
+
+        ox.frame(&mut editor, start, (300.0, 200.0), 14.0);
+        ox.frame(
+            &mut editor,
+            start + Duration::from_millis(1500),
+            (300.0, 200.0),
+            14.0,
+        );
+
+        let shown = current(&editor).unwrap();
+        let backdrop = shown.backdrop.as_ref().unwrap();
+        assert!(backdrop.shader.source.contains("fn shade(at: vec2<f32>)"));
+        assert!((backdrop.time - 1.5).abs() < 1e-6);
+        assert_eq!(&backdrop.inputs[..3], [300.0, 0.5, 0.0]);
+        assert_eq!(shown.shapes.len(), 1);
+    }
+
+    #[test]
+    fn polygons_curves_and_glows_are_read_with_their_points() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        ox.eval(
+            &mut editor,
+            r##"(take-over (fn [frame] [[:polygon [[0 0] [10 0] [5 8]] "#ff0000"]
+                                     [:curve [[0 0] [4 4] [8 0]] [:link 0.5] 2 0.75]
+                                     [:curve [[1 1] [2 2]] :link 1]
+                                     [:glow 3 4 20 "#00ff00"]]))"##,
+        )
+        .unwrap();
+
+        ox.frame(&mut editor, Instant::now(), (100.0, 100.0), 14.0);
+
+        let link = paint(Ink::Face(Highlight::Link), 0.5);
+        assert_eq!(
+            current(&editor).unwrap().shapes,
+            [
+                Shape::Polygon {
+                    points: vec![(0.0, 0.0), (10.0, 0.0), (5.0, 8.0)],
+                    paint: paint(Ink::Rgb(255, 0, 0), 1.0),
+                },
+                Shape::Curve {
+                    points: vec![(0.0, 0.0), (4.0, 4.0), (8.0, 0.0)],
+                    width: 2.0,
+                    fade: 0.75,
+                    paint: link,
+                },
+                Shape::Curve {
+                    points: vec![(1.0, 1.0), (2.0, 2.0)],
+                    width: 1.0,
+                    fade: 0.0,
+                    paint: paint(Ink::Face(Highlight::Link), 1.0),
+                },
+                Shape::Glow {
+                    x: 3.0,
+                    y: 4.0,
+                    radius: 20.0,
+                    paint: paint(Ink::Rgb(0, 255, 0), 1.0),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn shaders_that_do_not_compile_say_where() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        let error = ox
+            .eval(
+                &mut editor,
+                r#"(take-over nil :shader """
+                     fn shade(at: vec2<f32>) -> vec4<f32> {
+                       return vec4<f32>(at, 1.0);
+                     }
+                     """)"#,
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("The take-over shader has an error on line 2"),
+            "{error}"
+        );
+
+        let error = ox
+            .eval(
+                &mut editor,
+                r#"(take-over nil :shader "fn shade(at: vec2<f32>) -> vec4<f32> { return 1.0 }")"#,
+            )
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("on line 1"), "{error}");
+        assert!(current(&editor).is_none());
     }
 
     #[test]

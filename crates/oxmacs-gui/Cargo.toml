@@ -12,6 +12,7 @@ workspace = true
 [dependencies]
 dirs.workspace = true
 iced.workspace = true
+iced_wgpu.workspace = true
 jiff.workspace = true
 oxmacs-api.workspace = true
 oxmacs-core.workspace = true

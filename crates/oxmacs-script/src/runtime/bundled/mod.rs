@@ -580,8 +580,16 @@ const SCREENSAVER: Bundle = Bundle {
             include_str!("../../../plugins/screensaver/savers.ox"),
         ),
         (
-            "outline.ox",
-            include_str!("../../../plugins/screensaver/outline.ox"),
+            "shading.ox",
+            include_str!("../../../plugins/screensaver/shading.ox"),
+        ),
+        (
+            "backdrops.ox",
+            include_str!("../../../plugins/screensaver/backdrops.ox"),
+        ),
+        (
+            "tones.ox",
+            include_str!("../../../plugins/screensaver/tones.ox"),
         ),
         (
             "pond.ox",

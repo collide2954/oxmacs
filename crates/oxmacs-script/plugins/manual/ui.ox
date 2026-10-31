@@ -3,7 +3,7 @@
 (def page
   {id: "ui"
    title: "Buffers and views"
-   text: """
+   text: """"
 # Buffers and views
 
 A plugin shows its work in buffers of text lines, in views of widgets, or in menus, and a mode gives files of a kind their own keys and colors.
@@ -97,7 +97,28 @@ A buffer that shows a file of its own, as the PDF reader's do, takes `:file`: it
                         :height 100)))
 ```
 
-The shapes are `[:rect x y width height color]`, `[:circle x y radius color]`, `[:line x1 y1 x2 y2 color width]` and `[:text x y text color size]`, the last number of a line or text being optional. With `:relative true`, x positions and widths are fractions of the canvas's width, so the drawing fills whatever width it gets. `take-over` draws shapes over the whole window, frame by frame, until a key or a click, as the screensaver does.
+The shapes are `[:rect x y width height color]`, `[:circle x y radius color]`, `[:line x1 y1 x2 y2 color width]` and `[:text x y text color size]`, the last number of a line or text being optional, and three more:
+
+- `[:polygon points color]` fills the shape the `[x y]` points outline.
+- `[:curve points color width fade]` strokes a smooth line through the points; `fade` from 0 to 1 dims its start, for trails.
+- `[:glow x y radius color]` is a soft light that fades out toward `radius`.
+
+With `:relative true`, x positions and widths are fractions of the canvas's width, so the drawing fills whatever width it gets.
+
+## Taking over the window
+
+`take-over` draws over the whole window, frame by frame, until a key or a click, as the screensaver does. Each frame calls the drawing function with the time, width and height, and the shapes it returns are painted. Under them, `:shader` can paint every pixel on the graphics card: WGSL text defining `fn shade(at: vec2f) -> vec4f`, where `at` is the pixel in the same units as the shapes. The shader sees `frame.time` in seconds and `frame.size`, and reads `input(0)` to `input(15)` from the `:inputs` numbers a drawing function returns in a map beside its `:shapes`. Without a graphics card the shader is drawn on a software device at a lower resolution. A mistake in the shader is reported with its line when `take-over` is called.
+
+```
+(take-over (fn [frame] {shapes: [[:glow 200 150 60 "#ffcc66"]]
+                        inputs: [(/ frame.time 1000.0)]})
+           :shader """
+             fn shade(at: vec2f) -> vec4f {
+                 let t = at / frame.size;
+                 return vec4f(t.x, t.y, 0.5 + 0.5 * sin(input(0)), 1.0);
+             }
+             """)
+```
 
 ## Modes
 
@@ -126,4 +147,4 @@ The highlighter runs again whenever the buffer changes and is stopped after 250 
    {title: "Run" actions: [["d" "Deploy" (fn [flags] (message $"Deploying with {flags}"))]]}])
 ```
 
-"""})
+""""})

@@ -14,6 +14,7 @@ workspace = true
 dirs.workspace = true
 jiff.workspace = true
 keepass.workspace = true
+naga.workspace = true
 ox-lang.workspace = true
 ox-library.workspace = true
 ox-rodeo.workspace = true

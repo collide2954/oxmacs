@@ -27,39 +27,40 @@
           (screensaver sorting :as sorting)
           (screensaver storm :as storm)
           (screensaver fireflies :as fireflies)
-          (screensaver mandelbrot :as mandelbrot))
+          (screensaver mandelbrot :as mandelbrot)
+          (screensaver backdrops :as backdrops))
   (export savers notes start))
 
 (def savers
   [{kind: :starfield note: "Stars rushing toward you" draw: stars/draw}
    {kind: :matrix note: "Glyphs raining down the screen" draw: rain/draw fps: 15}
-   {kind: :pond note: "Rain on a dark pond, its rings spreading and crossing" draw: pond/draw background: pond/background}
-   {kind: :fireworks note: "Rockets rising and bursting into falling sparks" draw: fireworks/draw background: fireworks/background}
-   {kind: :harmonograph note: "A pen on swinging pendulums drawing a curve that dies away" draw: harmonograph/draw background: harmonograph/background}
-   {kind: :aurora note: "Curtains of light waving over a starry sky" draw: aurora/draw background: aurora/background}
-   {kind: :clock note: "The time and date drifting slowly around the screen" draw: clock/draw fps: 2}
-   {kind: :flow note: "Light swept along slowly turning currents" draw: flow/draw background: flow/background}
-   {kind: :orbits note: "Planets and moons going round a glowing star" draw: orbits/draw background: orbits/background}
-   {kind: :snowfall note: "Snow drifting down on a breeze and piling up" draw: snowfall/draw background: snowfall/background}
-   {kind: :tunnel note: "Rings of light rushing at you through a twisting tunnel" draw: tunnel/draw background: tunnel/background}
-   {kind: :lava note: "Warm blobs rising, merging and splitting in a lava lamp" draw: lava/draw background: lava/background fps: 20}
-   {kind: :constellations note: "Drifting stars joined by lines whenever they come near" draw: constellations/draw background: constellations/background}
-   {kind: :plasma note: "Bands of color rippling across a grid of tiles" draw: plasma/draw background: plasma/background fps: 20}
-   {kind: :bubbles note: "Bubbles wobbling up from the deep and popping" draw: bubbles/draw background: bubbles/background}
-   {kind: :kaleidoscope note: "Bright shapes turning in a six-fold mirror" draw: kaleidoscope/draw background: kaleidoscope/background}
-   {kind: :wireframes note: "Wireframe solids tumbling and turning into one another" draw: wireframes/draw background: wireframes/background}
-   {kind: :city note: "A skyline whose windows light up and go dark through the night" draw: city/draw background: city/background fps: 10}
-   {kind: :pendulums note: "A row of pendulums swinging in and out of step" draw: pendulums/draw background: pendulums/background}
-   {kind: :tree note: "A tree growing, swaying, dropping its blossom and growing again" draw: tree/draw background: tree/background}
-   {kind: :ocean note: "Swells rolling in under a low sun" draw: ocean/draw background: ocean/background}
-   {kind: :glass note: "Rain beading and running down a window over city lights" draw: glass/draw background: glass/background}
-   {kind: :galaxy note: "A spiral galaxy turning, its inner stars fastest" draw: galaxy/draw background: galaxy/background}
-   {kind: :ants note: "Langton's ants building chaos and then highways" draw: ants/draw background: ants/background fps: 15}
-   {kind: :campfire note: "Flames flickering up from the logs, sparks drifting off" draw: campfire/draw background: campfire/background}
-   {kind: :sorting note: "Bars sorting themselves by one algorithm after another" draw: sorting/draw background: sorting/background fps: 20}
-   {kind: :storm note: "Rain and forked lightning lighting up the clouds" draw: storm/draw background: storm/background}
-   {kind: :fireflies note: "Fireflies over the grass, blinking into step" draw: fireflies/draw background: fireflies/background}
-   {kind: :mandelbrot note: "A slow dive into the edge of the Mandelbrot set" draw: mandelbrot/draw background: mandelbrot/background fps: 12}])
+   {kind: :pond note: "Rain falling on a lily pond at dusk, its rings spreading and crossing" shader: pond/shader}
+   {kind: :fireworks note: "Fireworks bursting over a harbor, lighting the smoke and the water" draw: fireworks/draw shader: fireworks/shader}
+   {kind: :harmonograph note: "A pen on swinging pendulums inking a curve that dies away" draw: harmonograph/draw shader: backdrops/paper}
+   {kind: :aurora note: "Northern lights folding over mountains and a still lake" shader: aurora/shader}
+   {kind: :clock note: "The time and date drifting slowly over soft light" draw: clock/draw shader: clock/shader}
+   {kind: :flow note: "Light swept along slowly turning currents" draw: flow/draw shader: backdrops/deep fps: 20}
+   {kind: :orbits note: "Planets and moons going round a glowing star" draw: orbits/draw shader: backdrops/space}
+   {kind: :snowfall note: "Snow falling on a quiet forest and a lit cabin at dusk" shader: snowfall/shader}
+   {kind: :tunnel note: "Flying through a winding lit tunnel" shader: tunnel/shader}
+   {kind: :lava note: "Wax rising, merging and splitting in a glowing lava lamp" shader: lava/shader}
+   {kind: :constellations note: "Constellations traced one by one across the Milky Way" draw: constellations/draw shader: constellations/shader}
+   {kind: :plasma note: "Glossy liquid color folding slowly into itself" shader: plasma/shader}
+   {kind: :bubbles note: "Soap bubbles drifting up past a sunny garden, their films swirling with color" shader: bubbles/shader}
+   {kind: :kaleidoscope note: "Colored glass turning in a six-fold mirror" shader: kaleidoscope/shader}
+   {kind: :wireframes note: "Glowing wireframe solids tumbling and turning into one another" draw: wireframes/draw shader: backdrops/studio}
+   {kind: :city note: "A city across the water at night, its windows lighting and going dark" shader: city/shader}
+   {kind: :pendulums note: "A row of pendulums swinging in and out of step" draw: pendulums/draw shader: backdrops/deep}
+   {kind: :tree note: "A tree growing at dusk, swaying, dropping its blossom and growing again" draw: tree/draw shader: backdrops/dusk fps: 20}
+   {kind: :ocean note: "Open sea rolling under a low golden sun" shader: ocean/shader}
+   {kind: :glass note: "Rain beading and running down a window over blurred city lights" shader: glass/shader}
+   {kind: :galaxy note: "A spiral galaxy turning, its inner stars fastest" shader: galaxy/shader}
+   {kind: :ants note: "Langton's ants building chaos and then highways" draw: ants/draw shader: backdrops/deep fps: 15}
+   {kind: :campfire note: "A campfire in a dark forest, sparks rising into the night" shader: campfire/shader}
+   {kind: :sorting note: "Bars sorting themselves by one algorithm after another" draw: sorting/draw shader: backdrops/studio fps: 20}
+   {kind: :storm note: "A night thunderstorm, forked lightning lighting the clouds and rain" shader: storm/shader}
+   {kind: :fireflies note: "Fireflies over a meadow at dusk, blinking into step" shader: fireflies/shader}
+   {kind: :mandelbrot note: "A slow dive into the edge of the Mandelbrot set" shader: mandelbrot/shader}])
 
 (def notes
   (reduce (fn [found saver] (assoc found saver.kind saver.note)) {} savers))
@@ -67,4 +68,4 @@
 (def (start kind)
   "Takes over the windows with the screensaver called kind, or the first one."
   (let [saver (or (find (fn [saver] (= saver.kind kind)) savers) (first savers))]
-    (take-over saver.draw :fps saver.fps :background saver.background)))
+    (take-over saver.draw :fps saver.fps :background saver.background :shader saver.shader)))

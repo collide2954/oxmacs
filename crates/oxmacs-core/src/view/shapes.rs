@@ -42,4 +42,20 @@ pub enum Shape {
         size: Option<f32>,
         paint: Paint,
     },
+    Polygon {
+        points: Vec<(f32, f32)>,
+        paint: Paint,
+    },
+    Curve {
+        points: Vec<(f32, f32)>,
+        width: f32,
+        fade: f32,
+        paint: Paint,
+    },
+    Glow {
+        x: f32,
+        y: f32,
+        radius: f32,
+        paint: Paint,
+    },
 }

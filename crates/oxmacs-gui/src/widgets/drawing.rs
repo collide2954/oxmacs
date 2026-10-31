@@ -1,9 +1,13 @@
-use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke, Text};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+use iced::advanced::image::{Handle, Image};
+use iced::widget::canvas::{self, Frame, Geometry, LineCap, LineJoin, Path, Stroke, Text};
 use iced::{Color, Font, Pixels, Point, Rectangle, Renderer, Size, Theme, mouse};
 use oxmacs_core::theme::Theme as Faces;
 use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
-use crate::style;
+use crate::{style, units};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Drawing<'a> {
@@ -78,7 +82,119 @@ pub fn placed(shape: &Shape, width: f32) -> Shape {
             size,
             paint,
         },
+        Shape::Polygon { points, paint } => Shape::Polygon {
+            points: across(points, width),
+            paint,
+        },
+        Shape::Curve {
+            points,
+            width: thickness,
+            fade,
+            paint,
+        } => Shape::Curve {
+            points: across(points, width),
+            width: thickness,
+            fade,
+            paint,
+        },
+        Shape::Glow {
+            x,
+            y,
+            radius,
+            paint,
+        } => Shape::Glow {
+            x: x * width,
+            y,
+            radius,
+            paint,
+        },
     }
+}
+
+fn across(points: Vec<(f32, f32)>, width: f32) -> Vec<(f32, f32)> {
+    points.into_iter().map(|(x, y)| (x * width, y)).collect()
+}
+
+fn traced(points: &[(f32, f32)]) -> Path {
+    Path::new(|builder| {
+        let mut points = points.iter();
+        if let Some((x, y)) = points.next() {
+            builder.move_to(Point::new(*x, *y));
+        }
+        for (x, y) in points {
+            builder.line_to(Point::new(*x, *y));
+        }
+    })
+}
+
+const FADE_STEPS: usize = 24;
+
+fn curve(frame: &mut Frame, points: &[(f32, f32)], width: f32, fade: f32, color: Color) {
+    let stroke = |color: Color| {
+        Stroke::default()
+            .with_width(width)
+            .with_color(color)
+            .with_line_cap(LineCap::Round)
+            .with_line_join(LineJoin::Round)
+    };
+    if fade <= 0.0 || points.len() < 3 {
+        frame.stroke(&traced(points), stroke(color));
+        return;
+    }
+    let chunk = points.len().div_ceil(FADE_STEPS).max(1);
+    let last = points.len() - 1;
+    let mut start = 0;
+    while start < last {
+        let end = (start + chunk).min(last);
+        let along = units::to_f32(end) / units::to_f32(last);
+        let alpha = color.a * (1.0 - fade * (1.0 - along));
+        frame.stroke(
+            &traced(&points[start..=end]),
+            stroke(Color { a: alpha, ..color }),
+        );
+        start = end;
+    }
+}
+
+const GLOW_SIZE: usize = 64;
+const GLOW_PIXELS: u32 = 64;
+const GLOW_COLORS: usize = 256;
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "the value is clamped to a byte's range first"
+)]
+fn byte(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+fn glow_image(color: Color) -> Handle {
+    static GLOWS: OnceLock<Mutex<HashMap<[u8; 3], Handle>>> = OnceLock::new();
+    let [red, green, blue, _] = color.into_rgba8();
+    let key = [red, green, blue];
+    let mut glows = GLOWS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if glows.len() >= GLOW_COLORS && !glows.contains_key(&key) {
+        glows.clear();
+    }
+    glows
+        .entry(key)
+        .or_insert_with(|| {
+            let middle = units::to_f32(GLOW_SIZE) / 2.0;
+            let pixels: Vec<u8> = (0..GLOW_SIZE * GLOW_SIZE)
+                .flat_map(|index| {
+                    let x = (units::to_f32(index % GLOW_SIZE) + 0.5 - middle) / middle;
+                    let y = (units::to_f32(index / GLOW_SIZE) + 0.5 - middle) / middle;
+                    let falloff = (-(x * x + y * y) * 4.5).exp() * (1.0 - (x * x + y * y)).max(0.0);
+                    [red, green, blue, byte(falloff)]
+                })
+                .collect();
+            Handle::from_rgba(GLOW_PIXELS, GLOW_PIXELS, pixels)
+        })
+        .clone()
 }
 
 impl<Message> canvas::Program<Message> for Drawing<'_> {
@@ -144,6 +260,36 @@ impl<Message> canvas::Program<Message> for Drawing<'_> {
                     font: self.font,
                     ..Text::default()
                 }),
+                Shape::Polygon { points, paint } => {
+                    frame.fill(&traced(points), color(*paint, &self.faces));
+                }
+                Shape::Curve {
+                    points,
+                    width,
+                    fade,
+                    paint,
+                } => curve(
+                    &mut frame,
+                    points,
+                    *width,
+                    *fade,
+                    color(*paint, &self.faces),
+                ),
+                Shape::Glow {
+                    x,
+                    y,
+                    radius,
+                    paint,
+                } => {
+                    let shade = color(*paint, &self.faces);
+                    frame.draw_image(
+                        Rectangle::new(
+                            Point::new(x - radius, y - radius),
+                            Size::new(radius * 2.0, radius * 2.0),
+                        ),
+                        Image::new(glow_image(shade)).opacity(shade.a),
+                    );
+                }
             }
         }
         vec![frame.into_geometry()]

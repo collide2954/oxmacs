@@ -5,7 +5,7 @@ use oxmacs_core::view::shapes::{Ink, Paint, Shape};
 
 use oxmacs_core::theme::face_named;
 
-const SHAPES: &str = "[:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width] or [:text x y text color size]";
+const SHAPES: &str = "[:rect x y width height color], [:circle x y radius color], [:line x1 y1 x2 y2 color width], [:text x y text color size], [:polygon points color], [:curve points color width fade] or [:glow x y radius color]";
 
 fn wrong(heap: &Heap, wanted: &str, value: Value) -> Error {
     Error::new(format!(
@@ -114,8 +114,39 @@ fn shape(heap: &Heap, value: Value) -> Result<Shape, Error> {
             size: if parts.len() == 6 { Some(at(5)?) } else { None },
             paint: paint(heap, parts[4])?,
         },
+        ("polygon", 3) => Shape::Polygon {
+            points: points(heap, parts[1])?,
+            paint: paint(heap, parts[2])?,
+        },
+        ("curve", 4 | 5) => Shape::Curve {
+            points: points(heap, parts[1])?,
+            width: at(3)?,
+            fade: if parts.len() == 5 {
+                at(4)?.clamp(0.0, 1.0)
+            } else {
+                0.0
+            },
+            paint: paint(heap, parts[2])?,
+        },
+        ("glow", 5) => Shape::Glow {
+            x: at(1)?,
+            y: at(2)?,
+            radius: at(3)?,
+            paint: paint(heap, parts[4])?,
+        },
         _ => return Err(wrong(heap, SHAPES, value)),
     })
+}
+
+fn points(heap: &Heap, value: Value) -> Result<Vec<(f32, f32)>, Error> {
+    heap.elements(value)
+        .ok_or_else(|| wrong(heap, "a vector of [x y] points", value))?
+        .into_iter()
+        .map(|point| match heap.elements(point).as_deref() {
+            Some([x, y]) => Ok((number(heap, *x)?, number(heap, *y)?)),
+            _ => Err(wrong(heap, "points as [x y]", point)),
+        })
+        .collect()
 }
 
 pub fn shapes(heap: &Heap, value: Value) -> Result<Vec<Shape>, Error> {

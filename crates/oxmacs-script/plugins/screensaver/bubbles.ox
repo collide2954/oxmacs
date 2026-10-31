@@ -1,54 +1,77 @@
 (module
-  (import (ox math) (screensaver noise :as noise) (screensaver outline :as outline))
-  (export background bubble draw))
+  (import (screensaver shading :as shading))
+  (export shader))
 
-(def background "#03202b")
-(def bubbles 38)
+(def shader
+  (str shading/library
+       """
+       const COUNT: i32 = 14;
 
-(def (bubble i seconds width height)
-  "Bubble i: rising, wobbling and popping near the top, then rising again."
-  (let [size (+ 8 (* 26 (noise/of [i :size])))
-        rise (+ 30 (* 2.2 size))
-        top (* height (+ 0.08 (* 0.3 (noise/of [i :top]))))
-        travel (- (+ height size) top)
-        span (+ (/ travel rise) 0.6)
-        shifted (+ seconds (* span (noise/of [i :phase])))
-        round (int (/ shifted span))
-        age (- shifted (* round span))
-        risen (* age rise)
-        x0 (* width (noise/of [i round :x]))]
-    {x: (+ x0 (* (* 0.4 size) (math/sin (+ (* 2.1 age) (* 6 (noise/of [i :wobble]))))))
-     y: (- (+ height size) (min risen travel))
-     size: (* size (+ 1 (* 0.04 (math/sin (* 5 age)))))
-     popped: (when (> risen travel) (/ (- risen travel) rise))}))
+       fn garden(uv: vec2f) -> vec3f {
+           var color = mix(vec3f(0.25, 0.42, 0.66), vec3f(0.55, 0.70, 0.90), smoothstep(-0.2, 0.6, uv.y));
+           color += vec3f(0.9, 0.75, 0.45) * exp(-length(uv - vec2f(-0.7, 0.55)) * 2.5) * 0.6;
+           let leaves = fbm2(uv * vec2f(2.2, 3.0) + vec2f(0.0, frame.time * 0.01), 5);
+           let foliage = smoothstep(0.40, 0.58, leaves + (0.05 - uv.y) * 0.9);
+           let sunlit = fbm2(uv * 5.0 + 4.0, 4);
+           let greens = mix(vec3f(0.04, 0.10, 0.025), vec3f(0.30, 0.48, 0.10), sunlit);
+           color = mix(color, greens, foliage);
+           let lawn = smoothstep(-0.25, -0.45, uv.y);
+           color = mix(color, mix(vec3f(0.12, 0.25, 0.05), vec3f(0.35, 0.55, 0.12), fbm2(uv * vec2f(3.0, 12.0), 4)), lawn);
+           for (var i = 0; i < 22; i++) {
+               let s = f32(i);
+               let spot = vec2f((cell2(vec2f(s, 1.0)) - 0.5) * 2.0, (cell2(vec2f(s, 2.0)) - 0.4) * 1.0);
+               let d = length(uv - spot);
+               let size = 0.03 + 0.06 * cell2(vec2f(s, 3.0));
+               color += vec3f(1.0, 0.95, 0.75) * smoothstep(size, size * 0.9, d) * 0.22 * foliage;
+           }
+           return color;
+       }
 
-(def (shapes b)
-  (if b.popped
-    (if (< b.popped 0.35)
-      (let [spread (* b.size (+ 1 (* 3 b.popped)))
-            fade (- 1 (/ b.popped 0.35))]
-        (vec (concat (outline/ellipse b.x b.y spread spread ["#d8fbff" (* 0.6 fade)] 1 20)
-                     (map (fn [k]
-                            (let [angle (* k 1.05)]
-                              [:circle (+ b.x (* spread 1.2 (math/cos angle))) (+ b.y (* spread 1.2 (math/sin angle)))
-                               1.5 ["#d8fbff" fade]]))
-                          (range 6)))))
-      [])
-    (vec (concat [[:circle b.x b.y b.size ["#7fe7ff" 0.07]]]
-                 (outline/ellipse b.x b.y b.size b.size ["#bff4ff" 0.55] 1.2 28)
-                 [[:circle (- b.x (* 0.35 b.size)) (- b.y (* 0.38 b.size)) (* 0.22 b.size) ["#ffffff" 0.75]]
-                  [:circle (+ b.x (* 0.3 b.size)) (+ b.y (* 0.34 b.size)) (* 0.09 b.size) ["#ffffff" 0.35]]]))))
+       fn film(thickness: f32, cosine: f32) -> vec3f {
+           let path = 2.0 * 1.33 * thickness * cosine;
+           let waves = vec3f(650.0, 532.0, 450.0);
+           let phase = TAU * path / waves;
+           return 0.5 - 0.5 * cos(phase);
+       }
 
-(def (depths width height)
-  (vec (map (fn [band] [:rect 0 (* height 0.1 band) width (+ 1 (* height 0.1)) ["#000814" (* 0.07 band)]])
-            (range 10))))
+       fn bubble(i: i32) -> vec4f {
+           let s = f32(i);
+           let rise = 0.04 + 0.05 * cell2(vec2f(s, 4.0));
+           let period = 3.0 / rise;
+           let age = fract(frame.time / period + cell2(vec2f(s, 5.0)));
+           let x = (cell2(vec2f(s, 6.0)) - 0.5) * 1.6 + sin(frame.time * 0.5 + s * 2.0) * 0.06 + age * (cell2(vec2f(s, 8.0)) - 0.5) * 0.4;
+           let y = -0.75 + age * 1.6;
+           let radius = 0.05 + 0.10 * cell2(vec2f(s, 7.0));
+           let depth = 2.6 - 1.6 * s / f32(COUNT);
+           return vec4f(x, y, radius / depth * 1.4, depth);
+       }
 
-(def (draw frame)
-  (let [seconds (/ frame.time 1000.0)]
-    (vec (concat (depths frame.width frame.height)
-                 (mapcat (fn [i] (shapes (bubble i seconds frame.width frame.height))) (range bubbles))))))
-
-(test "bubbles rise until they pop"
-  (let [early (bubble 7 2.0 800 600)
-        later (bubble 7 2.3 800 600)]
-    (expect (or later.popped early.popped (< later.y early.y)))))
+       fn shade(at: vec2f) -> vec4f {
+           let uv = (at - frame.size * 0.5) / frame.size.y * vec2f(1.0, -1.0);
+           let blur = garden(uv * 0.9);
+           var color = blur;
+           for (var order = 0; order < COUNT; order++) {
+               let b = bubble(order);
+               let offset = (uv - b.xy) / b.z;
+               let wobble = 1.0 + 0.04 * sin(atan2(offset.y, offset.x) * 3.0 + frame.time * 2.0 + f32(order));
+               let r = length(offset) * wobble;
+               if (r < 1.0) {
+                   let z = sqrt(1.0 - r * r);
+                   let normal = vec3f(offset / wobble, z);
+                   let cosine = z;
+                   let swirl = fbm2(offset * 1.5 + vec2f(frame.time * 0.15, -frame.time * 0.1) + f32(order) * 3.0, 4);
+                   let thickness = mix(220.0, 900.0, swirl) * (0.7 + 0.5 * (1.0 - normal.y) * 0.5);
+                   let fresnel = 0.04 + 0.96 * pow(1.0 - cosine, 4.0);
+                   let iridescence = film(thickness, cosine) * (0.25 + fresnel * 1.4);
+                   let behind = garden((b.xy + offset * b.z * 0.85) * 0.9);
+                   let window = smoothstep(0.12, 0.08, length(normal.xy - vec2f(-0.38, 0.42))) * 1.4;
+                   let sill = smoothstep(0.08, 0.05, length(normal.xy - vec2f(0.45, -0.5))) * 0.4;
+                   let rim = smoothstep(0.80, 1.0, r) * 0.25;
+                   let film_color = iridescence * 0.55 + vec3f(1.0) * (window + sill) + rim;
+                   color = mix(color, behind, 0.6) * (1.0 - fresnel * 0.3) + film_color;
+               }
+           }
+           color *= 1.0 - smoothstep(0.6, 1.3, length(uv * vec2f(0.8, 1.0))) * 0.4;
+           return shown(color * 0.9, at);
+       }
+       """))
