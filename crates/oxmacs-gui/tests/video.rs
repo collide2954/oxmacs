@@ -2,6 +2,7 @@ mod kveikur;
 mod music;
 mod sample_book;
 mod sample_paper;
+mod screensavers;
 mod sigur;
 mod support;
 mod tank;
