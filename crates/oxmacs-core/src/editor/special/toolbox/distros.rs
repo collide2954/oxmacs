@@ -77,6 +77,39 @@ pub(super) fn package_install(family: &[&str], package: &str) -> Option<(&'stati
     })
 }
 
+fn server_cell(probe: &Probe, spec: &ServerSpec) -> (bool, String) {
+    let family = probe.family();
+    let found = spec
+        .programs
+        .iter()
+        .find_map(|(program, _)| probe.path_of(program));
+    let state = match (found, spec.package_for(&family)) {
+        (Some(path), _) => format!("found {path}"),
+        (None, Some((_, package))) => match package_install(&family, package) {
+            Some((manager, _)) => format!("not installed; i installs {package} with {manager}"),
+            None => format!("not installed; {}", spec.install),
+        },
+        (None, None) if spec.runs => format!("not installed; i runs {} there", spec.install),
+        (None, None) => format!("not installed; {}", spec.install),
+    };
+    (found.is_some(), state)
+}
+
+fn watcher_cell(probe: &Probe) -> (bool, String) {
+    let waiting = "not installed, so changes are checked every 2 seconds";
+    match (
+        probe.path_of(WATCHER),
+        package_install(&probe.family(), WATCHER_PACKAGE),
+    ) {
+        (Some(path), _) => (true, format!("found {path}; changes show at once")),
+        (None, Some((manager, _))) => (
+            false,
+            format!("{waiting}; i installs {WATCHER_PACKAGE} with {manager}"),
+        ),
+        (None, None) => (false, format!("{waiting}; install {WATCHER_PACKAGE}")),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::editor) enum Check {
     Stopped,
@@ -147,7 +180,7 @@ impl Editor {
             return;
         }
         if let Some(wsl) = wsl::installed() {
-            self.check_distros_with(wsl);
+            self.check_distros_with(&wsl);
         }
     }
 
@@ -158,11 +191,11 @@ impl Editor {
             .unwrap_or_else(env::temp_dir)
     }
 
-    pub(in crate::editor) fn check_distros_with(&mut self, wsl: PathBuf) {
+    pub(in crate::editor) fn check_distros_with(&mut self, wsl: &Path) {
         let directory = self.outside_distros();
-        let again = (wsl.clone(), directory.clone());
+        let again = (wsl.to_owned(), directory.clone());
         self.start_job(
-            listing(&wsl, &["--list", "--quiet"], directory),
+            listing(wsl, &["--list", "--quiet"], directory),
             collected(move |editor, lines, worked| {
                 let all = if worked {
                     wsl::names(&lines.join("\n"))
@@ -298,6 +331,23 @@ impl Editor {
             .map(|(_, path)| path)
     }
 
+    fn tool_cell(&self, distro: &str, probe: &Probe, tool: &Managed) -> (bool, String) {
+        let root = tools_root(distro, &probe.home);
+        match (
+            self.toolbox.installing_into(tool, &root),
+            tool.installed(&root),
+            probe.path_of(&tool.name),
+        ) {
+            (Some(version), ..) => (false, format!("installing {version}…")),
+            (None, Some((version, _)), _) => (true, format!("{version} (oxmacs)")),
+            (None, None, Some(path)) => (true, format!("found {path}")),
+            (None, None, None) => (
+                false,
+                "not installed; i installs its Linux build".to_owned(),
+            ),
+        }
+    }
+
     pub(super) fn distro_sections(
         &self,
         page: &mut Page,
@@ -328,7 +378,22 @@ impl Editor {
                 }
                 Check::Known(probe) => probe,
             };
-            let mut row = |page: &mut Page, name: &str, found: bool, state: &str, kind: Row| {
+            let tools = self
+                .toolbox
+                .tools
+                .iter()
+                .filter(|tool| tool.form == Form::Program)
+                .map(|tool| {
+                    let (found, state) = self.tool_cell(&distro.name, probe, tool);
+                    (tool.name.clone(), found, state, Row::Tool(tool.clone()))
+                });
+            let servers = specs.iter().map(|spec| {
+                let (found, state) = server_cell(probe, spec);
+                (spec.name.clone(), found, state, Row::Server(spec.clone()))
+            });
+            let (found, state) = watcher_cell(probe);
+            let watcher = (WATCHER.to_owned(), found, state, Row::Watcher);
+            for (name, found, state, kind) in tools.chain(servers).chain([watcher]) {
                 let (mark, highlight) = if found {
                     ("✓", Highlight::Success)
                 } else {
@@ -341,73 +406,7 @@ impl Editor {
                     (&format!(" {state}"), None),
                 ]);
                 rows.push((line, distro.name.clone(), kind));
-            };
-            let family = probe.family();
-            for tool in self
-                .toolbox
-                .tools
-                .iter()
-                .filter(|tool| tool.form == Form::Program)
-            {
-                let root = tools_root(&distro.name, &probe.home);
-                let state = match (
-                    self.toolbox.installing_into(tool, &root),
-                    tool.installed(&root),
-                    probe.path_of(&tool.name),
-                ) {
-                    (Some(version), ..) => format!("installing {version}…"),
-                    (None, Some((version, _)), _) => format!("{version} (oxmacs)"),
-                    (None, None, Some(path)) => format!("found {path}"),
-                    (None, None, None) => "not installed; i installs its Linux build".to_owned(),
-                };
-                let found = state.contains("(oxmacs)") || state.starts_with("found");
-                row(page, &tool.name, found, &state, Row::Tool(tool.clone()));
             }
-            for spec in specs {
-                let found = spec
-                    .programs
-                    .iter()
-                    .find_map(|(program, _)| probe.path_of(program));
-                let state = match (found, spec.package_for(&family)) {
-                    (Some(path), _) => format!("found {path}"),
-                    (None, Some((_, package))) => match package_install(&family, package) {
-                        Some((manager, _)) => {
-                            format!("not installed; i installs {package} with {manager}")
-                        }
-                        None => format!("not installed; {}", spec.install),
-                    },
-                    (None, None) if spec.runs => {
-                        format!("not installed; i runs {} there", spec.install)
-                    }
-                    (None, None) => format!("not installed; {}", spec.install),
-                };
-                row(
-                    page,
-                    &spec.name,
-                    found.is_some(),
-                    &state,
-                    Row::Server(spec.clone()),
-                );
-            }
-            let state = match (
-                probe.path_of(WATCHER),
-                package_install(&family, WATCHER_PACKAGE),
-            ) {
-                (Some(path), _) => format!("found {path}; changes show at once"),
-                (None, Some((manager, _))) => format!(
-                    "not installed, so changes are checked every 2 seconds; i installs {WATCHER_PACKAGE} with {manager}"
-                ),
-                (None, None) => format!(
-                    "not installed, so changes are checked every 2 seconds; install {WATCHER_PACKAGE}"
-                ),
-            };
-            row(
-                page,
-                WATCHER,
-                probe.path_of(WATCHER).is_some(),
-                &state,
-                Row::Watcher,
-            );
         }
         rows
     }
@@ -541,15 +540,13 @@ impl Editor {
             &format!("Remove {} {version} from {distro}?", tool.name),
             move |editor, yes| {
                 if yes {
-                    match managed::remove(&tool, &root) {
-                        Ok(()) => {
-                            editor.show_message(format!("Removed {} from {distro}", tool.name))
+                    let said = match managed::remove(&tool, &root) {
+                        Ok(()) => format!("Removed {} from {distro}", tool.name),
+                        Err(error) => {
+                            format!("Could not remove {} from {distro}: {error}", tool.name)
                         }
-                        Err(error) => editor.show_message(format!(
-                            "Could not remove {} from {distro}: {error}",
-                            tool.name
-                        )),
-                    }
+                    };
+                    editor.show_message(said);
                     editor.render_tools();
                 }
             },
@@ -642,7 +639,7 @@ mod tests {
         for id in checks {
             editor.fetched(id, Ok(release("0.12.0")));
         }
-        editor.check_distros_with(PathBuf::from(WSL));
+        editor.check_distros_with(Path::new(WSL));
         let all = spawned(&mut editor).pop().unwrap();
         assert_eq!(
             (all.program.as_str(), all.args.as_slice()),
