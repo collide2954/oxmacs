@@ -45,7 +45,7 @@ pub(in crate::editor) const RUSTFMT: Formatter = Formatter {
 pub(in crate::editor) const AIR_FORMAT: Formatter = Formatter {
     name: "air",
     format: |editor, request| {
-        let program = editor.air_program()?;
+        let program = editor.air_program(request.directory)?;
         tools::air_format(&program, request.text, request.path)
             .map_err(|error| format!("air: {error}"))
     },
@@ -130,7 +130,14 @@ impl Editor {
         self.working_directory.join(format!("untitled.{extension}"))
     }
 
-    pub(in crate::editor) fn air_program(&self) -> Result<PathBuf, String> {
+    pub(in crate::editor) fn air_program(&self, directory: &Path) -> Result<PathBuf, String> {
+        if oxmacs_process::inside_wsl()
+            && let Some(place) = oxmacs_files::wsl::place(directory)
+        {
+            return Ok(self
+                .tool_in_distro(&place.distro, "air")
+                .unwrap_or_else(|| PathBuf::from("air")));
+        }
         self.tool_path("air")
             .ok_or_else(|| match self.tool_program("air") {
                 Some(program) => format!("air-program not found: {program}"),

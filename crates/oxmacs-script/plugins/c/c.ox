@@ -15,4 +15,5 @@
 (define-language-server "clangd"
   :languages {"C" "c" "C++" "cpp"}
   :program "clangd"
-  :install "install clangd from your system's packages or https://clangd.llvm.org")
+  :install "install clangd from your system's packages or https://clangd.llvm.org"
+  :packages {fedora: "clang-tools-extra" debian: "clangd" arch: "clang" suse: "clang-tools" alpine: "clang-extra-tools"})

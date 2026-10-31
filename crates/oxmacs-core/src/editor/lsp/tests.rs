@@ -21,6 +21,7 @@ fn server(name: &str, language: (&str, &str), program: &[&str], install: &str) -
         )],
         install: install.to_owned(),
         runs: !install.is_empty(),
+        packages: Vec::new(),
     }
 }
 

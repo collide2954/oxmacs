@@ -26,6 +26,7 @@ struct Options {
     programs: Vec<(String, Vec<String>)>,
     install: String,
     runs: bool,
+    packages: Vec<(String, String)>,
 }
 
 fn programs(heap: &Heap, value: Value) -> Result<Vec<(String, Vec<String>)>, Error> {
@@ -46,39 +47,56 @@ fn programs(heap: &Heap, value: Value) -> Result<Vec<(String, Vec<String>)>, Err
         .collect()
 }
 
-const DEFINE: [&str; 6] = [
+const DEFINE: [&str; 7] = [
     "languages",
     "program",
     "args",
     "programs",
     "install",
     "runs",
+    "packages",
 ];
+
+fn pairs(
+    heap: &Heap,
+    option: &str,
+    what: &str,
+    value: Value,
+) -> Result<Vec<(String, String)>, Error> {
+    heap.entries(value)
+        .map(|entries| {
+            entries
+                .into_iter()
+                .map(|(key, item)| (name_of(heap, key), name_of(heap, item)))
+                .collect()
+        })
+        .ok_or_else(|| {
+            Error::new(format!(
+                "{NATIVE} expects a map of {what} for :{option}, got {}",
+                print::brief(heap, value)
+            ))
+        })
+}
 
 fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
     let mut found = Options::default();
     for (option, value) in given(&DEFINE, slots) {
         match option {
             "languages" => {
-                found.languages = heap
-                    .entries(value)
-                    .map(|entries| {
-                        entries
-                            .into_iter()
-                            .map(|(mode, id)| (name_of(heap, mode), name_of(heap, id)))
-                            .collect()
-                    })
-                    .ok_or_else(|| {
-                        Error::new(format!(
-                            "{NATIVE} expects a map of mode names to language ids for :languages, got {}",
-                            print::brief(heap, value)
-                        ))
-                    })?;
+                found.languages = pairs(heap, option, "mode names to language ids", value)?;
             }
             "program" => found.program = Some(print::display(heap, value)),
             "args" => found.args = texts(heap, "args", value)?,
             "programs" => found.programs = programs(heap, value)?,
             "install" => found.install = print::display(heap, value),
+            "packages" => {
+                found.packages = pairs(
+                    heap,
+                    option,
+                    "Linux families such as fedora or debian to package names",
+                    value,
+                )?;
+            }
             _ => found.runs = value.truthy(),
         }
     }
@@ -103,6 +121,7 @@ fn define(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
         programs: choices,
         install: given.install,
         runs: given.runs,
+        packages: given.packages,
     };
     editor.add_language_servers(&[spec]);
     Ok(Value::Nil)
@@ -195,6 +214,22 @@ mod tests {
                 r#"(define-language-server "x" :colour 1)"#
             )
             .contains("define-language-server has no keyword parameter :colour")
+        );
+        assert_eq!(
+            eval(
+                &mut editor,
+                &mut ox,
+                r#"(define-language-server "packaged" :languages {"R" "r"} :program "packaged" :packages {fedora: "packaged-tools" debian: "packaged"})"#
+            ),
+            "nil"
+        );
+        assert!(
+            eval(
+                &mut editor,
+                &mut ox,
+                r#"(define-language-server "x" :languages {"R" "r"} :program "x" :packages ["fedora"])"#
+            )
+            .contains("expects a map of Linux families such as fedora or debian to package names for :packages")
         );
     }
 

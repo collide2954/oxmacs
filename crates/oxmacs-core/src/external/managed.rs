@@ -115,16 +115,27 @@ struct Published {
     digest: Option<String>,
 }
 
+pub fn system_of(root: &Path) -> &'static str {
+    if oxmacs_files::wsl::place(root).is_some() {
+        "linux"
+    } else {
+        env::consts::OS
+    }
+}
+
 impl ToolSpec {
     pub fn binary(&self) -> String {
-        match self.form {
-            Form::Program => format!("{}{}", self.name, env::consts::EXE_SUFFIX),
-            Form::Library => format!(
-                "{}{}{}",
-                env::consts::DLL_PREFIX,
-                self.name,
-                env::consts::DLL_SUFFIX
-            ),
+        self.binary_for(env::consts::OS)
+    }
+
+    pub fn binary_for(&self, os: &str) -> String {
+        let name = &self.name;
+        match (self.form, os) {
+            (Form::Program, "windows") => format!("{name}.exe"),
+            (Form::Program, _) => name.clone(),
+            (Form::Library, "windows") => format!("{name}.dll"),
+            (Form::Library, "macos") => format!("lib{name}.dylib"),
+            (Form::Library, _) => format!("lib{name}.so"),
         }
     }
 
@@ -196,12 +207,13 @@ impl ToolSpec {
     }
 
     pub fn installed(&self, root: &Path) -> Option<(String, PathBuf)> {
+        let name = self.binary_for(system_of(root));
         fs::read_dir(root.join(&self.name))
             .ok()?
             .flatten()
             .filter_map(|entry| {
                 let version = entry.file_name().to_str()?.to_owned();
-                let binary = entry.path().join(self.binary());
+                let binary = entry.path().join(&name);
                 (plain(&version) && binary.is_file()).then_some((version, binary))
             })
             .max_by(|(a, _), (b, _)| numbers(a).cmp(&numbers(b)))
@@ -252,14 +264,15 @@ pub fn install(
             "{archive_name} does not match its published checksum"
         ));
     }
-    let binary = extract(archive_name, archive, &tool.binary())?;
+    let name = tool.binary_for(system_of(root));
+    let binary = extract(archive_name, archive, &name)?;
     let folder = root.join(&tool.name);
     let target = folder.join(version);
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|error| error.to_string())?;
     }
     fs::create_dir_all(&target).map_err(|error| error.to_string())?;
-    let installed = target.join(tool.binary());
+    let installed = target.join(name);
     oxmacs_files::write(&installed, &binary, oxmacs_files::NewFile::Shared)
         .map_err(|error| error.to_string())?;
     #[cfg(unix)]
@@ -608,6 +621,18 @@ mod tests {
             )
         );
         assert_eq!(air().binary(), format!("air{}", env::consts::EXE_SUFFIX));
+    }
+
+    #[test]
+    fn roots_inside_a_wsl_distribution_hold_linux_builds() {
+        let share = oxmacs_files::wsl::share("Fedora", "/home/ana/.local/share/oxmacs/tools");
+
+        assert_eq!(system_of(&share), "linux");
+        assert_eq!(system_of(Path::new("tools")), env::consts::OS);
+        assert_eq!(air().binary_for("linux"), "air");
+        assert_eq!(air().binary_for("windows"), "air.exe");
+        assert_eq!(pdfium().binary_for("linux"), "libpdfium.so");
+        assert_eq!(pdfium().binary_for("macos"), "libpdfium.dylib");
     }
 
     #[test]

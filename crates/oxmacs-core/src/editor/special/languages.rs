@@ -196,6 +196,7 @@ mod tests {
             programs: vec![("rust-analyzer".to_owned(), Vec::new())],
             install: String::new(),
             runs: false,
+            packages: Vec::new(),
         }]);
 
         listed(&mut editor);

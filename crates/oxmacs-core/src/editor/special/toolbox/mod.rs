@@ -1,6 +1,8 @@
 use std::env;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use oxmacs_files::wsl;
 
 use crate::command::{Scope, ScopeId};
 use crate::display::LineStyle;
@@ -13,6 +15,10 @@ use crate::special_buffer::SpecialBuffer;
 use crate::text::Buffer;
 use crate::theme::Highlight;
 
+mod distros;
+
+use distros::{Distro, Row};
+
 const NAME: &str = "*Tools*";
 const HELP: &str = "i installs, u updates, d removes, TAB details, g checks again, q quits";
 const NAME_WIDTH: usize = 8;
@@ -22,6 +28,7 @@ const MEGABYTE: u64 = 1024 * 1024;
 
 type ToolRows = Vec<(Range<usize>, Managed)>;
 type ServerRows = Vec<(usize, ServerSpec)>;
+type DistroRows = Vec<(usize, String, Row)>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Latest {
@@ -36,7 +43,8 @@ pub(in crate::editor) struct Toolbox {
     programs: Vec<(String, String)>,
     latest: Vec<(Managed, Latest)>,
     checks: Vec<(FetchId, Managed)>,
-    installing: Vec<(Managed, String)>,
+    installing: Vec<(Managed, String, PathBuf)>,
+    distros: Vec<Distro>,
 }
 
 impl Toolbox {
@@ -55,8 +63,15 @@ impl Toolbox {
     fn installing(&self, tool: &Managed) -> Option<&str> {
         self.installing
             .iter()
-            .find(|(known, _)| known == tool)
-            .map(|(_, version)| version.as_str())
+            .find(|(known, ..)| known == tool)
+            .map(|(_, version, _)| version.as_str())
+    }
+
+    fn installing_into(&self, tool: &Managed, root: &Path) -> Option<&str> {
+        self.installing
+            .iter()
+            .find(|(known, _, into)| known == tool && into == root)
+            .map(|(_, version, _)| version.as_str())
     }
 }
 
@@ -64,6 +79,7 @@ impl Toolbox {
 pub(in crate::editor) struct ToolList {
     rows: Vec<(Range<usize>, Managed)>,
     servers: Vec<(usize, ServerSpec)>,
+    distro_rows: DistroRows,
     styles: Vec<LineStyle>,
     open: Vec<Managed>,
 }
@@ -174,6 +190,7 @@ impl Editor {
             });
         }
         self.check_tool_releases();
+        self.check_distros();
         self.show_beside(Self::tools_index);
         if created
             && let Some(list) = self.buffers.special::<ToolList>(0)
@@ -298,6 +315,9 @@ impl Editor {
     }
 
     pub(in crate::editor) fn tool_install(&mut self) {
+        if self.distro_install() {
+            return;
+        }
         if let Some(spec) = self.server_at_point() {
             self.install_server(spec);
             return;
@@ -313,25 +333,44 @@ impl Editor {
     }
 
     pub(in crate::editor) fn tool_update(&mut self) {
+        if self.distro_update() {
+            return;
+        }
         let Some(tool) = self.tool_at_point() else {
             return;
         };
-        let Some((version, _)) = self.installed_tool(&tool) else {
+        let Some(root) = self.tools_root.clone() else {
+            self.show_message("No data folder to install tools into");
+            return;
+        };
+        self.update_into(&tool, root, env::consts::OS, env::consts::ARCH);
+    }
+
+    fn update_into(&mut self, tool: &Managed, root: PathBuf, os: &str, arch: &str) {
+        let Some((version, _)) = tool.installed(&root) else {
             self.show_message(format!("{} is not installed; i installs it", tool.name));
             return;
         };
-        match self.toolbox.latest(&tool) {
+        match self.toolbox.latest(tool) {
             Some(Latest::Known(release)) if managed::newer(&release.version, &version) => {
-                self.start_install(&tool);
+                self.start_install_into(tool, root, os, arch);
             }
             Some(Latest::Known(_)) => {
                 self.show_message(format!("{} {version} is up to date", tool.name));
             }
-            _ => self.start_install(&tool),
+            _ => self.start_install_into(tool, root, os, arch),
         }
     }
 
     fn start_install(&mut self, tool: &Managed) {
+        let Some(root) = self.tools_root.clone() else {
+            self.show_message("No data folder to install tools into");
+            return;
+        };
+        self.start_install_into(tool, root, env::consts::OS, env::consts::ARCH);
+    }
+
+    fn start_install_into(&mut self, tool: &Managed, root: PathBuf, os: &str, arch: &str) {
         if self.toolbox.installing(tool).is_some() {
             self.show_message(format!("Already installing {}", tool.name));
             return;
@@ -350,11 +389,7 @@ impl Editor {
                 return;
             }
         };
-        let Some(root) = self.tools_root.clone() else {
-            self.show_message("No data folder to install tools into");
-            return;
-        };
-        let assets = tool.archive_here().and_then(|name| {
+        let assets = tool.archive(os, arch).and_then(|name| {
             let archive = release.asset(&name)?.clone();
             let checksum = match tool.checksum {
                 Checksum::Sidecar => {
@@ -365,15 +400,20 @@ impl Editor {
             Some((archive, checksum))
         });
         let Some((archive, checksum)) = assets else {
+            let system = if (os, arch) == (env::consts::OS, env::consts::ARCH) {
+                "this system".to_owned()
+            } else {
+                format!("{os} on {arch}")
+            };
             self.show_message(format!(
-                "{} {} has no build for this system",
+                "{} {} has no build for {system}",
                 tool.name, release.version
             ));
             return;
         };
         self.toolbox
             .installing
-            .push((tool.clone(), release.version.clone()));
+            .push((tool.clone(), release.version.clone(), root.clone()));
         self.effects.push(Effect::InstallTool(Box::new(Install {
             tool: tool.clone(),
             version: release.version.clone(),
@@ -390,18 +430,36 @@ impl Editor {
             .toolbox
             .installing
             .iter()
-            .position(|(known, _)| known == tool);
-        let version = position
-            .map(|position| self.toolbox.installing.remove(position).1)
+            .position(|(known, ..)| known == tool);
+        let (version, root) = position
+            .map(|position| {
+                let (_, version, root) = self.toolbox.installing.remove(position);
+                (version, Some(root))
+            })
             .unwrap_or_default();
-        match result {
-            Ok(_) => self.show_message(format!("Installed {} {version}", tool.name)),
-            Err(error) => self.show_message(format!("Could not install {}: {error}", tool.name)),
+        let inside = root.as_deref().and_then(wsl::place);
+        match (result, inside) {
+            (Ok(installed), Some(place)) => {
+                if let Some(binary) = wsl::place(&installed) {
+                    self.make_runnable_inside(&place.distro, &binary.path);
+                }
+                self.show_message(format!(
+                    "Installed {} {version} in {}",
+                    tool.name, place.distro
+                ));
+            }
+            (Ok(_), None) => self.show_message(format!("Installed {} {version}", tool.name)),
+            (Err(error), _) => {
+                self.show_message(format!("Could not install {}: {error}", tool.name));
+            }
         }
         self.render_tools();
     }
 
     pub(in crate::editor) fn tool_remove(&mut self) {
+        if self.distro_remove() {
+            return;
+        }
         let Some(tool) = self.tool_at_point() else {
             return;
         };
@@ -424,7 +482,11 @@ impl Editor {
     }
 
     fn tool_state(&self, tool: &Managed) -> (&'static str, Highlight, String) {
-        if let Some(version) = self.toolbox.installing(tool) {
+        if let Some(version) = self
+            .tools_root
+            .as_deref()
+            .and_then(|root| self.toolbox.installing_into(tool, root))
+        {
             return ("!", Highlight::Warning, format!("installing {version}…"));
         }
         if let Some((have, _)) = self.installed_tool(tool) {
@@ -488,6 +550,10 @@ impl Editor {
     }
 
     pub(in crate::editor) fn tool_details(&mut self) {
+        if self.distro_row_at_point().is_some() {
+            self.show_message("TAB shows details of the tools on this system");
+            return;
+        }
         let Some(tool) = self.tool_at_point() else {
             return;
         };
@@ -500,7 +566,19 @@ impl Editor {
         }
         self.render_tools();
     }
-    fn tools_page(&self, open: &[Managed]) -> (Page, ToolRows, ServerRows) {
+    fn shown_server_specs(&self) -> Vec<ServerSpec> {
+        let languages = self.languages();
+        self.server_specs()
+            .into_iter()
+            .filter(|spec| {
+                languages
+                    .iter()
+                    .any(|language| spec.language_id(language.name()).is_some())
+            })
+            .collect()
+    }
+
+    fn tools_page(&self, open: &[Managed]) -> (Page, ToolRows, ServerRows, DistroRows) {
         let tools = &self.toolbox.tools;
         let cells: Vec<_> = tools
             .iter()
@@ -510,20 +588,13 @@ impl Editor {
                 (tool.clone(), self.tool_state(tool), latest)
             })
             .collect();
-        let languages = self.languages();
-        let specs: Vec<_> = self
-            .server_specs()
-            .into_iter()
-            .filter(|spec| {
-                languages
-                    .iter()
-                    .any(|language| spec.language_id(language.name()).is_some())
-            })
-            .collect();
+        let specs = self.shown_server_specs();
+        let watcher = (!self.toolbox.distros.is_empty()).then_some("inotifywait".len() + 2);
         let name_width = tools
             .iter()
             .map(|tool| tool.name.chars().count() + 2)
             .chain(specs.iter().map(|spec| spec.name.chars().count() + 2))
+            .chain(watcher)
             .max()
             .unwrap_or(0)
             .max(NAME_WIDTH);
@@ -570,17 +641,18 @@ impl Editor {
         if !specs.is_empty() {
             page.heading("Language servers");
         }
-        for spec in specs {
-            let (mark, highlight, state) = self.server_state(&spec);
+        for spec in &specs {
+            let (mark, highlight, state) = self.server_state(spec);
             let line = page.line_count();
             page.line(&[
                 (&format!("  {:<name_width$}", spec.name), None),
                 (mark, Some(highlight)),
                 (&format!(" {state}"), None),
             ]);
-            servers.push((line, spec));
+            servers.push((line, spec.clone()));
         }
-        (page, rows, servers)
+        let distro_rows = self.distro_sections(&mut page, &specs, name_width);
+        (page, rows, servers, distro_rows)
     }
     pub(in crate::editor) fn render_tools(&mut self) {
         let Some(index) = self.tools_index() else {
@@ -591,7 +663,7 @@ impl Editor {
             .special::<ToolList>(index)
             .map(|list| list.open.clone())
             .unwrap_or_default();
-        let (page, rows, servers) = self.tools_page(&open);
+        let (page, rows, servers, distro_rows) = self.tools_page(&open);
 
         if let Some((buffer, list)) = self.buffers.entry_special_mut::<ToolList>(index) {
             let point = buffer.point();
@@ -614,6 +686,7 @@ impl Editor {
             }
             list.rows = rows;
             list.servers = servers;
+            list.distro_rows = distro_rows;
             list.styles = page.styles;
         }
     }

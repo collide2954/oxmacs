@@ -46,9 +46,9 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
 | `bellow` | 0.1.0 | opt-in | Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls |
-| `c` | 0.1.0 | opt-in | C with highlighting, indentation and the clangd language server |
+| `c` | 0.1.1 | opt-in | C with highlighting, indentation and the clangd language server |
 | `calendar` | 0.2.9 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
-| `cpp` | 0.1.0 | opt-in | C++ with highlighting, indentation and the clangd language server |
+| `cpp` | 0.1.1 | opt-in | C++ with highlighting, indentation and the clangd language server |
 | `customize` | 0.1.6 | on | Change the editor's and plugins' settings in a form |
 | `dired` | 0.3.4 | on | List directories and manage their files |
 | `epub` | 0.2.6 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
@@ -60,7 +60,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.0 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.94 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.95 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.10 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.5 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |

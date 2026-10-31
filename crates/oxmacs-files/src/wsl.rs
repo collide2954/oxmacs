@@ -29,6 +29,22 @@ pub fn share(distro: &str, path: &str) -> PathBuf {
     PathBuf::from(format!(r"\\wsl.localhost\{distro}\{inside}"))
 }
 
+pub fn installed() -> Option<PathBuf> {
+    let wsl = PathBuf::from(std::env::var_os("ProgramFiles")?)
+        .join("WSL")
+        .join("wsl.exe");
+    (cfg!(windows) && wsl.is_file()).then_some(wsl)
+}
+
+pub fn names(listing: &str) -> Vec<String> {
+    listing
+        .lines()
+        .map(|line| line.trim_matches(|c: char| c.is_whitespace() || c == '\0'))
+        .filter(|name| !name.is_empty() && !name.contains(char::is_whitespace))
+        .map(str::to_owned)
+        .collect()
+}
+
 pub fn named(text: &str) -> Option<Place> {
     let (distro, path) = text.strip_prefix("wsl:")?.split_once(':')?;
     (!distro.is_empty() && path.starts_with('/')).then(|| Place {
@@ -98,6 +114,15 @@ mod tests {
             share("Fedora", "/home/ana/x").join("/home/ana/x/src/main.rs"),
             share("Fedora", "/home/ana/x/src/main.rs")
         );
+    }
+
+    #[test]
+    fn quiet_listings_name_one_distribution_a_line() {
+        assert_eq!(
+            names("FedoraLinux-44\r\ndocker-desktop\r\n\r\n"),
+            ["FedoraLinux-44", "docker-desktop"]
+        );
+        assert!(names("Windows Subsystem for Linux has no installed distributions.\n").is_empty());
     }
 
     #[test]

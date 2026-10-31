@@ -12,6 +12,7 @@ fn ox_lsp() -> ServerSpec {
         programs: vec![(env!("CARGO_BIN_EXE_ox").to_owned(), vec!["lsp".to_owned()])],
         install: "cargo install --path crates/ox".to_owned(),
         runs: true,
+        packages: Vec::new(),
     }
 }
 
