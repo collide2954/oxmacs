@@ -94,12 +94,13 @@ Plugin       Version  Default  What it does
 bellow       0.1.0    opt-in   Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls
 c            0.1.1    opt-in   C with highlighting, indentation and the clangd language server
 calendar     0.2.9    opt-in   Calendars in .ics files, with CalDAV sync, reminders and invitations
+claude       0.1.0    opt-in   Claude beside your code: a chat that can read and drive the editor, questions about a region, and edits reviewed as diffs
 cpp          0.1.1    opt-in   C++ with highlighting, indentation and the clangd language server
 customize    0.1.6    on       Change the editor's and plugins' settings in a form
 dired        0.3.4    on       List directories and manage their files
 epub         0.2.6    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
 explorer     0.2.4    on       A file tree beside the windows that follows the file you're in
-git          0.4.5    opt-in   Git status and staging in the style of Magit
+git          0.5.0    opt-in   Git status and staging in the style of Magit
 go           0.1.0    opt-in   Go with highlighting, indentation with tabs and the gopls language server
 irc          0.10.7   opt-in   An IRCv3 client in the style of ERC
 javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typescript-language-server

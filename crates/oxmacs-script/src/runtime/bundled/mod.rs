@@ -37,7 +37,34 @@ pub const BUNDLED: &[Bundle] = &[
     BELLOW,
     WSL,
     PIXI,
+    CLAUDE,
 ];
+
+const CLAUDE: Bundle = Bundle {
+    name: "claude",
+    files: &[
+        (
+            "plugin.ox",
+            include_str!("../../../plugins/claude/plugin.ox"),
+        ),
+        (
+            "claude.ox",
+            include_str!("../../../plugins/claude/claude.ox"),
+        ),
+        ("api.ox", include_str!("../../../plugins/claude/api.ox")),
+        (
+            "render.ox",
+            include_str!("../../../plugins/claude/render.ox"),
+        ),
+        ("tools.ox", include_str!("../../../plugins/claude/tools.ox")),
+        (
+            "review.ox",
+            include_str!("../../../plugins/claude/review.ox"),
+        ),
+        ("chats.ox", include_str!("../../../plugins/claude/chats.ox")),
+        ("where.ox", include_str!("../../../plugins/claude/where.ox")),
+    ],
+};
 
 const PIXI: Bundle = Bundle {
     name: "pixi",
@@ -832,3 +859,6 @@ mod pixi;
 
 #[cfg(test)]
 mod wsl;
+
+#[cfg(test)]
+mod claude;
