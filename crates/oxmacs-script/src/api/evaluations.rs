@@ -48,7 +48,7 @@ fn asked(editor: &mut Editor) -> &mut Asked {
 fn evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
     let code = heap
         .text(arguments[0])
-        .ok_or_else(|| expected(heap, "evaluate", "a string of Ox code", arguments[0]))?
+        .ok_or_else(|| expected(heap, "ox-evaluate", "a string of Ox code", arguments[0]))?
         .to_owned();
     let promise = heap.new_promise()?;
     let hold = heap.hold(promise);
@@ -157,7 +157,7 @@ fn on_evaluate(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) {
 
 pub fn install(isolate: &mut Isolate) {
     isolate
-        .native("ox", "evaluate")
+        .native("ox", "ox-evaluate")
         .suspends()
         .arity(1, Some(1))
         .host::<Editor>(evaluate);
@@ -236,12 +236,12 @@ mod tests {
     }
 
     #[test]
-    fn evaluate_runs_code_in_the_user_module_and_waits_for_its_value() {
+    fn ox_evaluate_runs_code_in_the_user_module_and_waits_for_its_value() {
         let (mut editor, mut ox) = written("");
         eval(
             &mut editor,
             &mut ox,
-            r#"(def got (atom nil)) (spawn (reset! got [(evaluate "(def twice (fn [x] (* 2 x))) (twice 21)") (try (evaluate "(car)") (catch error e e.message))]))"#,
+            r#"(def got (atom nil)) (spawn (reset! got [(ox-evaluate "(def twice (fn [x] (* 2 x))) (twice 21)") (try (ox-evaluate "(car)") (catch error e e.message))]))"#,
         );
         settle(&mut editor, &mut ox);
 
