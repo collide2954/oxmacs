@@ -117,6 +117,40 @@ fn render(lines: &[Line]) -> Rendered {
             .collect(),
     }
 }
+fn kept_above(editor: &Editor, id: BufferId, from: usize, rendered: Rendered) -> Rendered {
+    let Some((buffer, view)) = editor.special_buffer::<LinesBuffer>(id) else {
+        return rendered;
+    };
+    let shown = view.styles.len() - usize::from(view.chat.is_some());
+    let from = from.min(shown);
+    if from == 0 {
+        return rendered;
+    }
+    let mut text = buffer.text_in(0..buffer.line_start(from));
+    if rendered.styles.is_empty() {
+        text.pop();
+    }
+    text.push_str(&rendered.text);
+    Rendered {
+        text,
+        styles: view.styles[..from]
+            .iter()
+            .cloned()
+            .chain(rendered.styles)
+            .collect(),
+        pills: view.pills[..from]
+            .iter()
+            .cloned()
+            .chain(rendered.pills)
+            .collect(),
+        links: view.links[..from]
+            .iter()
+            .cloned()
+            .chain(rendered.links)
+            .collect(),
+    }
+}
+
 fn special_buffer(editor: &Editor, name: &str) -> Option<BufferId> {
     editor
         .special_buffers::<LinesBuffer>()
@@ -678,8 +712,21 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
         given => Some(number(heap, given)?),
     };
     let unsaved = (arguments[3] != Value::Nil).then(|| arguments[3].truthy());
-    fill(editor, id, render(&shown), line);
-    lines::keep(heap, editor, id, &shown);
+    let from = match arguments[4] {
+        Value::Nil => None,
+        given => Some(number(heap, given)?),
+    };
+    match from {
+        Some(from) => {
+            let rendered = kept_above(editor, id, from, render(&shown));
+            fill(editor, id, rendered, line);
+            lines::keep_from(heap, editor, id, from, &shown);
+        }
+        None => {
+            fill(editor, id, render(&shown), line);
+            lines::keep(heap, editor, id, &shown);
+        }
+    }
     if let Some(unsaved) = unsaved
         && let Some((_, view)) = editor.special_buffer_mut::<LinesBuffer>(id)
     {
@@ -740,7 +787,7 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "set-lines")
         .arity(2, Some(2))
-        .keywords(&["line", "unsaved"])
+        .keywords(&["line", "unsaved", "from"])
         .host::<Editor>(set_lines);
     isolate
         .native("ox", "current-line")

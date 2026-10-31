@@ -304,6 +304,22 @@ pub(crate) fn keep_more(
     kept.splice(before..before, rows);
 }
 
+pub(crate) fn keep_from(
+    heap: &mut Heap,
+    editor: &mut Editor,
+    id: BufferId,
+    from: usize,
+    lines: &[Line],
+) {
+    let dropped = editor
+        .plugin_state_mut::<Kept>()
+        .and_then(|state| state.0.get_mut(&id))
+        .map(|rows| rows.split_off(from.min(rows.len())))
+        .unwrap_or_default();
+    release_rows(heap, dropped);
+    keep_more(heap, editor, id, from, lines);
+}
+
 pub(crate) fn release(heap: &mut Heap, editor: &mut Editor, id: BufferId) {
     let old = editor
         .plugin_state_mut::<Kept>()

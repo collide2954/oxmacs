@@ -293,6 +293,42 @@ fn diagnostic_counts(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Resul
     heap.map_from(&items)
 }
 
+fn diagnostics(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Value, Error> {
+    use oxmacs_core::external::diagnostics::Severity;
+
+    let path = match arguments.first() {
+        Some(given) => Some(path_of(heap, "diagnostics", *given)?),
+        None => None,
+    };
+    let number = |number: usize| Value::Int(i64::try_from(number).unwrap_or(i64::MAX));
+    let mut shown = Vec::new();
+    for found in editor.diagnostics(path.as_deref()) {
+        let severity = match found.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let file = heap.string(&found.path.display().to_string())?;
+        let message = heap.string(&found.message)?;
+        shown.push(heap.map_from(&[
+            Value::keyword("file"),
+            file,
+            Value::keyword("line"),
+            number(found.start.0),
+            Value::keyword("column"),
+            number(found.start.1),
+            Value::keyword("end-line"),
+            number(found.end.0),
+            Value::keyword("end-column"),
+            number(found.end.1),
+            Value::keyword("severity"),
+            Value::keyword(severity),
+            Value::keyword("message"),
+            message,
+        ])?);
+    }
+    heap.vector_from(&shown).map_err(Error::from)
+}
+
 fn install_handlers(isolate: &mut Isolate) {
     for (name, hook, kind) in EVENTS {
         isolate.native("ox", name).arity(2, Some(2)).host::<Editor>(
@@ -342,6 +378,10 @@ pub fn install(isolate: &mut Isolate) {
         .native("ox", "diagnostic-counts")
         .arity(0, Some(0))
         .host::<Editor>(diagnostic_counts);
+    isolate
+        .native("ox", "diagnostics")
+        .arity(0, Some(1))
+        .host::<Editor>(diagnostics);
     isolate
         .native("ox", "open-file")
         .arity(1, Some(1))
@@ -564,6 +604,50 @@ mod tests {
             )
             .unwrap();
         assert_eq!(counts, "{errors: 1 warnings: 1}");
+    }
+
+    #[test]
+    fn diagnostics_list_each_problem_and_where_it_is() {
+        use oxmacs_core::external::diagnostics::{Diagnostic, Severity};
+
+        let (home, mut editor, mut ox) = with_init("");
+        let main = home.path().join("main.rs");
+        let other = home.path().join("other.rs");
+        let found = |path: &Path, start, end, severity, message: &str| Diagnostic {
+            path: path.to_path_buf(),
+            start,
+            end,
+            severity,
+            message: message.to_owned(),
+        };
+        editor.replace_diagnostics(
+            &main,
+            vec![found(&main, (3, 5), (3, 9), Severity::Error, "unused x")],
+        );
+        editor.replace_diagnostics(
+            &other,
+            vec![found(&other, (1, 1), (2, 1), Severity::Warning, "long")],
+        );
+        settle(&mut editor, &mut ox);
+
+        let shown = ox
+            .eval(
+                &mut editor,
+                &format!("(diagnostics {:?})", main.display().to_string()),
+            )
+            .unwrap();
+        assert_eq!(
+            shown,
+            format!(
+                "[{{file: {:?} line: 3 column: 5 end-line: 3 end-column: 9 severity: :error message: \"unused x\"}}]",
+                main.display().to_string()
+            )
+        );
+        assert_eq!(
+            ox.eval(&mut editor, "(map (fn [d] d.severity) (diagnostics))")
+                .unwrap(),
+            "[:error :warning]"
+        );
     }
 
     #[test]

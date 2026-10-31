@@ -570,6 +570,27 @@ impl Editor {
         self.commands.find(name)
     }
 
+    pub fn available_commands(&self) -> Vec<(String, String, Option<String>)> {
+        let here = self.buffer_scope();
+        let mut found: Vec<_> = self
+            .commands
+            .all()
+            .filter(|command| {
+                let scope = self.commands.scope(*command);
+                scope == Scope::Global.into() || scope == here
+            })
+            .map(|command| {
+                (
+                    self.commands.name(command).to_owned(),
+                    self.commands.summary(command).to_owned(),
+                    self.where_is(command).map(|keys| keys.to_string()),
+                )
+            })
+            .collect();
+        found.sort();
+        found
+    }
+
     pub fn plugin_state<T: Any + Send>(&self) -> Option<&T> {
         self.plugin_states.get()
     }

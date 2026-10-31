@@ -120,6 +120,19 @@ impl Editor {
         self.builds.counts()
     }
 
+    pub fn diagnostics(&self, path: Option<&Path>) -> Vec<Diagnostic> {
+        match path {
+            Some(path) => {
+                let identity = crate::files::identity(path);
+                self.builds
+                    .on_file(&identity)
+                    .map(|(_, found)| found.clone())
+                    .collect()
+            }
+            None => self.builds.diagnostics().to_vec(),
+        }
+    }
+
     pub fn replace_diagnostics(&mut self, path: &Path, found: Vec<Diagnostic>) {
         self.builds.replace(path, found);
         self.diagnostics_changed();

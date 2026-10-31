@@ -150,6 +150,49 @@ fn map_lines_are_items_found_by_their_fields() {
 }
 
 #[test]
+fn set_lines_from_a_line_keeps_the_lines_above() {
+    let (mut editor, mut ox) =
+        opened(r#"(open-buffer "*from*" [{line: "a" name: "a"} [["b" :type]] "c" "d"])"#);
+
+    ox.eval(
+        &mut editor,
+        r#"(set-lines "*from*" [[["x" :keyword]] {line: "y" name: "y"}] :from 2)"#,
+    )
+    .unwrap();
+
+    assert_eq!(editor.buffer().contents(), "a\nb\nx\ny");
+    assert_eq!(editor.line_style(1).spans, [(0..1, Highlight::Type)]);
+    assert_eq!(editor.line_style(2).spans, [(0..1, Highlight::Keyword)]);
+    assert_eq!(
+        ox.eval(
+            &mut editor,
+            "[(get (line-item 0) :name) (get (line-item 3) :name) (line-item 4)]"
+        )
+        .unwrap(),
+        r#"["a" "y" nil]"#
+    );
+}
+
+#[test]
+fn set_lines_from_a_line_leaves_a_chats_input_alone() {
+    let (mut editor, mut ox) =
+        opened(r#"(open-buffer "*talk*" ["you: hi" "bot: he"] :input "> ")"#);
+    press(&mut editor, &mut ox, "n e x t");
+
+    ox.eval(
+        &mut editor,
+        r#"(set-lines "*talk*" ["bot: hello" "there"] :from 1)"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        editor.buffer().contents(),
+        "you: hi\nbot: hello\nthere\n> next"
+    );
+    assert_eq!(ox.eval(&mut editor, "(input-text)").unwrap(), r#""next""#);
+}
+
+#[test]
 fn links_call_their_buffers_on_link_from_keys_and_clicks() {
     let (mut editor, mut ox) = opened(
         r#"(def followed (atom [])) (open-buffer "*links*" ["Read" ["see " ["docs" :link :link "manual"] " and " ["code" :link :link {file: "a.ox"}]]] :keys {"RET" 'follow-link "TAB" 'next-link "S-TAB" 'previous-link} :on-link (fn [target] (swap! followed conj target)))"#,

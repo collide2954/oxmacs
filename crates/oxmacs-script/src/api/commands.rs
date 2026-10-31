@@ -105,7 +105,32 @@ fn run(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Valu
     Ok(Value::Nil)
 }
 
+fn commands(heap: &mut Heap, editor: &mut Editor, _: &[Value]) -> Result<Value, Error> {
+    let mut shown = Vec::new();
+    for (name, summary, keys) in editor.available_commands() {
+        let name = heap.string(&name)?;
+        let summary = heap.string(&summary)?;
+        let keys = match keys {
+            Some(keys) => heap.string(&keys)?,
+            None => Value::Nil,
+        };
+        shown.push(heap.map_from(&[
+            Value::keyword("name"),
+            name,
+            Value::keyword("summary"),
+            summary,
+            Value::keyword("keys"),
+            keys,
+        ])?);
+    }
+    heap.vector_from(&shown).map_err(Error::from)
+}
+
 pub fn install(isolate: &mut Isolate) {
+    isolate
+        .native("ox", "commands")
+        .arity(0, Some(0))
+        .host::<Editor>(commands);
     isolate
         .native("ox", "define-command")
         .arity(3, Some(3))
@@ -180,6 +205,22 @@ mod tests {
 
         assert_eq!(editor.buffer().contents(), "xyxy");
         assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), r#"["x" "xyx"]"#);
+    }
+
+    #[test]
+    fn commands_lists_what_m_x_offers_with_summaries_and_keys() {
+        let (_home, mut editor, mut ox) = started(
+            r#"(defcommand note "Note the text" nil) (bind-key "C-c m" 'note) (defcommand quiet "Say nothing" nil)"#,
+        );
+
+        assert_eq!(
+            ox.eval(
+                &mut editor,
+                r#"(filter (fn [c] (contains? #{"note" "quiet" "save-buffer"} c.name)) (commands))"#
+            )
+            .unwrap(),
+            r#"[{name: "note" summary: "Note the text" keys: "C-c m"} {name: "quiet" summary: "Say nothing" keys: nil} {name: "save-buffer" summary: "Save the buffer to its file" keys: "C-x C-s"}]"#
+        );
     }
 
     #[test]
