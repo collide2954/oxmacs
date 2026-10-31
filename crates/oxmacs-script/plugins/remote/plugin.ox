@@ -1,5 +1,5 @@
 (plugin remote
-  :version "0.3.8"
+  :version "0.4.0"
   :requires {vault: "^0.3" customize: "^0.1"}
   :summary "Browse and edit files on other machines over ssh, sftp and ftp"
   :commands [remote remote-add-host remote-disconnect]

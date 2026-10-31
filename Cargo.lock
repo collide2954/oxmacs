@@ -4084,6 +4084,7 @@ dependencies = [
  "oxmacs-api",
  "oxmacs-core",
  "oxmacs-pdf",
+ "oxmacs-process",
  "regex",
  "rodio",
  "semver",

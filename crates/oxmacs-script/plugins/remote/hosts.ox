@@ -1,9 +1,9 @@
 (module
   (import (ox file) (ox path) (ox string))
-  (export all-hosts find-host ssh-hosts parse-ssh-config protocol-of))
+  (export all-hosts find-host ssh-hosts parse-ssh-config protocol-of add-hosts!))
 
 (def (protocol-of host)
-  "How to reach host: :ssh, :sftp or :ftp."
+  "How to reach host: :ssh, :sftp or :ftp, or another protocol a plugin's hosts name, such as :wsl."
   (let [given (or host.protocol :ssh)]
     (keyword (string/lower (name given)))))
 
@@ -34,11 +34,18 @@
       (parse-ssh-config (await (file/read file)))
       [])))
 
+(defonce sources (atom []))
+
+(def (add-hosts! source)
+  "Lists the hosts source, a function of no arguments, gives in every remote command, after the saved ones and those of ~/.ssh/config. A host with a :folder opens that folder in place of browsing."
+  (swap! sources conj source))
+
 (def (all-hosts)
-  "The saved hosts, then those of ~/.ssh/config that aren't saved too."
+  "The saved hosts, then those of ~/.ssh/config and those other plugins add, leaving out names already listed."
   (let [saved (vec (map (fn [host] (assoc host :protocol (protocol-of host))) (setting :hosts)))
-        known (set (map :name saved))]
-    (vec (concat saved (remove (fn [host] (contains? known host.name)) (ssh-hosts))))))
+        known (set (map :name saved))
+        more (concat (ssh-hosts) (mapcat (fn [source] (source)) @sources))]
+    (vec (concat saved (remove (fn [host] (contains? known host.name)) more)))))
 
 (def (find-host name)
   (or (find (fn [host] (= host.name name)) (all-hosts))

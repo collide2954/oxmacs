@@ -35,7 +35,20 @@ pub const BUNDLED: &[Bundle] = &[
     PDF,
     RODEO,
     BELLOW,
+    WSL,
 ];
+
+const WSL: Bundle = Bundle {
+    name: "wsl",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/wsl/plugin.ox")),
+        ("wsl.ox", include_str!("../../../plugins/wsl/wsl.ox")),
+        (
+            "distros.ox",
+            include_str!("../../../plugins/wsl/distros.ox"),
+        ),
+    ],
+};
 
 const BELLOW: Bundle = Bundle {
     name: "bellow",
@@ -676,3 +689,6 @@ mod pdf;
 
 #[cfg(test)]
 mod rodeo;
+
+#[cfg(test)]
+mod wsl;

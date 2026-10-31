@@ -33,6 +33,7 @@ zip = { workspace = true, optional = true }
 testing = ["dep:tempfile", "dep:zip", "oxmacs-core/testing"]
 
 [dev-dependencies]
+oxmacs-process.workspace = true
 image.workspace = true
 keepass = { workspace = true, features = ["save_kdbx4"] }
 oxmacs-core = { workspace = true, features = ["testing"] }

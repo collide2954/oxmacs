@@ -68,7 +68,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `profiler` | 0.1.4 | on | Find where the Ox code in oxmacs spends its time |
 | `python` | 0.1.0 | opt-in | Python with highlighting, indentation and the basedpyright, pyright or pylsp language server |
 | `r` | 0.21.0 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
-| `remote` | 0.3.8 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `remote` | 0.4.0 | on | Browse and edit files on other machines over ssh, sftp and ftp |
 | `rodeo` | 0.1.2 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
 | `rust` | 0.1.0 | opt-in | Rust with highlighting, cargo builds and lints, and the rust-analyzer language server |
 | `screensaver` | 0.2.4 | opt-in | A starfield or matrix rain after a while without input |
@@ -77,6 +77,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `typescript` | 0.1.0 | opt-in | TypeScript and TSX with highlighting, indentation and typescript-language-server |
 | `vault` | 0.3.1 | opt-in | An encrypted password vault with one-time codes and imports |
 | `weather` | 0.3.4 | opt-in | Forecasts from Open-Meteo |
+| `wsl` | 0.1.0 | opt-in | WSL distributions as places to work: their files open as your own, their tools run inside them, and *WSL* starts, stops and opens them |
 | `zap` | 0.2.2 | opt-in | Flash the code you evaluate or send to a console, in the error color when it fails |
 | `zen` | 0.1.2 | opt-in | Distraction-free writing in one centered column |
 

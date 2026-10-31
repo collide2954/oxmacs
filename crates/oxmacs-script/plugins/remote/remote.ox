@@ -70,7 +70,9 @@
 
 (defcommand remote-browse "Browse the host on this line"
   (let [host (or (host-here) (raise (error "No host on this line")))]
-    (browse! host (ops/home host))))
+    (if host.folder
+      (open-file host.folder)
+      (browse! host (ops/home host)))))
 
 (def (browser)
   (or (buffer-value :remote) (raise (error "This isn't a remote folder"))))
