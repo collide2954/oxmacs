@@ -67,7 +67,7 @@ Saving a loaded plugin's file evaluates it again in place, so a change takes eff
 - `:error-patterns` makes locations in build output clickable, as `[#"--> (?P<file>.+):(?P<line>\d+):(?P<column>\d+)"]`: each regex names the groups `file` and `line`, and may name `column`.
 - `:tools` lists programs or libraries `M-x list-tools` installs from GitHub releases while the plugin is on, as `[{name: "air" repository: "posit-dev/air" summary: "R formatter" group: "R" tag-prefix: "v" checksum: :sidecar setting: :air-program archives: {linux: {x86_64: "air-x86_64-unknown-linux-gnu.tar.gz"}}}]`. `archives` maps each system (`windows`, `macos`, `linux`) and architecture (`x86_64`, `aarch64`) to its file; `checksum` is `:sidecar`, a `.sha256` file beside each archive, or `:digest`, the digest GitHub publishes; `form: :library` is for a shared library, which is never looked for on PATH; and `setting` names the plugin's setting that points at a copy of your own instead.
 
-`(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, `(oxmacs-home)` gives the folder that holds `init.ox`, and `(plugin-folder 'hello)` gives the plugin a folder of its own for its files, as the tutorial keeps your place in the manual's.
+`(use-plugin hello :disabled true)` turns a plugin off, and a plugin in your folder with the name of a bundled one replaces it. `(plugin-setting 'weather :units)` reads another plugin's setting, `(oxmacs-home)` gives the folder that holds `init.ox`, and `(plugin-folder 'hello)` gives the plugin a folder of its own for its files, as your copy of the tutorial lives in the manual's.
 
 ## Modules
 
@@ -106,7 +106,7 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.92   on       The oxmacs tutorial and the Ox manual
+manual       0.5.93   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.10   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.5    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying

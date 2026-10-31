@@ -461,11 +461,7 @@ fn demo_home() -> PathBuf {
     );
     fs::create_dir_all(home.join("plugins").join("conway")).unwrap();
     fs::write(home.join(".oxmacs-demo"), "").unwrap();
-    fs::write(
-        home.join(".gitignore"),
-        ".oxmacs-demo\ntutorial.txt\ntutorial.place\n",
-    )
-    .unwrap();
+    fs::write(home.join(".gitignore"), ".oxmacs-demo\ntutorial.txt\n").unwrap();
     fs::write(
         home.join("init.ox"),
         "(settings {theme: :adwaita-dark mode-line-style: :powerline animations: false font-size: 11})\n(use-plugin git)\n(use-plugin markdown)\n(use-plugin calendar)\n(use-plugin screensaver)\n(use-plugin keycast)\n",

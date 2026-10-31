@@ -332,7 +332,7 @@ fn the_plugins_the_guide_builds_work() {
 }
 
 #[test]
-fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
+fn c_h_t_opens_your_own_copy_of_the_tutorial_at_the_top_every_time() {
     let (home, mut editor, mut ox) = started();
 
     press(&mut editor, &mut ox, "C-h t");
@@ -346,17 +346,21 @@ fn c_h_t_opens_your_own_copy_of_the_tutorial_where_you_left_it() {
     assert!(lines(&editor)[0].starts_with("The oxmacs tutorial"));
     assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
 
-    fs::write(
-        home.path()
+    press(&mut editor, &mut ox, "M-> C-x C-s C-h t");
+    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
+
+    typed(&mut editor, &mut ox, "my note ");
+    press(&mut editor, &mut ox, "M-> C-x C-s C-x k RET C-h t");
+    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 0);
+    assert!(lines(&editor)[0].starts_with("my note The oxmacs tutorial"));
+    assert!(
+        !home
+            .path()
             .join("data")
             .join("manual")
-            .join("tutorial.place"),
-        "12",
-    )
-    .unwrap();
-    press(&mut editor, &mut ox, "C-x k RET");
-    press(&mut editor, &mut ox, "C-h t");
-    assert_eq!(editor.buffer().line_of(editor.buffer().point()), 12);
+            .join("tutorial.place")
+            .exists()
+    );
 }
 
 const TUTORIAL: &str = include_str!("../../../plugins/manual/tutorial.ox");
@@ -446,15 +450,8 @@ fn a_copy_of_the_tutorial_from_before_moves_into_the_manual_s_folder() {
 fn deleting_your_copy_of_the_tutorial_starts_it_over() {
     let (home, mut editor, mut ox) = started();
     press(&mut editor, &mut ox, "C-h t");
-    press(&mut editor, &mut ox, "C-x k RET");
-    fs::write(
-        home.path()
-            .join("data")
-            .join("manual")
-            .join("tutorial.place"),
-        "12",
-    )
-    .unwrap();
+    typed(&mut editor, &mut ox, "my note ");
+    press(&mut editor, &mut ox, "C-x C-s C-x k RET");
     fs::remove_file(home.path().join("data").join("manual").join("tutorial.txt")).unwrap();
 
     press(&mut editor, &mut ox, "C-h t");

@@ -1,13 +1,13 @@
 (module
-  (import (ox file) (ox path) (ox string))
+  (import (ox file) (ox path))
   (export text open))
 
 (def text
   """
 The oxmacs tutorial
 
-This is your own copy of the tutorial: edit it as you go. oxmacs keeps
-your place, so C-h t brings you back here. Delete tutorial.txt in your
+This is your own copy of the tutorial: edit it as you go. C-h t opens
+it again at the top with your edits kept. Delete tutorial.txt in your
 oxmacs folder to start over.
 
 Keys are written C-x for Control+x and M-x for Alt+x (Meta).
@@ -139,27 +139,11 @@ You have finished the tutorial.
       (await (file/rename older file)))
     file))
 
-(def (place-file)
-  (moved-in "tutorial.place"))
-
-(def (saved-line)
-  (try
-    (or (string/to-number (string/trim (await (file/read (place-file))))) 0)
-    (catch error _e 0)))
-
-(def (reading?)
-  (string/ends-with? (or (buffer-file) "") "tutorial.txt"))
-
 (def (open)
-  "Opens the reader's own copy of the tutorial where they left it, making it the first time."
-  (let [copy (moved-in "tutorial.txt")
-        fresh (not (await (file/exists? copy)))]
-    (when fresh
+  "Opens the reader's own copy of the tutorial at the top, making it the first time."
+  (let [copy (moved-in "tutorial.txt")]
+    (unless (await (file/exists? copy))
       (await (file/make-dir (folder)))
       (await (file/write copy text)))
     (open-file copy)
-    (goto-line (if fresh 0 (saved-line)) 0)
-    (on-idle :tutorial 2
-             (fn []
-               (when (reading?)
-                 (await (file/write (place-file) (str (current-line)))))))))
+    (goto-line 0 0)))
