@@ -1,11 +1,10 @@
 use std::cmp::Reverse;
 use std::path::PathBuf;
 
-use oxmacs_files::uri;
 use serde_json::Value;
 
 use super::features::STALE;
-use super::{Encoding, ServerId, number};
+use super::{Encoding, ServerId, local_path, number};
 use crate::editor::Editor;
 use crate::text::{Buffer, BufferId};
 
@@ -19,19 +18,20 @@ pub(super) fn position(buffer: &Buffer, encoding: Encoding, at: &Value) -> usize
     (buffer.line_start(line) + column).min(buffer.line_end(line))
 }
 
-pub(super) fn files(edit: &Value) -> Vec<(PathBuf, Vec<Value>)> {
+pub(super) fn files(distro: Option<&str>, edit: &Value) -> Vec<(PathBuf, Vec<Value>)> {
     let mut found = Vec::new();
     if let Some(changes) = edit.get("documentChanges").and_then(Value::as_array) {
         for change in changes {
             let uri = change["textDocument"]["uri"].as_str();
             let edits = change.get("edits").and_then(Value::as_array);
-            if let (Some(path), Some(edits)) = (uri.and_then(uri::to_path), edits) {
+            let path = uri.and_then(|uri| local_path(distro, uri));
+            if let (Some(path), Some(edits)) = (path, edits) {
                 found.push((path, edits.clone()));
             }
         }
     } else if let Some(changes) = edit.get("changes").and_then(Value::as_object) {
         for (uri, edits) in changes {
-            if let (Some(path), Some(edits)) = (uri::to_path(uri), edits.as_array()) {
+            if let (Some(path), Some(edits)) = (local_path(distro, uri), edits.as_array()) {
                 found.push((path, edits.clone()));
             }
         }
@@ -80,16 +80,21 @@ impl Editor {
         if self.lsp.client(id).is_none() {
             return false;
         }
+        let distro = self.lsp.distro(id);
         let versions: Vec<(PathBuf, Option<i64>)> = edit
             .get("documentChanges")
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
             .filter_map(|change| {
-                let path = uri::to_path(change["textDocument"]["uri"].as_str()?)?;
+                let path = local_path(distro, change["textDocument"]["uri"].as_str()?)?;
                 Some((path, change["textDocument"]["version"].as_i64()))
             })
-            .chain(files(edit).into_iter().map(|(path, _)| (path, None)))
+            .chain(
+                files(distro, edit)
+                    .into_iter()
+                    .map(|(path, _)| (path, None)),
+            )
             .collect();
         versions.iter().any(|(path, version)| {
             self.index_visiting(path)
@@ -119,7 +124,7 @@ impl Editor {
         let origin = self.buffers.current().id();
         let mut places = 0;
         let mut changed = 0;
-        for (path, edits) in files(edit) {
+        for (path, edits) in files(self.lsp.distro(id).map(str::to_owned).as_deref(), edit) {
             let index = self.index_visiting(&path).or_else(|| {
                 self.open_file(&path);
                 self.index_visiting(&path)

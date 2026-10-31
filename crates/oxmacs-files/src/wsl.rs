@@ -91,6 +91,15 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn linux_paths_in_tool_output_join_onto_their_share() {
+        assert_eq!(
+            share("Fedora", "/home/ana/x").join("/home/ana/x/src/main.rs"),
+            share("Fedora", "/home/ana/x/src/main.rs")
+        );
+    }
+
     #[test]
     fn wsl_names_reach_any_distro() {
         assert_eq!(named("wsl:Fedora:/etc/hosts"), at("Fedora", "/etc/hosts"));

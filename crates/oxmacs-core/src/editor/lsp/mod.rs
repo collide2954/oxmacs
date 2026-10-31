@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use oxmacs_files::units::Encoding;
-use oxmacs_files::uri;
+use oxmacs_files::{uri, wsl};
 use serde_json::{Value, json};
 
 pub use servers::ServerSpec;
@@ -50,6 +50,7 @@ struct Client {
     id: ServerId,
     spec: ServerSpec,
     root: PathBuf,
+    distro: Option<String>,
     state: State,
     next_request: i64,
     pending: Vec<(i64, Pending)>,
@@ -184,16 +185,34 @@ fn closing(uri: &str) -> String {
     )
 }
 
-fn initialize(root: &Path) -> Value {
+pub(super) fn file_uri(distro: Option<&str>, path: &Path) -> String {
+    match (distro, wsl::place(path)) {
+        (Some(distro), Some(place)) if place.distro.eq_ignore_ascii_case(distro) => {
+            uri::from_path(Path::new(&place.path))
+        }
+        _ => uri::from_path(path),
+    }
+}
+
+pub(super) fn local_path(distro: Option<&str>, uri: &str) -> Option<PathBuf> {
+    let path = uri::to_path(uri)?;
+    let text = path.to_string_lossy();
+    Some(match distro {
+        Some(distro) if text.starts_with('/') => wsl::share(distro, &text),
+        _ => path,
+    })
+}
+
+fn initialize(distro: Option<&str>, root: &Path) -> Value {
     let name = root
         .file_name()
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     json!({
         "processId": std::process::id(),
         "clientInfo": {"name": "oxmacs", "version": env!("CARGO_PKG_VERSION")},
-        "rootUri": uri::from_path(root),
+        "rootUri": file_uri(distro, root),
         "rootPath": root.display().to_string(),
-        "workspaceFolders": [{"uri": uri::from_path(root), "name": name}],
+        "workspaceFolders": [{"uri": file_uri(distro, root), "name": name}],
         "capabilities": {
             "general": {"positionEncodings": ["utf-32", "utf-16"]},
             "window": {"workDoneProgress": true},
@@ -245,6 +264,10 @@ impl Lsp {
             .iter()
             .find(|spec| spec.language_id(language).is_some())
             .cloned()
+    }
+
+    pub(super) fn distro(&self, id: ServerId) -> Option<&str> {
+        self.client(id).and_then(|client| client.distro.as_deref())
     }
 
     fn client(&self, id: ServerId) -> Option<&Client> {
@@ -325,7 +348,7 @@ impl Lsp {
                 None => return,
             },
         };
-        let uri = uri::from_path(file.path);
+        let uri = file_uri(self.distro(id), file.path);
         self.reconcile(file.buffer, id, &uri);
         let Some(client) = self.client(id) else {
             return;
@@ -398,11 +421,21 @@ impl Lsp {
             return None;
         }
         let find = self.find;
-        let Some((program, args)) = spec
-            .programs
-            .iter()
-            .find_map(|(program, args)| find(program).map(|found| (found, args.clone())))
-        else {
+        let distro = oxmacs_process::Launch::new("")
+            .directory(root)
+            .distro()
+            .map(|place| place.distro);
+        let found = match &distro {
+            Some(_) => spec
+                .programs
+                .first()
+                .map(|(program, args)| (PathBuf::from(program), args.clone())),
+            None => spec
+                .programs
+                .iter()
+                .find_map(|(program, args)| find(program).map(|found| (found, args.clone()))),
+        };
+        let Some((program, args)) = found else {
             self.missing.push((spec.name.clone(), now));
             if !self.told.contains(&spec.name) {
                 self.told.push(spec.name.clone());
@@ -426,6 +459,7 @@ impl Lsp {
             id,
             spec,
             root: root.to_path_buf(),
+            distro: distro.clone(),
             state: State::Starting,
             next_request: 0,
             pending: Vec::new(),
@@ -435,7 +469,11 @@ impl Lsp {
             progress: Vec::new(),
             diagnostics: Vec::new(),
         };
-        let initialize = client.request("initialize", &initialize(root), Pending::Initialize);
+        let initialize = client.request(
+            "initialize",
+            &initialize(distro.as_deref(), root),
+            Pending::Initialize,
+        );
         self.running.push(client);
         self.out.push(Out::Start(
             id,
@@ -527,7 +565,7 @@ impl Lsp {
                 let Some(root) = self.client(id).map(|client| client.root.clone()) else {
                     return Vec::new();
                 };
-                json!([{"uri": uri::from_path(&root), "name": root.display().to_string()}])
+                json!([{"uri": file_uri(self.distro(id), &root), "name": root.display().to_string()}])
             }
             "workspace/applyEdit" => {
                 return vec![Outcome::EditRequested {
@@ -626,7 +664,7 @@ impl Lsp {
         let Some(uri) = params.get("uri").and_then(Value::as_str) else {
             return Vec::new();
         };
-        let Some(path) = uri::to_path(uri) else {
+        let Some(path) = local_path(self.distro(id), uri) else {
             return Vec::new();
         };
         let items = params

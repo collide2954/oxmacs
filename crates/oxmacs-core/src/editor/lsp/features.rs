@@ -1,8 +1,7 @@
-use oxmacs_files::uri;
 use serde_json::{Value, json};
 
 use super::edits::{files, position};
-use super::{Encoding, ServerId, number};
+use super::{Encoding, ServerId, local_path, number};
 use crate::command::Command;
 use crate::editor::decorations::Owner;
 use crate::editor::{Editor, Lasts, Look, Offer, Picked, Place, Service};
@@ -731,7 +730,7 @@ impl Editor {
         found
             .iter()
             .filter_map(|(uri, range)| {
-                let path = uri::to_path(uri)?;
+                let path = local_path(self.lsp.distro(id), uri)?;
                 let line = number(&range["start"]["line"]);
                 let units = number(&range["start"]["character"]);
                 let column = self
@@ -872,7 +871,7 @@ impl Editor {
     pub(super) fn applied_edit(&mut self, id: ServerId, params: &Value) -> Value {
         match self.apply_workspace_edit(id, None, &params["edit"]) {
             Some((places, _)) => {
-                json!({"applied": places > 0 || !files(&params["edit"]).is_empty()})
+                json!({"applied": places > 0 || !files(self.lsp.distro(id), &params["edit"]).is_empty()})
             }
             None => json!({"applied": false, "failureReason": STALE}),
         }

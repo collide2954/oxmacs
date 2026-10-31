@@ -1078,3 +1078,30 @@ fn moving_a_visited_file_reopens_its_document_at_the_new_place() {
         &oxmacs_files::uri::from_path(&to)
     ));
 }
+
+#[test]
+fn servers_inside_a_distro_trade_linux_paths() {
+    let inside = std::path::Path::new(r"\\wsl.localhost\Fedora\home\ana\x\src\main.rs");
+    let windows = std::path::Path::new(r"C:\work\main.rs");
+
+    assert_eq!(
+        super::file_uri(Some("Fedora"), inside),
+        "file:///home/ana/x/src/main.rs"
+    );
+    assert_eq!(
+        super::local_path(Some("Fedora"), "file:///home/ana/x/src/main.rs"),
+        Some(inside.to_path_buf())
+    );
+    assert_eq!(
+        super::file_uri(None, inside),
+        oxmacs_files::uri::from_path(inside)
+    );
+    assert_eq!(
+        super::file_uri(Some("Fedora"), windows),
+        oxmacs_files::uri::from_path(windows)
+    );
+    assert_eq!(
+        super::local_path(None, "file:///C:/work/main.rs"),
+        Some(PathBuf::from(r"C:\work\main.rs"))
+    );
+}
