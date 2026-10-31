@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::mem;
+use std::ops::Range;
 
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse::{self, Click, ScrollDelta, click};
@@ -15,7 +16,7 @@ use iced::{
     keyboard, window,
 };
 use oxmacs_core::display::{self, LineStyle};
-use oxmacs_core::editor::{Cell, Clicks, Gutter, Pane, ScreenRow, WindowId};
+use oxmacs_core::editor::{Cell, Clicks, Ghost, Gutter, Pane, ScreenRow, WindowId};
 use oxmacs_core::external::diagnostics::Severity;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::{Highlight, Theme as Faces};
@@ -36,6 +37,7 @@ const LINE_CURSOR: f32 = 0.18;
 const LINE_CURSOR_UNFOCUSED: f32 = 0.07;
 const LINE_CURSOR_EDGE: f32 = 3.0;
 const DIMMED: f32 = 0.3;
+const GHOST_ALPHA: f32 = 0.8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewEvent {
@@ -317,6 +319,14 @@ impl<'a, Message> BufferView<'a, Message> {
         let cell_size = state.metrics.cell;
         let top = -state.shift();
         let gutter = self.gutter_width(cell_size.width);
+        let shown = self.ghost_shown();
+        let place = |position: Point| {
+            let cell = cell_at(position, cell_size, top);
+            Cell {
+                row: past_ghost(cell.row, shown),
+                ..cell
+            }
+        };
         let view_event = match event {
             mouse::Event::ButtonPressed(mouse::Button::Left)
                 if cursor
@@ -329,7 +339,7 @@ impl<'a, Message> BufferView<'a, Message> {
                 state.dragging = true;
                 state.numbering = true;
                 ViewEvent::NumberPressed {
-                    row: cell_at(position, cell_size, top).row,
+                    row: place(position).row,
                     extend: state.modifiers.shift(),
                 }
             }
@@ -338,7 +348,7 @@ impl<'a, Message> BufferView<'a, Message> {
                     return;
                 };
                 let position = Point::new(position.x - gutter, position.y);
-                let cell = cell_at(position, cell_size, top);
+                let cell = place(position);
                 match button {
                     mouse::Button::Left => {
                         let click = Click::new(position, button, state.last_click);
@@ -359,10 +369,10 @@ impl<'a, Message> BufferView<'a, Message> {
                     return;
                 };
                 if state.numbering {
-                    ViewEvent::NumbersDragged(cell_at(position, cell_size, top).row)
+                    ViewEvent::NumbersDragged(place(position).row)
                 } else {
                     let position = Point::new(position.x - gutter, position.y);
-                    ViewEvent::Dragged(cell_at(position, cell_size, top))
+                    ViewEvent::Dragged(place(position))
                 }
             }
             mouse::Event::ButtonReleased(mouse::Button::Left) => {
@@ -374,7 +384,7 @@ impl<'a, Message> BufferView<'a, Message> {
                     return;
                 };
                 let position = Point::new(position.x - gutter, position.y);
-                ViewEvent::Released(cell_at(position, cell_size, top))
+                ViewEvent::Released(place(position))
             }
             mouse::Event::WheelScrolled { delta } if cursor.is_over(bounds) => {
                 let (rows, carry) = wheel_rows(delta, cell_size.height, state.wheel_carry);
@@ -442,7 +452,14 @@ impl<'a, Message> BufferView<'a, Message> {
         if !within(origin.y, cell.height, bounds) {
             return None;
         }
-        let (glyph, width) = self.pane.cursor_glyph();
+        let (glyph, width) = match self
+            .pane
+            .ghost()
+            .and_then(|ghost| ghost.lines.first()?.chars().next())
+        {
+            Some(first) if first != '\t' => (first.to_string(), 1),
+            _ => self.pane.cursor_glyph(),
+        };
         Some(CursorBlock {
             bounds: Rectangle::new(origin, Size::new(cell.width * to_f32(width), cell.height)),
             glyph,
@@ -620,6 +637,7 @@ where
         let opacity = self.cursor_opacity(state);
         let behind = self.focused();
         let point_line = self.pane.buffer().line_of(self.pane.point());
+        let ghost = self.pane.ghost();
         renderer.with_layer(bounds, |renderer| {
             if let Some(gutter) = self.pane.gutter() {
                 self.draw_gutter(renderer, gutter, &rows, bounds, cell.width);
@@ -679,7 +697,27 @@ where
             }
             for (row, rectangle) in &rows {
                 if let Some(line) = line_of(row.line) {
-                    self.draw_row_text(renderer, line, row, *rectangle, cell.width, text_bounds);
+                    match ghost.as_ref().filter(|ghost| on_ghost(ghost, row)) {
+                        Some(ghost) => self.draw_ghost_row(
+                            renderer,
+                            line,
+                            row,
+                            ghost,
+                            *rectangle,
+                            cell.width,
+                            text_bounds,
+                        ),
+                        None => {
+                            self.draw_row_text(
+                                renderer,
+                                line,
+                                row,
+                                *rectangle,
+                                cell.width,
+                                text_bounds,
+                            );
+                        }
+                    }
                     for (columns, severity) in &line.diagnostics {
                         if let Some(columns) =
                             display::row_highlight(*columns, row.column, row.end_column)
@@ -753,13 +791,18 @@ impl<'a, Message> BufferView<'a, Message> {
         let now = state.frame.unwrap_or_else(Instant::now);
         let selection = buffer.selection();
         let focus = self.pane.focus_lines();
+        let ghost = self.pane.ghost();
         let mut lines: Vec<DrawnLine<'a>> = Vec::new();
         let mut rows = Vec::new();
         for row in self
             .pane
             .screen_rows(floor_to_isize(-shift), self.pane.viewport().rows() + 2)
         {
-            let y = bounds.y + (signed_to_f32(row.offset) + shift) * cell.height;
+            let pushed = ghost
+                .as_ref()
+                .filter(|ghost| below_ghost(ghost, &row))
+                .map_or(0, |ghost| ghost.lines.len() - 1);
+            let y = bounds.y + (signed_to_f32(row.offset) + shift + to_f32(pushed)) * cell.height;
             if !within(y, cell.height, bounds) {
                 continue;
             }
@@ -831,6 +874,146 @@ impl<'a, Message> BufferView<'a, Message> {
         (lines, rows)
     }
 
+    fn ghost_shown(&self) -> Option<(usize, usize)> {
+        let ghost = self.pane.ghost()?;
+        let row = self
+            .pane
+            .screen_rows(0, self.pane.viewport().rows())
+            .into_iter()
+            .find(|row| on_ghost(&ghost, row))?;
+        Some((usize::try_from(row.offset).ok()?, ghost.lines.len() - 1))
+    }
+
+    fn ghost_color(&self) -> Color {
+        style::color(self.faces.highlight(Highlight::Comment)).scale_alpha(GHOST_ALPHA)
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a run of a line is drawn from where it starts and where it lands"
+    )]
+    fn draw_segments<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        line: &DrawnLine<'_>,
+        chars: Range<usize>,
+        from_column: usize,
+        rectangle: Rectangle,
+        cell_width: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let foreground = style::color(self.faces.default.foreground);
+        let fade = if line.dimmed { DIMMED } else { 1.0 };
+        for segment in
+            display::segments_in(&line.text, chars, &line.style.spans, self.pane.tab_width())
+        {
+            let color = segment
+                .face
+                .map_or(foreground, |face| style::color(self.faces.highlight(face)))
+                .scale_alpha(fade);
+            let x = to_f32(segment.column.saturating_sub(from_column)) * cell_width;
+            renderer.fill_text(
+                self.text(segment.text, Size::new(f32::INFINITY, rectangle.height)),
+                Point::new(rectangle.x + x, rectangle.y),
+                color,
+                bounds,
+            );
+        }
+    }
+
+    fn draw_ghost_text<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        text: &str,
+        at: Point,
+        height: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        renderer.fill_text(
+            self.text(text.to_owned(), Size::new(f32::INFINITY, height)),
+            at,
+            self.ghost_color(),
+            bounds,
+        );
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the row with a suggestion is drawn around it"
+    )]
+    fn draw_ghost_row<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        line: &DrawnLine<'_>,
+        row: &ScreenRow,
+        ghost: &Ghost,
+        rectangle: Rectangle,
+        cell_width: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        let tab_width = self.pane.tab_width();
+        let split = ghost.column.clamp(row.chars.start, row.chars.end);
+        let at = display::display_column(&line.text, split, tab_width);
+        self.draw_segments(
+            renderer,
+            line,
+            row.chars.start..split,
+            row.column,
+            rectangle,
+            cell_width,
+            bounds,
+        );
+        let width = |text: &str| display::display_column(text, text.chars().count(), tab_width);
+        let first = ghost.lines.first().map_or("", String::as_str);
+        let x = to_f32(at - row.column) * cell_width;
+        self.draw_ghost_text(
+            renderer,
+            first,
+            Point::new(rectangle.x + x, rectangle.y),
+            rectangle.height,
+            bounds,
+        );
+        let last = ghost.lines.len() - 1;
+        for (index, shown) in ghost.lines.iter().enumerate().skip(1) {
+            let y = rectangle.y + to_f32(index) * rectangle.height;
+            if within(y, rectangle.height, bounds) {
+                self.draw_ghost_text(
+                    renderer,
+                    shown,
+                    Point::new(rectangle.x, y),
+                    rectangle.height,
+                    bounds,
+                );
+            }
+        }
+        let (rest_x, rest_y) = if last == 0 {
+            (x + to_f32(width(first)) * cell_width, rectangle.y)
+        } else {
+            (
+                to_f32(width(&ghost.lines[last])) * cell_width,
+                rectangle.y + to_f32(last) * rectangle.height,
+            )
+        };
+        let rest = Rectangle::new(Point::new(rectangle.x + rest_x, rest_y), rectangle.size());
+        if within(rest_y, rectangle.height, bounds) {
+            self.draw_segments(
+                renderer,
+                line,
+                split..row.chars.end,
+                at,
+                rest,
+                cell_width,
+                bounds,
+            );
+        }
+    }
+
     fn draw_row_text<Renderer>(
         &self,
         renderer: &mut Renderer,
@@ -842,24 +1025,16 @@ impl<'a, Message> BufferView<'a, Message> {
     ) where
         Renderer: text::Renderer<Font = Font>,
     {
-        let foreground = style::color(self.faces.default.foreground);
         let tab_width = self.pane.tab_width();
-        let fade = if line.dimmed { DIMMED } else { 1.0 };
-        for segment in
-            display::segments_in(&line.text, row.chars.clone(), &line.style.spans, tab_width)
-        {
-            let color = segment
-                .face
-                .map_or(foreground, |face| style::color(self.faces.highlight(face)))
-                .scale_alpha(fade);
-            let x = to_f32(segment.column - row.column) * cell_width;
-            renderer.fill_text(
-                self.text(segment.text, Size::new(f32::INFINITY, rectangle.height)),
-                Point::new(rectangle.x + x, rectangle.y),
-                color,
-                bounds,
-            );
-        }
+        self.draw_segments(
+            renderer,
+            line,
+            row.chars.clone(),
+            row.column,
+            rectangle,
+            cell_width,
+            bounds,
+        );
         if row.end_column.is_none()
             && let Some((note, face)) = &line.note
         {
@@ -976,6 +1151,24 @@ pub fn wave_rise(step: usize) -> f32 {
         1 | 3 => 1.0,
         2 => 2.0,
         _ => 0.0,
+    }
+}
+
+fn on_ghost(ghost: &Ghost, row: &ScreenRow) -> bool {
+    row.line == ghost.line
+        && row.chars.start <= ghost.column
+        && (ghost.column < row.chars.end || row.end_column.is_none())
+}
+
+fn below_ghost(ghost: &Ghost, row: &ScreenRow) -> bool {
+    row.line > ghost.line || (row.line == ghost.line && row.chars.start > ghost.column)
+}
+
+pub fn past_ghost(row: usize, shown: Option<(usize, usize)>) -> usize {
+    match shown {
+        Some((at, extra)) if row > at + extra => row - extra,
+        Some((at, _)) if row > at => at,
+        _ => row,
     }
 }
 
@@ -1232,6 +1425,57 @@ mod tests {
                 .all(|(_, row)| row.y >= body.y && row.y + row.height <= body.y + body.height),
             "{rows:?}"
         );
+    }
+
+    #[test]
+    fn rows_below_a_suggestion_make_room_for_its_lines() {
+        let mut buffer = Buffer::with_text("t", "a\nb\nc\n");
+        buffer.set_point(1);
+        let mut editor = oxmacs_core::editor::Editor::with_buffer(buffer);
+        editor.suggest(Some("x\ny\nz".to_owned()));
+        let view = BufferView::new(
+            editor.pane(),
+            editor.selected_window(),
+            oxmacs_core::theme::ADWAITA,
+            Font::MONOSPACE,
+            16.0,
+            Motion {
+                enabled: false,
+                last_input: Instant::now(),
+                blink_interval: Duration::ZERO,
+            },
+            ignored,
+        );
+        let state = State {
+            metrics: Metrics {
+                cell: CELL,
+                ..Metrics::default()
+            },
+            ..State::default()
+        };
+
+        let (_, rows) = view.lay_out_rows(
+            &state,
+            Rectangle::new(Point::ORIGIN, Size::new(400.0, 200.0)),
+        );
+
+        let tops: Vec<(usize, f32)> = rows.iter().map(|(row, at)| (row.line, at.y)).collect();
+        assert_eq!(
+            &tops[..3],
+            [(0, 0.0), (1, 3.0 * CELL.height), (2, 4.0 * CELL.height)]
+        );
+        assert_eq!(view.ghost_shown(), Some((0, 2)));
+    }
+
+    #[test]
+    fn clicks_below_a_suggestion_land_on_the_lines_they_show() {
+        let shown = Some((2, 3));
+
+        assert_eq!(past_ghost(1, shown), 1);
+        assert_eq!(past_ghost(2, shown), 2);
+        assert_eq!(past_ghost(4, shown), 2);
+        assert_eq!(past_ghost(6, shown), 3);
+        assert_eq!(past_ghost(6, None), 6);
     }
 
     #[test]

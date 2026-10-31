@@ -37,6 +37,7 @@ pub use build::run::{OnExit, OnLine, RunSpec};
 pub use console::{ConsoleHook, ConsoleSpec, MarkerHook};
 pub use decorations::{Lasts, LineDecorations, Look};
 pub use editing::format::{FormatRequest, Formatter};
+pub use editing::suggestion::Ghost;
 pub use effect::{Effect, FetchId};
 pub use events::{Event, EventKind, Service, Source};
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
@@ -165,6 +166,7 @@ pub struct Editor {
     config: Config,
     roots: roots::Found,
     dormant: languages::dormant::Dormant,
+    suggestion: Option<editing::suggestion::Suggestion>,
 }
 
 impl Default for Editor {
@@ -252,6 +254,7 @@ impl Editor {
             config: Config::default(),
             roots: roots::Found::default(),
             dormant: languages::dormant::Dormant::default(),
+            suggestion: None,
         }
     }
 
@@ -466,6 +469,12 @@ impl Editor {
         {
             return found;
         }
+        if self.suggestion().is_some()
+            && keys.len() == 1
+            && let found @ Lookup::Command(_) = self.keymaps.get(Scope::Suggestion).lookup(keys)
+        {
+            return found;
+        }
         let local = if self.prompts.reading() {
             Some(self.keymaps.get(Scope::Minibuffer))
         } else {
@@ -544,6 +553,7 @@ impl Editor {
         let noting = self.noting_keystrokes();
         let repeated = self.last_id == Some(command);
         self.run_id(command, shifted);
+        self.forget_stale_suggestion();
         if let Some(before) = noting {
             self.note_keystroke(keys, command, before, repeated);
         }
@@ -551,6 +561,7 @@ impl Editor {
 
     pub fn execute(&mut self, command: impl Into<CommandId>) {
         self.run_id(command.into(), false);
+        self.forget_stale_suggestion();
     }
 
     #[cfg(test)]

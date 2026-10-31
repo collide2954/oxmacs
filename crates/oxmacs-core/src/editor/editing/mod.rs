@@ -5,6 +5,7 @@ pub(super) mod indent;
 pub(super) mod macros;
 pub(super) mod pairs;
 pub(super) mod selection;
+pub(super) mod suggestion;
 pub(super) mod undo;
 
 use crate::editor::Editor;
@@ -14,11 +15,16 @@ use crate::text::{Buffer, motion};
 impl Editor {
     pub(super) fn self_insert(&mut self) {
         if let Some(KeyCode::Char(c)) = self.last_key.map(Key::code) {
+            let rest = self.suggestion_after(c);
+            let before = self.buffer().len_chars();
             if self.insert_pair(c) {
                 return;
             }
             self.insert_over_selection(c.encode_utf8(&mut [0; 4]));
             self.reindent_after(c);
+            if self.buffer().len_chars() == before + 1 {
+                self.suggest(rest);
+            }
         }
     }
 

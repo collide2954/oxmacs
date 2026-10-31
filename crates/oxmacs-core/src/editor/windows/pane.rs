@@ -188,6 +188,12 @@ impl<'a> Pane<'a> {
         self.editor.decorations_on_line(self.index, line, now)
     }
 
+    pub fn ghost(&self) -> Option<crate::editor::Ghost> {
+        (self.selected && self.index == 0)
+            .then(|| self.editor.ghost())
+            .flatten()
+    }
+
     pub fn line_pills(&self, line: usize) -> Vec<(Range<usize>, Highlight)> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Special(view)) => view.pills(line),

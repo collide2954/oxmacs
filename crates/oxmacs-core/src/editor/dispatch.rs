@@ -112,6 +112,7 @@ impl Editor {
             Command::CompletionPrevious => self.prompts.popup_step(false),
             Command::CompletionAccept => self.popup_accept(),
             Command::CompletionQuit => self.prompts.quit_popup(),
+            Command::SuggestionAccept => self.accept_suggestion(),
             Command::CompletionAtPoint => self.completion_at_point(),
             Command::ComintSendInput => self.console_send_input(),
             Command::ComintPreviousInput => self.recall_input(true),

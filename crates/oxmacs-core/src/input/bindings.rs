@@ -206,6 +206,8 @@ const POPUP: &[(&str, Command)] = &[
     ("ESC", Command::CompletionQuit),
 ];
 
+const SUGGESTION: &[(&str, Command)] = &[("TAB", Command::SuggestionAccept)];
+
 const TOOLS: &[(&str, Command)] = &[
     ("TAB", Command::ToolDetails),
     ("i", Command::ToolInstall),
@@ -289,6 +291,7 @@ fn table(scope: Scope) -> &'static [(&'static str, Command)] {
         Scope::Places => PLACES,
         Scope::Popup => POPUP,
         Scope::Tools => TOOLS,
+        Scope::Suggestion => SUGGESTION,
     }
 }
 

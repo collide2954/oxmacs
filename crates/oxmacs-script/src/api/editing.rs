@@ -131,6 +131,30 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .host::<Editor>(insert);
     isolate
+        .native("ox", "suggest")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let shown = match arguments[0] {
+                Value::Nil => None,
+                given => Some(
+                    heap.text(given)
+                        .ok_or_else(|| {
+                            ox_lang::native::expected(heap, "suggest", "text or nil", given)
+                        })?
+                        .to_owned(),
+                ),
+            };
+            editor.suggest(shown);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "suggestion")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| match editor.suggestion() {
+            Some(shown) => text(heap, shown),
+            None => Ok(Value::Nil),
+        });
+    isolate
         .native("ox", "delete")
         .arity(2, Some(2))
         .host::<Editor>(delete);
@@ -431,6 +455,23 @@ mod tests {
             ox.eval(&mut editor, "(delete -1 2)").unwrap_err().message,
             "delete expects positions from 0, got -1"
         );
+    }
+
+    #[test]
+    fn suggestions_show_at_point_until_tab_takes_them() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        typed(&mut editor, &mut ox, "let x = ");
+
+        ox.eval(&mut editor, r#"(suggest "42;")"#).unwrap();
+        assert_eq!(ox.eval(&mut editor, "(suggestion)").unwrap(), r#""42;""#);
+        press(&mut editor, &mut ox, "TAB");
+
+        assert_eq!(editor.buffer().contents(), "let x = 42;");
+        assert_eq!(ox.eval(&mut editor, "(suggestion)").unwrap(), "nil");
+        ox.eval(&mut editor, r#"(suggest "!") (suggest nil)"#)
+            .unwrap();
+        assert_eq!(ox.eval(&mut editor, "(suggestion)").unwrap(), "nil");
     }
 
     #[test]

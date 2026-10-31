@@ -124,6 +124,8 @@
 (set-point position) "Moves point in the current buffer to position, stopping at its end."
 (buffer-size) "How many characters the current buffer holds."
 (insert text) "Inserts text at point in the current buffer and moves point after it; read-only buffers refuse."
+(suggest text) "Shows text in grey at point in the buffer you're in, as a suggestion TAB inserts, on as many lines as it has. Typing its next character keeps the rest; moving point, another edit or (suggest nil) takes it away."
+(suggestion) "The suggestion shown at point, or nil."
 (delete start end) "Deletes the text from start up to end in the current buffer and returns it; read-only buffers refuse."
 (text-between start end) "The text from start up to end in the current buffer."
 (region) "The selection in the current buffer as [start end], or nil when there is none."

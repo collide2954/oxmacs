@@ -396,6 +396,8 @@ pub enum Command {
     CompletionAccept,
     #[strum(message = "Close the completion popup")]
     CompletionQuit,
+    #[strum(message = "Insert the suggestion shown at point")]
+    SuggestionAccept,
 
     #[strum(
         message = "List each language and what works in it",
@@ -522,6 +524,7 @@ impl Command {
             | Self::CompletionPrevious
             | Self::CompletionAccept
             | Self::CompletionQuit => Scope::Popup,
+            Self::SuggestionAccept => Scope::Suggestion,
             Self::PlaceVisit
             | Self::PlaceShow
             | Self::PlaceNext
@@ -547,6 +550,7 @@ pub enum Scope {
     Places,
     Popup,
     Tools,
+    Suggestion,
 }
 
 impl Scope {
@@ -562,6 +566,7 @@ impl Scope {
             Self::Places => Some("lists of places"),
             Self::Popup => Some("the completion popup"),
             Self::Tools => Some("*Tools*"),
+            Self::Suggestion => Some("suggestions at point"),
         }
     }
 }
