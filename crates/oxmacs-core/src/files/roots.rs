@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+
+use oxmacs_files::wsl;
+use oxmacs_process::Launch;
 
 pub const PROJECT: &[&str] = &[".git", ".hg", ".svn", ".projectile"];
 
@@ -37,14 +39,19 @@ pub fn upward<S: AsRef<str>>(folder: &Path, markers: &[S], home: Option<&Path>) 
 
 pub fn located<S: AsRef<str>>(folder: &Path, command: &[S]) -> Option<PathBuf> {
     let (program, args) = command.split_first()?;
-    let mut run = Command::new(program.as_ref());
-    run.args(args.iter().map(AsRef::as_ref)).current_dir(folder);
-    let output = oxmacs_process::run(&mut run, None).ok()?;
+    let launch = Launch::new(program.as_ref())
+        .args(args.iter().map(AsRef::as_ref))
+        .directory(folder);
+    let output = oxmacs_process::run(&mut launch.command(), None).ok()?;
     if !output.status.success() {
         return None;
     }
     let file = String::from_utf8(output.stdout).ok()?;
-    let root = Path::new(file.trim()).parent()?;
+    let file = match launch.distro() {
+        Some(place) => wsl::share(&place.distro, file.trim()),
+        None => PathBuf::from(file.trim()),
+    };
+    let root = file.parent()?;
     let canonical = fs::canonicalize(root).ok();
     let spelled = folder
         .ancestors()

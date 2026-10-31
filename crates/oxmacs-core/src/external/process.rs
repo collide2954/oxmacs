@@ -54,11 +54,17 @@ fn launch(
 }
 
 fn command(job: &Job, output: PipeWriter, interactive: bool) -> io::Result<Command> {
-    let mut command = Command::new(&job.program);
-    command
+    let launch = job
+        .env
+        .iter()
+        .fold(
+            oxmacs_process::Launch::new(&job.program),
+            |launch, (key, value)| launch.env(key, value),
+        )
         .args(&job.args)
-        .envs(job.env.iter().map(|(key, value)| (key, value)))
-        .current_dir(&job.directory)
+        .directory(&job.directory);
+    let mut command = launch.command();
+    command
         .stdin(if interactive || job.input.is_some() {
             Stdio::piped()
         } else {

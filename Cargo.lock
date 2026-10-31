@@ -4063,6 +4063,7 @@ dependencies = [
 name = "oxmacs-process"
 version = "0.14.0"
 dependencies = [
+ "oxmacs-files",
  "rustix 1.1.5",
  "tempfile",
  "windows-sys 0.61.2",

@@ -79,18 +79,17 @@ fn parse(heap: &Heap, name: &str, arguments: &[Value]) -> Result<Run, Error> {
 }
 
 fn command(run: &Run) -> Command {
-    let mut command = Command::new(&run.program);
-    command.args(&run.arguments);
+    let mut launch = oxmacs_process::Launch::new(&run.program).args(&run.arguments);
     if let Some(directory) = &run.directory {
-        command.current_dir(directory);
+        launch = launch.directory(directory);
     }
     for (name, value) in &run.environment {
-        match value {
-            Some(value) => command.env(name, value),
-            None => command.env_remove(name),
+        launch = match value {
+            Some(value) => launch.env(name, value),
+            None => launch.env_remove(name),
         };
     }
-    command
+    launch.command()
 }
 
 fn execute(run: &Run) -> Result<Portable, Failure> {

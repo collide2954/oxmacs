@@ -7,11 +7,13 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod launch;
 mod lookup;
 #[cfg_attr(unix, path = "unix.rs")]
 #[cfg_attr(windows, path = "windows.rs")]
 mod tree;
 
+pub use launch::{Launch, run_inside_wsl};
 pub use lookup::{find, which};
 
 const POLL: Duration = Duration::from_millis(20);

@@ -61,10 +61,11 @@ pub fn read_message(reader: &mut impl BufRead) -> io::Result<Option<String>> {
 }
 
 fn command(launch: &Launch) -> Command {
-    let mut command = Command::new(&launch.program);
-    command
+    let mut command = oxmacs_process::Launch::new(&launch.program)
         .args(&launch.args)
-        .current_dir(&launch.directory)
+        .directory(&launch.directory)
+        .command();
+    command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

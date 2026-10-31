@@ -1,7 +1,7 @@
 [package]
 name = "oxmacs-process"
 version.workspace = true
-description = "Child processes for oxmacs and Ox: program lookup, hidden consoles, queued input and stopping whole process trees"
+description = "Child processes for oxmacs and Ox: program lookup, hidden consoles, queued input, stopping whole process trees and running inside WSL distributions"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
@@ -19,6 +19,9 @@ pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 must_use_candidate = "allow"
+
+[dependencies]
+oxmacs-files.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process"] }

@@ -2,6 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use oxmacs_process::Launch;
+
 const EDITIONS: &[&str] = &["2015", "2018", "2021", "2024"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,22 +37,27 @@ pub fn version(path: &Path) -> Result<String, String> {
 }
 
 pub fn rustfmt(text: &str, directory: &Path, edition: &str) -> Result<String, String> {
-    let program = oxmacs_process::which("rustfmt")
-        .ok_or_else(|| "not found; rustup component add rustfmt".to_owned())?;
-    let mut command = Command::new(program);
-    command
-        .args(["--edition", edition, "--config", "newline_style=Unix"])
-        .current_dir(directory);
-    pipe(command, text)
+    let launch = Launch::new("rustfmt").directory(directory);
+    let launch = if launch.distro().is_some() {
+        launch
+    } else {
+        let program = oxmacs_process::which("rustfmt")
+            .ok_or_else(|| "not found; rustup component add rustfmt".to_owned())?;
+        Launch::new(program).directory(directory)
+    };
+    let launch = launch.args(["--edition", edition, "--config", "newline_style=Unix"]);
+    pipe(launch.command(), text)
 }
 
 pub fn air_format(program: &Path, text: &str, file: &Path) -> Result<String, String> {
-    let mut command = Command::new(program);
-    command.arg("format").arg("--stdin-file-path").arg(file);
+    let mut launch = Launch::new(program)
+        .arg("format")
+        .arg("--stdin-file-path")
+        .arg(file);
     if let Some(directory) = file.parent().filter(|directory| directory.is_dir()) {
-        command.current_dir(directory);
+        launch = launch.directory(directory);
     }
-    pipe(command, text)
+    pipe(launch.command(), text)
 }
 
 fn pipe(mut command: Command, text: &str) -> Result<String, String> {
