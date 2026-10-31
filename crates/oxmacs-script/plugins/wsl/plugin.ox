@@ -1,5 +1,5 @@
 (plugin wsl
-  :version "0.2.0"
+  :version "0.2.1"
   :opt-in true
   :startup-when true
   :requires {remote: "^0.4"}

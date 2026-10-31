@@ -2,22 +2,28 @@
   (import (ox string) (ox process) (ox file) (ox path))
   (export parse-list listed default-name home-of linux-path situation detect notice))
 
-(def (parse-list text)
-  "The distributions wsl --list --verbose names, as maps of :name, :state, :version and :default."
+(def (parse-list text running)
+  "The distributions wsl --list --verbose names, as maps of :name, :state as WSL words it in the system's language, :version, :default and :running, from running, the names wsl --list --running --quiet gives."
   (vec (keep (fn [line]
                (let [default (string/starts-with? (string/trim-start line) "*")
-                     words (string/words (string/replace line "*" " "))]
-                 (when (= (count words) 3)
-                   (when-let [version (string/to-number (nth words 2))]
-                     {name: (first words)
-                      state: (keyword (string/lower (second words)))
-                      version: version
-                      default: default}))))
+                     words (string/words (string/replace line "*" " "))
+                     version (when (>= (count words) 3) (string/to-number (last words)))]
+                 (when version
+                   {name: (first words)
+                    state: (string/join " " (take (- (count words) 2) (rest words)))
+                    version: version
+                    default: default
+                    running: (if (some (fn [name] (= name (first words))) running) true false)})))
              (string/lines text))))
+
+(def (wsl-lines args)
+  (let [ran (process/run "wsl.exe" args :env {WSL_UTF8: "1"})]
+    (if (= ran.status 0) ran.stdout "")))
 
 (def (listed)
   "The installed distributions."
-  (parse-list (get (process/run "wsl.exe" ["--list" "--verbose"] :env {WSL_UTF8: "1"}) :stdout)))
+  (parse-list (wsl-lines ["--list" "--verbose"])
+              (vec (map string/trim (string/lines (wsl-lines ["--list" "--running" "--quiet"]))))))
 
 (def (default-name)
   "The name of WSL's default distribution."
@@ -75,21 +81,26 @@
        found))
 
 (test "wsl lists its distributions with the default marked"
-  (expect (= (parse-list "  NAME              STATE           VERSION\n* FedoraLinux-44    Running         2\n  docker-desktop    Stopped         2\n")
-             [{name: "FedoraLinux-44" state: :running version: 2 default: true}
-              {name: "docker-desktop" state: :stopped version: 2 default: false}])))
+  (expect (= (parse-list "  NAME              STATE           VERSION\n* FedoraLinux-44    Running         2\n  docker-desktop    Stopped         2\n"
+                         ["FedoraLinux-44"])
+             [{name: "FedoraLinux-44" state: "Running" version: 2 default: true running: true}
+              {name: "docker-desktop" state: "Stopped" version: 2 default: false running: false}])))
+
+(test "distributions read the same in any language"
+  (expect (= (parse-list "  NAME      STATUS            VERSION\n* Ubuntu    Wird ausgeführt   2\n" ["Ubuntu"])
+             [{name: "Ubuntu" state: "Wird ausgeführt" version: 2 default: true running: true}])))
 
 (test "wsl's messages are not distributions"
-  (expect (= (parse-list "Windows Subsystem for Linux has no installed distributions.\nUse wsl --list --online\n") []))
-  (expect (= (parse-list "Pas de distribution\n") [])))
+  (expect (= (parse-list "Windows Subsystem for Linux has no installed distributions.\nUse wsl --list --online\n" []) []))
+  (expect (= (parse-list "Pas de distribution\n" []) [])))
 
 (test "windows paths reach a distribution under /mnt"
   (expect (= (linux-path "C:\\Users\\ana\\notes.txt") "/mnt/c/Users/ana/notes.txt"))
   (expect (= (linux-path "/home/ana") "/home/ana")))
 
 (test "the plugin works with WSL 2 on Windows and says why not elsewhere"
-  (let [two {name: "Fedora" state: :running version: 2 default: true}
-        one {name: "Old" state: :stopped version: 1 default: false}
+  (let [two {name: "Fedora" state: "Running" version: 2 default: true running: true}
+        one {name: "Old" state: "Stopped" version: 1 default: false running: false}
         worked {status: 0 stdout: "WSL version: 2.4.13" stderr: ""}
         failed {status: 1 stdout: "" stderr: ""}]
     (expect (= (situation :linux nil []) :not-windows))

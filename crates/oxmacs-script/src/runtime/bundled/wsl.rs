@@ -1,9 +1,11 @@
 use std::path::Path;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use oxmacs_core::editor::Editor;
 
 use crate::Ox;
-use crate::testing::{press, settle, typed};
+use crate::testing::{Runner, press, settle, typed};
 
 fn started_in(directory: Option<&Path>, init_ox: &str) -> (tempfile::TempDir, Editor, Ox) {
     let home = tempfile::tempdir().unwrap();
@@ -33,6 +35,20 @@ fn inside(distro: &str, script: &str) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn pump(editor: &mut Editor, ox: &mut Ox, done: impl Fn(&Editor) -> bool) -> bool {
+    let mut runner = Runner::new();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while Instant::now() < deadline {
+        runner.step(editor);
+        ox.tick(editor);
+        if done(editor) {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    false
 }
 
 fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
@@ -120,6 +136,37 @@ fn with_wsl_2_the_page_lists_distributions_and_windows_paths_reach_them_under_mn
     let shown = editor.message().unwrap_or_default().to_owned();
     assert!(shown.starts_with("Copied /mnt/"), "{shown}");
     assert!(shown.ends_with("/notes.txt"), "{shown}");
+}
+
+#[test]
+#[ignore = "checks the tools inside the WSL distro named by OXMACS_WSL_DISTRO"]
+fn list_tools_checks_a_running_distribution_from_inside_it() {
+    let Ok(distro) = std::env::var("OXMACS_WSL_DISTRO") else {
+        return;
+    };
+    inside(&distro, "true");
+    let (_home, mut editor, mut ox) = started();
+    settle(&mut editor, &mut ox);
+
+    let id = editor.command_named("list-tools").unwrap();
+    editor.execute(id);
+    let heading = format!("{distro} (WSL)");
+    let checked = pump(&mut editor, &mut ox, |editor| {
+        let shown = editor.buffer().contents();
+        shown.contains(&heading) && shown.contains("  inotifywait")
+    });
+
+    let shown = editor.buffer().contents();
+    assert!(checked, "{shown}");
+    let row = shown
+        .lines()
+        .skip_while(|line| *line != heading)
+        .find(|line| line.starts_with("  inotifywait"))
+        .unwrap();
+    assert!(
+        row.contains("found /") || row.contains("i installs inotify-tools with"),
+        "{row}"
+    );
 }
 
 #[test]

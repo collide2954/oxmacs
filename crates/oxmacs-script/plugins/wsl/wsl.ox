@@ -38,7 +38,7 @@
 (def (distro-line distro)
   {line: [[(if distro.default "* " "  ") :keyword]
           (string/pad-end distro.name 26)
-          [(string/pad-end (name distro.state) 12) (if (= distro.state :running) :string :comment)]
+          [(string/pad-end distro.state 18) (if distro.running :string :comment)]
           [$"WSL {distro.version}" :comment]]
    distro: distro})
 
