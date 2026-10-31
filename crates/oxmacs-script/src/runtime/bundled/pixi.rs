@@ -173,6 +173,13 @@ fn programs_in_a_pixi_project_get_its_environment_and_its_tasks_run_there() {
         .find(|(key, _)| key == "PIXI_PROJECT_NAME")
         .map(|(_, value)| value);
     assert_eq!(prefix.as_deref(), Some("demo"));
+    let labelled = pump(&mut editor, &mut ox, |editor| {
+        editor
+            .mode_line_segments()
+            .iter()
+            .any(|segment| segment.contains("pixi:default"))
+    });
+    assert!(labelled, "{:?}", editor.mode_line_segments());
 
     let id = editor.command_named("pixi-run").unwrap();
     editor.execute(id);
