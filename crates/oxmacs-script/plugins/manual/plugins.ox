@@ -106,7 +106,7 @@ javascript   0.1.0    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.0    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.4    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.5    opt-in   Conway's Game of Life on a canvas
-manual       0.5.97   on       The oxmacs tutorial and the Ox manual
+manual       0.5.98   on       The oxmacs tutorial and the Ox manual
 markdown     0.2.10   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.5    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
@@ -118,7 +118,7 @@ r            0.21.0   opt-in   R consoles, plots, data and help in the style of 
 remote       0.4.0    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.2    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 rust         0.1.0    opt-in   Rust with highlighting, cargo builds and lints, and the rust-analyzer language server
-screensaver  0.2.4    opt-in   A starfield or matrix rain after a while without input
+screensaver  0.3.0    opt-in   Twenty-nine screensavers after a while without input, from a starfield and matrix rain to fireworks, an aurora, a lava lamp and a Mandelbrot dive
 tabs         0.1.4    opt-in   Workspace tabs across the top, each keeping its own windows
 toml         0.1.0    opt-in   TOML with highlighting, indentation and the taplo language server
 typescript   0.1.0    opt-in   TypeScript and TSX with highlighting, indentation and typescript-language-server

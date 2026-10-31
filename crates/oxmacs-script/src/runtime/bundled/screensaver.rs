@@ -12,6 +12,38 @@ use oxmacs_core::view::takeover;
 const IMPORTS: &str =
     "(module (import (screensaver starfield :as stars) (screensaver matrix :as rain)))";
 
+const KINDS: [&str; 29] = [
+    "starfield",
+    "matrix",
+    "pond",
+    "fireworks",
+    "harmonograph",
+    "aurora",
+    "clock",
+    "flow",
+    "orbits",
+    "snowfall",
+    "tunnel",
+    "lava",
+    "constellations",
+    "plasma",
+    "bubbles",
+    "kaleidoscope",
+    "wireframes",
+    "city",
+    "pendulums",
+    "tree",
+    "ocean",
+    "glass",
+    "galaxy",
+    "ants",
+    "campfire",
+    "sorting",
+    "storm",
+    "fireflies",
+    "mandelbrot",
+];
+
 fn started(init: &str) -> (tempfile::TempDir, Editor, Ox) {
     crate::testing::started(&format!("(use-plugin screensaver)\n{init}"))
 }
@@ -78,7 +110,7 @@ fn the_preview_offers_each_screensaver_by_name() {
         .into_iter()
         .map(|completion| completion.label)
         .collect();
-    assert_eq!(offered, ["starfield", "matrix"]);
+    assert_eq!(offered, KINDS);
     press(&mut editor, &mut ox, "s t RET");
 
     let start = Instant::now();
@@ -143,6 +175,38 @@ fn rain_falls_in_columns_with_bright_heads_and_fading_trails() {
         }
     }
     assert!(heads > 0 && trails > heads, "{heads} {trails}");
+}
+
+#[test]
+fn every_screensaver_starts_and_keeps_drawing_through_its_first_minute() {
+    let (_home, mut editor, mut ox) = started("");
+
+    for kind in KINDS {
+        for millis in [0, 700, 3500, 9000, 31_000, 61_000] {
+            let drawn = ox.eval(
+                &mut editor,
+                &format!(
+                    "(module (import (screensaver savers :as savers))) (count ((get (find (fn [s] (= s.kind :{kind})) savers/savers) :draw) {{time: {millis} width: 960 height: 540 font-size: 16}}))"
+                ),
+            );
+            let shapes: usize = drawn
+                .unwrap_or_else(|error| panic!("{kind} at {millis} ms: {}", error.message))
+                .parse()
+                .unwrap();
+            assert!(
+                millis < 3000 || shapes > 0,
+                "{kind} drew nothing at {millis} ms"
+            );
+        }
+        ox.eval(
+            &mut editor,
+            &format!("(module (import (screensaver savers :as savers))) (savers/start :{kind})"),
+        )
+        .unwrap();
+        assert!(takeover::current(&editor).is_some(), "{kind} didn't start");
+        ox.event(&mut editor, UiEvent::EndTakeOver);
+        settle(&mut editor, &mut ox);
+    }
 }
 
 fn drawn_at(editor: &mut Editor, ox: &mut Ox, module: &str, time: u32) -> Vec<Shape> {
