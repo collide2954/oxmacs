@@ -1,12 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::{fs, future};
 
 use iced::Subscription;
 use iced::futures::Stream;
 use iced::futures::channel::mpsc;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use oxmacs_files::wsl;
+
+mod distros;
+
+use distros::Folder;
 
 #[derive(Debug, Clone, Default, Hash, PartialEq, Eq)]
 pub struct Watched {
@@ -29,17 +35,54 @@ fn watch(watched: &Watched) -> impl Stream<Item = ()> + use<> {
     })
 }
 
-fn start(watched: &Watched, mut sender: mpsc::Sender<()>) -> notify::Result<RecommendedWatcher> {
-    let interest = Interest::new(watched);
-    let mut notifier = notify::recommended_watcher(move |result: notify::Result<Event>| {
-        if result.is_ok_and(|event| interest.concerns(&event)) {
-            let _ = sender.try_send(());
-        }
-    })?;
-    for directory in watched_directories(watched) {
+struct Watching {
+    _notifier: RecommendedWatcher,
+    _distros: Vec<distros::Watch>,
+}
+
+fn start(watched: &Watched, sender: mpsc::Sender<()>) -> notify::Result<Watching> {
+    let interest = Arc::new(Interest::new(watched));
+    let (inside, outside) = by_distro(watched_directories(watched), oxmacs_process::inside_wsl());
+    let mut notifier = {
+        let interest = Arc::clone(&interest);
+        let mut sender = sender.clone();
+        notify::recommended_watcher(move |result: notify::Result<Event>| {
+            if result.is_ok_and(|event| interest.concerns(&event)) {
+                let _ = sender.try_send(());
+            }
+        })?
+    };
+    for directory in outside {
         let _ = notifier.watch(directory, RecursiveMode::NonRecursive);
     }
-    Ok(notifier)
+    let distros = inside
+        .into_iter()
+        .map(|(distro, folders)| {
+            distros::Watch::start(distro, folders, Arc::clone(&interest), sender.clone())
+        })
+        .collect();
+    Ok(Watching {
+        _notifier: notifier,
+        _distros: distros,
+    })
+}
+
+fn by_distro(
+    directories: Vec<&Path>,
+    inside_wsl: bool,
+) -> (BTreeMap<String, Vec<Folder>>, Vec<&Path>) {
+    let mut inside: BTreeMap<String, Vec<Folder>> = BTreeMap::new();
+    let mut outside = Vec::new();
+    for directory in directories {
+        match wsl::place(directory).filter(|_| inside_wsl) {
+            Some(place) => inside.entry(place.distro).or_default().push(Folder {
+                share: directory.to_owned(),
+                linux: place.path,
+            }),
+            None => outside.push(directory),
+        }
+    }
+    (inside, outside)
 }
 
 fn watched_directories(watched: &Watched) -> Vec<&Path> {
@@ -79,13 +122,15 @@ impl Interest {
 
     fn concerns(&self, event: &Event) -> bool {
         !matches!(event.kind, EventKind::Access(_))
-            && event.paths.iter().any(|path| {
-                path.file_name()
-                    .is_some_and(|name| self.names.contains(name))
-                    || path
-                        .parent()
-                        .is_some_and(|parent| self.directories.contains(parent))
-            })
+            && event.paths.iter().any(|path| self.touches(path))
+    }
+
+    fn touches(&self, path: &Path) -> bool {
+        path.file_name()
+            .is_some_and(|name| self.names.contains(name))
+            || path
+                .parent()
+                .is_some_and(|parent| self.directories.contains(parent))
     }
 }
 
@@ -119,6 +164,33 @@ mod tests {
             watched_directories(&watched),
             [Path::new("/a"), Path::new("/b"), Path::new("/c")]
         );
+    }
+
+    #[test]
+    fn folders_inside_distros_are_watched_from_inside_them_once_wsl_is_on() {
+        let home = Path::new(r"\\wsl.localhost\Fedora\home\ana");
+        let etc = Path::new(r"\\wsl$\Fedora\etc");
+        let work = Path::new("/work");
+
+        let (inside, outside) = by_distro(vec![home, etc, work], true);
+
+        assert_eq!(outside, [work]);
+        assert_eq!(
+            inside.get("Fedora").unwrap(),
+            &[
+                Folder {
+                    share: home.to_owned(),
+                    linux: "/home/ana".to_owned(),
+                },
+                Folder {
+                    share: etc.to_owned(),
+                    linux: "/etc".to_owned(),
+                },
+            ]
+        );
+        let (inside, outside) = by_distro(vec![home, work], false);
+        assert!(inside.is_empty());
+        assert_eq!(outside, [home, work]);
     }
 
     #[test]
@@ -176,5 +248,48 @@ mod tests {
         fs::write(dir.path().join("new.txt"), "").unwrap();
 
         assert_signaled(&mut receiver);
+    }
+
+    fn inside(distro: &str, script: &str) {
+        let ran = std::process::Command::new("wsl.exe")
+            .args(["-d", distro, "--exec", "/bin/sh", "-c", script])
+            .output()
+            .unwrap();
+        assert!(
+            ran.status.success(),
+            "{script}: {:?} {}{}",
+            ran.status,
+            String::from_utf8_lossy(&ran.stdout),
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    }
+
+    #[test]
+    #[ignore = "writes inside the WSL distro named by OXMACS_WSL_DISTRO"]
+    fn changes_made_inside_a_distro_send_a_signal() {
+        let Ok(distro) = std::env::var("OXMACS_WSL_DISTRO") else {
+            return;
+        };
+        oxmacs_process::run_inside_wsl(true);
+        let folder = format!("/tmp/oxmacs-watch-{}", std::process::id());
+        inside(
+            &distro,
+            &format!("mkdir -p {folder} && printf old > {folder}/a.txt"),
+        );
+        let (sender, mut receiver) = mpsc::channel(1);
+        let watched = Watched {
+            files: vec![PathBuf::from(format!(
+                r"\\wsl.localhost\{distro}{}\a.txt",
+                folder.replace('/', r"\")
+            ))],
+            directories: Vec::new(),
+        };
+        let _watcher = start(&watched, sender).unwrap();
+        thread::sleep(Duration::from_secs(1));
+
+        inside(&distro, &format!("printf new > {folder}/a.txt"));
+
+        assert_signaled(&mut receiver);
+        inside(&distro, &format!("rm -rf {folder}"));
     }
 }
