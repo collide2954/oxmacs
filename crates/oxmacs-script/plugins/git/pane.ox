@@ -146,7 +146,7 @@
 
 (def (header file)
   (let [stats (if (and file.counted (not (= file.counted [0 0]))) (status/stats file.counted) [])]
-    (vec (concat [[(get labels file.section) :link :pill] "  " [file.path :heading]]
+    (vec (concat [[(or file.label (get labels file.section)) :link :pill] "  " [file.path :heading]]
                  (if (empty? stats) [] (concat ["  "] stats))))))
 
 (def (render file hunks layout columns)

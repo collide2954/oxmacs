@@ -1,6 +1,6 @@
 (module
   (import (ox string))
-  (export parse whole-file header patch words shown))
+  (export parse whole-file header patch words shown matches))
 
 (def (numbers text)
   (let [parts (string/split text ",")]
