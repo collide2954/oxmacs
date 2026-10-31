@@ -35,8 +35,14 @@ fn inside(distro: &str, script: &str) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
+fn run(editor: &mut Editor, ox: &mut Ox, command: &str) {
+    let id = editor.command_named(command).unwrap();
+    editor.execute(id);
+    settle(editor, ox);
+}
+
 #[test]
-fn the_wsl_commands_exist_before_the_plugin_loads() {
+fn the_wsl_commands_are_there_to_run() {
     let (_home, editor, _) = started();
 
     for command in [
@@ -50,6 +56,7 @@ fn the_wsl_commands_exist_before_the_plugin_loads() {
     }
 }
 
+#[cfg(windows)]
 #[test]
 fn turning_it_on_runs_programs_in_distro_folders_inside_the_distro() {
     let (_home, mut editor, mut ox) = started();
@@ -61,24 +68,58 @@ fn turning_it_on_runs_programs_in_distro_folders_inside_the_distro() {
     assert_eq!(inside.map(|place| place.path), Some("/home/ana".to_owned()));
 }
 
+#[cfg(not(windows))]
 #[test]
-fn the_linux_path_of_a_windows_file_lies_under_mnt() {
+fn outside_windows_it_says_so_once_and_each_command_says_so_again() {
     let (home, mut editor, mut ox) = started();
+    settle(&mut editor, &mut ox);
+    let system = if cfg!(target_os = "macos") {
+        "macOS"
+    } else {
+        "Linux"
+    };
+    let notice = format!("WSL is part of Windows, so the wsl plugin has nothing to do on {system}");
+
+    assert_eq!(editor.message(), Some(notice.as_str()));
     let file = home.path().join("notes.txt");
     std::fs::write(&file, "x").unwrap();
     editor.open_file(&file);
+    editor.show_message("");
+    run(&mut editor, &mut ox, "wsl-copy-linux-path");
+    assert_eq!(editor.message(), Some(notice.as_str()));
+    run(&mut editor, &mut ox, "wsl");
+    assert_eq!(editor.buffer().name(), "*WSL*");
+    assert!(
+        editor.buffer().contents().contains(&notice),
+        "{}",
+        editor.buffer().contents()
+    );
+    let inside = oxmacs_process::Launch::new("cargo")
+        .directory(r"\\wsl.localhost\Fedora\home\ana")
+        .distro();
+    assert_eq!(inside, None);
+}
 
-    let id = editor.command_named("wsl-copy-linux-path").unwrap();
-    editor.execute(id);
+#[test]
+#[ignore = "lists and works in the WSL distro named by OXMACS_WSL_DISTRO"]
+fn with_wsl_2_the_page_lists_distributions_and_windows_paths_reach_them_under_mnt() {
+    let Ok(distro) = std::env::var("OXMACS_WSL_DISTRO") else {
+        return;
+    };
+    let (home, mut editor, mut ox) = started();
     settle(&mut editor, &mut ox);
 
+    run(&mut editor, &mut ox, "wsl");
+    let shown = editor.buffer().contents();
+    assert!(shown.contains(&distro), "{shown}");
+    assert!(!shown.contains("WSL 2 isn't installed"), "{shown}");
+    let file = home.path().join("notes.txt");
+    std::fs::write(&file, "x").unwrap();
+    editor.open_file(&file);
+    run(&mut editor, &mut ox, "wsl-copy-linux-path");
     let shown = editor.message().unwrap_or_default().to_owned();
-    if cfg!(windows) {
-        assert!(shown.starts_with("Copied /mnt/"), "{shown}");
-        assert!(shown.ends_with("/notes.txt"), "{shown}");
-    } else {
-        assert_eq!(shown, format!("Copied {}", file.display()));
-    }
+    assert!(shown.starts_with("Copied /mnt/"), "{shown}");
+    assert!(shown.ends_with("/notes.txt"), "{shown}");
 }
 
 #[test]
