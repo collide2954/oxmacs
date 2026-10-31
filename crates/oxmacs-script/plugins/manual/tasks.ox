@@ -71,7 +71,7 @@ These calls pause their task until the answer comes, so their results are ready 
   (await git.exit))
 ```
 
-`net/connect` gives a TCP connection whose `:lines` channel works the same way, and `net/send` writes a line to it. `ox/csv` reads CSV, and `ox/crypto` hashes, encrypts and makes one-time codes.
+`net/connect` gives a TCP connection whose `:lines` channel works the same way, and `net/send` writes a line to it. `http/open` streams a web response like that too: it returns once the headers arrive with `:status` and `:headers`, `:lines` gives the body's lines as they come, `:done` settles when the body ends, and closing `:lines` stops it. `ox/csv` reads CSV, and `ox/crypto` hashes, encrypts and makes one-time codes.
 
 ## Generators
 

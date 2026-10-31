@@ -43,14 +43,37 @@ impl Runtime {
     }
 
     pub(super) fn poll_jobs(&mut self) {
-        for (promise, outcome) in self.heap.finished_jobs() {
-            self.finish_job(promise, outcome);
+        for finished in self.heap.finished_jobs() {
+            self.finish_job(finished.promise, finished.outcome, &finished.carried);
         }
     }
 
-    fn finish_job(&mut self, promise: Value, outcome: Result<Portable, Failure>) {
+    fn carry(&mut self, value: Value, carried: &[(Value, Value)]) -> Result<Value, Error> {
+        if carried.is_empty() {
+            return Ok(value);
+        }
+        let Some(entries) = self.heap.entries(value) else {
+            return Ok(value);
+        };
+        let items: Vec<Value> = entries
+            .into_iter()
+            .chain(carried.iter().copied())
+            .flat_map(|(key, value)| [key, value])
+            .collect();
+        self.heap.map_from(&items)
+    }
+
+    fn finish_job(
+        &mut self,
+        promise: Value,
+        outcome: Result<Portable, Failure>,
+        carried: &[(Value, Value)],
+    ) {
         match outcome {
-            Ok(portable) => match self.rebuild(&portable) {
+            Ok(portable) => match self
+                .rebuild(&portable)
+                .and_then(|value| self.carry(value, carried))
+            {
                 Ok(value) => {
                     self.heap.set_promise(promise, Promise::Delivered(value));
                 }

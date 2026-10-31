@@ -14,6 +14,14 @@ pub(crate) struct Job {
     promise: Value,
     outcome: Outcome,
     thread: JoinHandle<()>,
+    carried: Vec<(Value, Value)>,
+}
+
+#[derive(Debug)]
+pub(crate) struct Finished {
+    pub promise: Value,
+    pub outcome: Result<Portable, Failure>,
+    pub carried: Vec<(Value, Value)>,
 }
 
 impl Heap {
@@ -24,6 +32,15 @@ impl Heap {
     pub fn background(
         &mut self,
         name: &str,
+        work: impl FnOnce() -> Result<Portable, Failure> + Send + 'static,
+    ) -> Result<Value, Error> {
+        self.background_carrying(name, &[], work)
+    }
+
+    pub fn background_carrying(
+        &mut self,
+        name: &str,
+        carried: &[(&str, Value)],
         work: impl FnOnce() -> Result<Portable, Failure> + Send + 'static,
     ) -> Result<Value, Error> {
         let promise = self.promise(Promise::Pending { awaited: false })?;
@@ -42,6 +59,10 @@ impl Heap {
             promise,
             outcome,
             thread,
+            carried: carried
+                .iter()
+                .map(|(key, value)| (Value::keyword(key), *value))
+                .collect(),
         });
         Ok(promise)
     }
@@ -59,11 +80,13 @@ impl Heap {
         })
     }
 
-    pub(crate) fn job_promises(&self) -> impl Iterator<Item = Value> + '_ {
-        self.jobs.iter().map(|job| job.promise)
+    pub(crate) fn job_roots(&self) -> impl Iterator<Item = Value> + '_ {
+        self.jobs.iter().flat_map(|job| {
+            std::iter::once(job.promise).chain(job.carried.iter().map(|(_, value)| *value))
+        })
     }
 
-    pub(crate) fn finished_jobs(&mut self) -> Vec<(Value, Result<Portable, Failure>)> {
+    pub(crate) fn finished_jobs(&mut self) -> Vec<Finished> {
         let mut finished = Vec::new();
         let mut index = 0;
         while index < self.jobs.len() {
@@ -86,7 +109,11 @@ impl Heap {
                 }
             };
             let job = self.jobs.remove(index);
-            finished.push((job.promise, outcome));
+            finished.push(Finished {
+                promise: job.promise,
+                outcome,
+                carried: job.carried,
+            });
         }
         finished
     }
