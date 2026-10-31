@@ -36,7 +36,20 @@ pub const BUNDLED: &[Bundle] = &[
     RODEO,
     BELLOW,
     WSL,
+    PIXI,
 ];
+
+const PIXI: Bundle = Bundle {
+    name: "pixi",
+    files: &[
+        ("plugin.ox", include_str!("../../../plugins/pixi/plugin.ox")),
+        ("pixi.ox", include_str!("../../../plugins/pixi/pixi.ox")),
+        (
+            "project.ox",
+            include_str!("../../../plugins/pixi/project.ox"),
+        ),
+    ],
+};
 
 const WSL: Bundle = Bundle {
     name: "wsl",
@@ -689,6 +702,9 @@ mod pdf;
 
 #[cfg(test)]
 mod rodeo;
+
+#[cfg(test)]
+mod pixi;
 
 #[cfg(test)]
 mod wsl;

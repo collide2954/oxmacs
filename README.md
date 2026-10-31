@@ -60,10 +60,11 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.0 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.96 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.97 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.10 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.5 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
+| `pixi` | 0.1.0 | opt-in | pixi projects as environments: programs started in one run in its pixi environment, with its tasks, packages and environments on *pixi* |
 | `processes` | 0.1.6 | on | List the processes oxmacs runs, with their usage |
 | `profiler` | 0.1.4 | on | Find where the Ox code in oxmacs spends its time |
 | `python` | 0.1.0 | opt-in | Python with highlighting, indentation and the basedpyright, pyright or pylsp language server |
