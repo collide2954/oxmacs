@@ -266,6 +266,10 @@ pub fn install(isolate: &mut Isolate) {
             let label = format!("ox process/run {}", run.program);
             heap.background(&label, move || execute(&run))
         });
+    install_environment(isolate);
+}
+
+fn install_environment(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "env")
         .arity(1, Some(1))
