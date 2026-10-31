@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{self, Path, PathBuf};
 
+use oxmacs_files::wsl;
+
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
 use crate::editor::{Choice, Editor, Event};
@@ -248,11 +250,27 @@ impl Editor {
     }
 
     fn resolve_path(&self, input: &str) -> PathBuf {
-        let path = paths::expand(input, self.home.as_deref());
+        if cfg!(windows)
+            && let Some(place) = wsl::named(input)
+        {
+            return wsl::share(&place.distro, &place.path);
+        }
+        let directory = self.default_directory();
+        let path = paths::expand(input, self.home_for(&directory, input).as_deref());
         if path.is_absolute() {
             path
         } else {
-            self.default_directory().join(path)
+            directory.join(path)
+        }
+    }
+
+    fn home_for(&self, directory: &Path, input: &str) -> Option<PathBuf> {
+        match wsl::place(directory)
+            .filter(|_| input.starts_with('~') && oxmacs_process::inside_wsl())
+        {
+            Some(place) => oxmacs_process::home_inside(&place.distro)
+                .map(|home| wsl::share(&place.distro, &home)),
+            None => self.home.clone(),
         }
     }
 
@@ -568,6 +586,48 @@ mod tests {
         assert_eq!(minibuffer_input(&editor), format!("{}{SEP}", sub.display()));
         assert_eq!(labels(&editor), ["c.txt"]);
         assert_eq!(editor.buffer_names(), ["*scratch*"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn linux_paths_name_files_in_the_distro_holding_the_default_directory() {
+        use crate::files::paths;
+        use oxmacs_files::wsl;
+
+        let mut editor = Editor::new();
+        editor.set_working_directory(PathBuf::from(r"\\wsl.localhost\Fedora\home\ana\x"));
+
+        assert_eq!(
+            editor.resolve_path("/etc/hosts"),
+            wsl::share("Fedora", "/etc/hosts")
+        );
+        assert_eq!(
+            editor.resolve_path("wsl:Ubuntu:/srv/app"),
+            wsl::share("Ubuntu", "/srv/app")
+        );
+        assert_eq!(
+            paths::restart(r"\\wsl.localhost\Fedora\home\ana\x\/etc"),
+            Some("/etc")
+        );
+    }
+
+    #[test]
+    #[ignore = "asks the WSL distro named by OXMACS_WSL_DISTRO for its home"]
+    fn a_tilde_in_a_distro_folder_is_the_home_there() {
+        use oxmacs_files::wsl;
+
+        let Ok(distro) = std::env::var("OXMACS_WSL_DISTRO") else {
+            return;
+        };
+        oxmacs_process::run_inside_wsl(true);
+        let mut editor = Editor::new();
+        editor.set_working_directory(wsl::share(&distro, "/tmp"));
+        let home = oxmacs_process::home_inside(&distro).unwrap();
+
+        assert_eq!(
+            editor.resolve_path("~/notes.txt"),
+            wsl::share(&distro, &format!("{home}/notes.txt"))
+        );
     }
 
     fn find_file_workspace() -> (tempfile::TempDir, Editor) {

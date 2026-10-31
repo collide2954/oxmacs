@@ -13,7 +13,7 @@ mod lookup;
 #[cfg_attr(windows, path = "windows.rs")]
 mod tree;
 
-pub use launch::{Launch, run_inside_wsl};
+pub use launch::{Launch, home_inside, inside_wsl, run_inside_wsl};
 pub use lookup::{find, which};
 
 const POLL: Duration = Duration::from_millis(20);

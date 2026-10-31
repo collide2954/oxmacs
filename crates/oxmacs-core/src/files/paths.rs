@@ -15,7 +15,7 @@ fn starts_anew(rest: &str) -> bool {
         (Some(first), _) if is_separator(first) => true,
         (Some('~'), Some(next)) => is_separator(next),
         (Some(letter), Some(':')) => cfg!(windows) && letter.is_ascii_alphabetic(),
-        _ => false,
+        _ => cfg!(windows) && rest.starts_with("wsl:"),
     }
 }
 
@@ -103,6 +103,10 @@ mod tests {
         if cfg!(windows) {
             assert_eq!(restart(r"C:\Users\ana\D:"), Some("D:"));
             assert_eq!(restart(r"C:\Users\ana\D:\x"), Some(r"D:\x"));
+            assert_eq!(
+                restart(r"C:\Users\ana\wsl:Fedora:/etc"),
+                Some("wsl:Fedora:/etc")
+            );
         }
     }
 

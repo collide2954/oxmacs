@@ -1,16 +1,48 @@
+use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use oxmacs_files::wsl::{self, Place};
 
 static INSIDE_WSL: AtomicBool = AtomicBool::new(false);
 
+static HOMES: Mutex<BTreeMap<String, String>> = Mutex::new(BTreeMap::new());
+
 const LOGIN: &str = r#"exec "${SHELL:-/bin/sh}" -l -c 'exec "$@"' sh "$@""#;
 
 pub fn run_inside_wsl(on: bool) {
     INSIDE_WSL.store(on, Ordering::Relaxed);
+}
+
+pub fn inside_wsl() -> bool {
+    INSIDE_WSL.load(Ordering::Relaxed)
+}
+
+pub fn home_inside(distro: &str) -> Option<String> {
+    let mut homes = HOMES.lock().ok()?;
+    if let Some(home) = homes.get(distro) {
+        return Some(home.clone());
+    }
+    let output = crate::run(
+        Command::new("wsl.exe").args([
+            "-d",
+            distro,
+            "--exec",
+            "/bin/sh",
+            "-c",
+            r#"printf %s "$HOME""#,
+        ]),
+        None,
+    )
+    .ok()?;
+    let home = String::from_utf8(output.stdout)
+        .ok()
+        .filter(|home| output.status.success() && home.starts_with('/'))?;
+    homes.insert(distro.to_owned(), home.clone());
+    Some(home)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -62,7 +94,7 @@ impl Launch {
     }
 
     pub fn distro(&self) -> Option<Place> {
-        self.distro_with(INSIDE_WSL.load(Ordering::Relaxed))
+        self.distro_with(inside_wsl())
     }
 
     fn distro_with(&self, inside_wsl: bool) -> Option<Place> {
@@ -72,7 +104,7 @@ impl Launch {
     }
 
     pub fn command(&self) -> Command {
-        self.command_with(INSIDE_WSL.load(Ordering::Relaxed))
+        self.command_with(inside_wsl())
     }
 
     fn command_with(&self, inside_wsl: bool) -> Command {
@@ -243,5 +275,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(String::from_utf8_lossy(&output.stdout), "/tmp\nhello");
+        let home = home_inside(&distro).unwrap();
+        assert!(home.starts_with('/'), "{home}");
+        assert_eq!(home_inside(&distro), Some(home));
     }
 }
