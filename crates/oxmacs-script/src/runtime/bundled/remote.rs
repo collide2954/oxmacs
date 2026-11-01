@@ -166,7 +166,10 @@ fn a_remote_file_that_is_not_utf8_is_refused_and_left_as_it_is() {
     assert_eq!(editor.buffer().name(), browser);
     let shown = editor.message().unwrap_or_default().to_owned();
     assert!(shown.contains("not valid UTF-8"), "{shown}");
-    assert_eq!(fs::read(far.path().join("latin.txt")).unwrap(), b"caf\xE9\n");
+    assert_eq!(
+        fs::read(far.path().join("latin.txt")).unwrap(),
+        b"caf\xE9\n"
+    );
 }
 
 #[test]

@@ -283,7 +283,10 @@ fn a_books_file_that_cannot_be_read_is_left_as_it_is() {
     reader.open();
 
     let shown = reader.editor.message().unwrap_or_default().to_owned();
-    assert!(shown.starts_with("Couldn't open sample.epub: Can't read"), "{shown}");
+    assert!(
+        shown.starts_with("Couldn't open sample.epub: Can't read"),
+        "{shown}"
+    );
     assert!(shown.contains("books.json"), "{shown}");
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
 
