@@ -109,27 +109,7 @@ fn marker(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     heap.shared("marker", Arc::new(placed)).map_err(Error::from)
 }
 
-pub fn install(isolate: &mut Isolate) {
-    isolate
-        .native("ox", "point")
-        .arity(0, Some(0))
-        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.point())));
-    isolate
-        .native("ox", "set-point")
-        .arity(1, Some(1))
-        .host::<Editor>(|heap, editor, arguments| {
-            let at = position(heap, "set-point", arguments[0])?;
-            current_buffer_mut(heap, editor)?.set_point(at);
-            Ok(Value::Nil)
-        });
-    isolate
-        .native("ox", "buffer-size")
-        .arity(0, Some(0))
-        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.len_chars())));
-    isolate
-        .native("ox", "insert")
-        .arity(1, Some(1))
-        .host::<Editor>(insert);
+fn install_suggestions(isolate: &mut Isolate) {
     isolate
         .native("ox", "suggest")
         .arity(1, Some(1))
@@ -154,6 +134,30 @@ pub fn install(isolate: &mut Isolate) {
             Some(shown) => text(heap, shown),
             None => Ok(Value::Nil),
         });
+}
+
+pub fn install(isolate: &mut Isolate) {
+    isolate
+        .native("ox", "point")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.point())));
+    isolate
+        .native("ox", "set-point")
+        .arity(1, Some(1))
+        .host::<Editor>(|heap, editor, arguments| {
+            let at = position(heap, "set-point", arguments[0])?;
+            current_buffer_mut(heap, editor)?.set_point(at);
+            Ok(Value::Nil)
+        });
+    isolate
+        .native("ox", "buffer-size")
+        .arity(0, Some(0))
+        .host::<Editor>(|heap, editor, _| Ok(int(current_buffer(heap, editor)?.len_chars())));
+    isolate
+        .native("ox", "insert")
+        .arity(1, Some(1))
+        .host::<Editor>(insert);
+    install_suggestions(isolate);
     isolate
         .native("ox", "delete")
         .arity(2, Some(2))

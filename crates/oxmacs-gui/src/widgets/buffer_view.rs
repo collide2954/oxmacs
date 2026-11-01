@@ -697,44 +697,16 @@ where
             }
             for (row, rectangle) in &rows {
                 if let Some(line) = line_of(row.line) {
-                    match ghost.as_ref().filter(|ghost| on_ghost(ghost, row)) {
-                        Some(ghost) => self.draw_ghost_row(
-                            renderer,
-                            line,
-                            row,
-                            ghost,
-                            *rectangle,
-                            cell.width,
-                            text_bounds,
-                        ),
-                        None => {
-                            self.draw_row_text(
-                                renderer,
-                                line,
-                                row,
-                                *rectangle,
-                                cell.width,
-                                text_bounds,
-                            );
-                        }
-                    }
-                    for (columns, severity) in &line.diagnostics {
-                        if let Some(columns) =
-                            display::row_highlight(*columns, row.column, row.end_column)
-                        {
-                            let color = match severity {
-                                Severity::Error => self.faces.error,
-                                Severity::Warning => self.faces.warning,
-                            };
-                            draw_wave(
-                                renderer,
-                                columns,
-                                *rectangle,
-                                cell.width,
-                                style::color(color),
-                            );
-                        }
-                    }
+                    let ghost = ghost.as_ref().filter(|ghost| on_ghost(ghost, row));
+                    self.draw_line_text(
+                        renderer,
+                        line,
+                        row,
+                        ghost,
+                        *rectangle,
+                        cell.width,
+                        text_bounds,
+                    );
                 }
             }
         });
@@ -882,6 +854,45 @@ impl<'a, Message> BufferView<'a, Message> {
             .into_iter()
             .find(|row| on_ghost(&ghost, row))?;
         Some((usize::try_from(row.offset).ok()?, ghost.lines.len() - 1))
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "a row's text is drawn with what lies on it"
+    )]
+    fn draw_line_text<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        line: &DrawnLine<'_>,
+        row: &ScreenRow,
+        ghost: Option<&Ghost>,
+        rectangle: Rectangle,
+        cell_width: f32,
+        bounds: Rectangle,
+    ) where
+        Renderer: text::Renderer<Font = Font>,
+    {
+        match ghost {
+            Some(ghost) => {
+                self.draw_ghost_row(renderer, line, row, ghost, rectangle, cell_width, bounds);
+            }
+            None => self.draw_row_text(renderer, line, row, rectangle, cell_width, bounds),
+        }
+        for (columns, severity) in &line.diagnostics {
+            if let Some(columns) = display::row_highlight(*columns, row.column, row.end_column) {
+                let color = match severity {
+                    Severity::Error => self.faces.error,
+                    Severity::Warning => self.faces.warning,
+                };
+                draw_wave(
+                    renderer,
+                    columns,
+                    rectangle,
+                    cell_width,
+                    style::color(color),
+                );
+            }
+        }
     }
 
     fn ghost_color(&self) -> Color {

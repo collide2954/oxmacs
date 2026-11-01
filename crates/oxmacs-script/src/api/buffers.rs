@@ -716,16 +716,13 @@ fn set_lines(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Resul
         Value::Nil => None,
         given => Some(number(heap, given)?),
     };
-    match from {
-        Some(from) => {
-            let rendered = kept_above(editor, id, from, render(&shown));
-            fill(editor, id, rendered, line);
-            lines::keep_from(heap, editor, id, from, &shown);
-        }
-        None => {
-            fill(editor, id, render(&shown), line);
-            lines::keep(heap, editor, id, &shown);
-        }
+    if let Some(from) = from {
+        let rendered = kept_above(editor, id, from, render(&shown));
+        fill(editor, id, rendered, line);
+        lines::keep_from(heap, editor, id, from, &shown);
+    } else {
+        fill(editor, id, render(&shown), line);
+        lines::keep(heap, editor, id, &shown);
     }
     if let Some(unsaved) = unsaved
         && let Some((_, view)) = editor.special_buffer_mut::<LinesBuffer>(id)
