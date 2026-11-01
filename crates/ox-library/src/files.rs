@@ -22,7 +22,14 @@ pub fn private_folder() -> io::Result<PathBuf> {
     if let Some(folder) = held.as_ref().filter(|folder| folder.path().is_dir()) {
         return Ok(folder.path().to_owned());
     }
-    let made = tempfile::Builder::new().prefix("oxmacs-").tempdir()?;
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("oxmacs-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        builder.permissions(fs::Permissions::from_mode(0o700));
+    }
+    let made = builder.tempdir()?;
     let path = made.path().to_owned();
     *held = Some(made);
     Ok(path)
