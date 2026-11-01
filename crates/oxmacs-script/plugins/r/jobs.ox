@@ -11,7 +11,7 @@
 (def (rscript)
   (when-let [program (session/find-r)]
     (let [script (language/rscript program)]
-      (if (await (file/exists? script))
+      (if (file/exists? script)
         script
         (do (message $"Rscript was not found beside {program}") nil)))))
 
@@ -25,9 +25,9 @@
       (message "Run a saved R script as a job"))))
 
 (def (app? folder)
-  (or (await (file/exists? (path/join folder "app.R")))
-      (and (await (file/exists? (path/join folder "ui.R")))
-           (await (file/exists? (path/join folder "server.R"))))))
+  (or (file/exists? (path/join folder "app.R"))
+      (and (file/exists? (path/join folder "ui.R"))
+           (file/exists? (path/join folder "server.R")))))
 
 (def (app-folder)
   (let [here (when-let [file (buffer-file)] (path/parent file))

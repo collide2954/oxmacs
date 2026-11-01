@@ -62,7 +62,7 @@
 
 (def (load name path key)
   (spawn
-    (try (let [picture (await (image/open path))]
+    (try (let [picture (image/open path)]
            (change! name
                     (fn [plots]
                       (assoc plots key (if (= key :thumbs) (assoc (or plots.thumbs {}) path picture) {path picture})))))
@@ -249,7 +249,7 @@
 (defcommand r-plot-save "Save the shown R plot to a file"
   (when-let [name (here)]
     (when-let [[index _ _] (shown-plot name "save")]
-      (let [path (await (prompt-path "Save plot as: " :initial $"plot-{index}.png"))]
+      (let [path (prompt-path "Save plot as: " :initial $"plot-{index}.png")]
         (when-let [[_ id [width height]] (shown-plot name "save")]
           (session/request (get (plots-of name) :session)
                            $"getOption(\"oxmacs\")$plot_save({id}L, {(session/r-string path)}, {width}L, {height}L)"))))))

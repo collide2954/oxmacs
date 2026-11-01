@@ -144,25 +144,25 @@
 
 (defcommand tab-rename "Name the current tab"
   (let [s @state
-        name (await (prompt "Rename tab to: "
-                            :initial (strip/label (nth s.tabs s.current) (buffer-name))))]
+        name (prompt "Rename tab to: "
+                     :initial (strip/label (nth s.tabs s.current) (buffer-name)))]
     (swap! state (fn [s] (assoc-in s [:tabs s.current :name] (if (string/blank? name) nil name))))
     (draw)))
 
 (defcommand tab-switch "Go to a tab by its name"
   (let [names (labels)
-        picked (await (prompt "Switch to tab: " :choices names))
+        picked (prompt "Switch to tab: " :choices names)
         at (first (keep (fn [at] (when (= (nth names at) picked) at)) (range (count names))))]
     (if at (select at) (message $"No tab is called {picked}"))))
 
 (defcommand find-file-other-tab "Visit a file in a new tab"
-  (let [path (await (prompt-path "Find file in new tab: "))]
+  (let [path (prompt-path "Find file in new tab: ")]
     (new-tab)
     (open-file path)
     (draw)))
 
 (defcommand switch-to-buffer-other-tab "Show a buffer in a new tab"
-  (let [name (await (prompt "Switch to buffer in new tab: " :choices (buffer-list)))]
+  (let [name (prompt "Switch to buffer in new tab: " :choices (buffer-list))]
     (new-tab)
     (if (buffer-exists? name)
       (switch-to-buffer name)

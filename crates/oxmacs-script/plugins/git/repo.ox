@@ -25,7 +25,7 @@
   (output (await (run root args))))
 
 (def (git-with root args input)
-  (output (await (process/run "git" (vec (concat base args)) :cwd root :input input))))
+  (output (process/run "git" (vec (concat base args)) :cwd root :input input)))
 
 (def (climb directory cdup)
   (reduce (fn [dir part] (if (= part "..") (path/parent dir) dir))
@@ -139,10 +139,10 @@
     nil
     (try
       (let [full (path/join root path)
-            found (await (file/metadata full))]
+            found (file/metadata full)]
         (if (> (or found.size 0) large)
           :large
-          [(count (string/lines (await (file/read full)))) 0]))
+          [(count (string/lines (file/read full))) 0]))
       (catch error _e :binary))))
 
 (def (untracked-counts root paths)
@@ -193,7 +193,7 @@
     [(= section :untracked)
      (if (string/ends-with? change.path "/")
        []
-       (diff/whole-file (await (file/read (path/join root change.path)))))]
+       (diff/whole-file (file/read (path/join root change.path))))]
     [(= section :unstaged)
      (diff/parse (git root ["diff" "--no-ext-diff" "--" change.path]))]
     [else

@@ -30,8 +30,8 @@
 (def (ssh-hosts)
   "The hosts named in ~/.ssh/config."
   (let [file (path/join (path/home) ".ssh" "config")]
-    (if (await (file/exists? file))
-      (parse-ssh-config (await (file/read file)))
+    (if (file/exists? file)
+      (parse-ssh-config (file/read file))
       [])))
 
 (defonce sources (atom []))

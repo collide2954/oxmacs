@@ -220,7 +220,7 @@
       (if (and row (some? row.path))
         (let [target (path/join state.root row.path)
               number (line-number state row)]
-          (if (await (file/exists? target))
+          (if (file/exists? target)
             (do
               (open-file target)
               (when number (goto-line (- number 1))))
@@ -331,13 +331,13 @@
 
 (def (throw-away git paths)
   (let [trash (get (settings) :delete-to-trash)]
-    (when (await (yes-or-no (if trash
-                              $"Move {(describe paths)} to the trash?"
-                              $"Delete {(describe paths)}?")))
+    (when (yes-or-no (if trash
+                       $"Move {(describe paths)} to the trash?"
+                       $"Delete {(describe paths)}?"))
       (deactivate-mark)
       (map (fn [path]
              (let [full (path/join (get @git :root) path)]
-               (await (delete-path full))))
+               (delete-path full)))
            paths)
       (refresh git))))
 
@@ -350,13 +350,13 @@
       [(= section :untracked)
        (throw-away git (if (= chosen.kind :section) state.snapshot.untracked chosen.paths))]
       [(= chosen.kind :hunk)
-       (when (await (yes-or-no (if chosen.lines "Discard the selected lines?" "Discard this hunk?")))
+       (when (yes-or-no (if chosen.lines "Discard the selected lines?" "Discard this hunk?"))
          (apply-hunk git chosen true ["apply" "--reverse" "-"]))]
       [(= chosen.kind :section)
-       (when (await (yes-or-no "Discard all unstaged changes?"))
+       (when (yes-or-no "Discard all unstaged changes?")
          (change git ["restore" "--" "."]))]
       [else
-       (when (await (yes-or-no $"Discard changes to {(describe chosen.paths)}?"))
+       (when (yes-or-no $"Discard changes to {(describe chosen.paths)}?")
          (change git (vec (concat ["restore" "--"] chosen.paths))))])))
 
 (defcommand git-discard "Discard the changes in the file, section, hunk or lines at point"
@@ -410,7 +410,7 @@
                                  [else []])))
              history (messages state.root)]
          (when (buffer-exists? "COMMIT_EDITMSG") (close-buffer "COMMIT_EDITMSG"))
-         (await (file/write file (commit/template text snapshot)))
+         (file/write file (commit/template text snapshot))
          (open-file file)
          (set-buffer-value! :git-commit {root: state.root git: git args: args history: history recalled: nil})
          (goto-line 0)

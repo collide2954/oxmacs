@@ -279,7 +279,7 @@
 
 (defcommand r-table-filter "Keep the rows of the table where an R expression is true"
   (when-let [view (table-here)]
-    (let [typed (await (prompt $"Keep the rows of {view.object} where (R): " :initial view.table.filter))]
+    (let [typed (prompt $"Keep the rows of {view.object} where (R): " :initial view.table.filter)]
       (ask-table view.session view.object (assoc (current-view view) :filter (string/trim typed) :offset 0)))))
 
 (def (turn-page forward)

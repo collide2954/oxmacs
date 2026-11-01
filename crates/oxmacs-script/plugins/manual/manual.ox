@@ -14,7 +14,7 @@
 
 (def (reference)
   (or (get @state :reference)
-      (let [found (await (ox-reference))]
+      (let [found (ox-reference)]
         (swap! state assoc :reference found)
         found)))
 
@@ -195,7 +195,7 @@
         (show! spot)))))
 
 (defcommand ox-manual-search "Search the manual"
-  (let [term (string/trim (await (prompt "Search the manual: ")))]
+  (let [term (string/trim (prompt "Search the manual: "))]
     (unless (= term "")
       (show! {id: (str "search:" (string/url-encode term))} :from (remember-here)))))
 
@@ -206,7 +206,7 @@
                                   (assoc found (qualified docs.module entry.name) {module: docs.module name: entry.name}))
                                 found docs.entries))
                       {} modules)
-        chosen (await (prompt "Look up: " :choices (reduce (fn [notes [label place]] (assoc notes label place.module)) {} (entries found))))]
+        chosen (prompt "Look up: " :choices (reduce (fn [notes [label place]] (assoc notes label place.module)) {} (entries found)))]
     (if-let [place (get found chosen)]
       (show! {id: (str "ref:" place.module) anchor: place.name} :from (remember-here))
       (message $"Nothing in the manual is called {chosen}"))))

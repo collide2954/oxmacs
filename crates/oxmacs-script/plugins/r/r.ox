@@ -126,7 +126,7 @@
 
 (defcommand r-help "Show R's help on a topic in *R help*"
   (let [default (help/symbol-at-point)
-        typed (string/trim (await (prompt (if default $"R help on (default {default}): " "R help on: "))))
+        typed (string/trim (prompt (if default $"R help on (default {default}): " "R help on: ")))
         topic (if (string/blank? typed) default typed)]
     (when topic
       (pane/ask-help topic))))

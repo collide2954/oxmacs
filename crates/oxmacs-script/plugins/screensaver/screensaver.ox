@@ -9,7 +9,7 @@
       kind)))
 
 (defcommand screensaver-preview "Show a screensaver until the next key or click"
-  (let [answer (await (prompt "Screensaver: " :choices savers/notes))
+  (let [answer (prompt "Screensaver: " :choices savers/notes)
         kind (find (fn [known] (= (name known) answer)) (keys savers/notes))]
     (if kind
       (savers/start kind)

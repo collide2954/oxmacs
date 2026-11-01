@@ -103,10 +103,10 @@
   (show-workbench))
 
 (defcommand bellow-new "Write a small song to start from, and visit it"
-  (let [path (await (prompt-path "New song file: " :initial "song.ox"))]
-    (if (await (file/exists? path))
+  (let [path (prompt-path "New song file: " :initial "song.ox")]
+    (if (file/exists? path)
       (message $"{path} already exists; pick another name")
-      (do (await (file/write path starter))
+      (do (file/write path starter)
         (open-file path)))))
 
 (test "the starter song reads as Ox and loops itself"

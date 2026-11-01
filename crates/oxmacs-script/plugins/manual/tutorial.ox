@@ -134,16 +134,16 @@ You have finished the tutorial.
 (def (moved-in name)
   (let [file (path/join (folder) name)
         older (when-let [home (oxmacs-home)] (path/join home name))]
-    (when (and older (not= older file) (not (await (file/exists? file))) (await (file/exists? older)))
-      (await (file/make-dir (folder)))
-      (await (file/rename older file)))
+    (when (and older (not= older file) (not (file/exists? file)) (file/exists? older))
+      (file/make-dir (folder))
+      (file/rename older file))
     file))
 
 (def (open)
   "Opens the reader's own copy of the tutorial at the top, making it the first time."
   (let [copy (moved-in "tutorial.txt")]
-    (unless (await (file/exists? copy))
-      (await (file/make-dir (folder)))
-      (await (file/write copy text)))
+    (unless (file/exists? copy)
+      (file/make-dir (folder))
+      (file/write copy text))
     (open-file copy)
     (goto-line 0 0)))

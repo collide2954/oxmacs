@@ -17,7 +17,7 @@
 (def (remembered)
   (when (nil? @saved)
     (reset! saved (or (when-let [file (places-file)]
-                        (maybe (json/read (await (file/read file)))))
+                        (maybe (json/read (file/read file))))
                       [])))
   @saved)
 
@@ -32,8 +32,8 @@
         others (remove (fn [old] (= old.path book.path)) (remembered))]
     (reset! saved (vec (cons kept others)))
     (when-let [file (places-file)]
-      (await (file/make-dir (path/parent file)))
-      (await (file/write file (json/write @saved))))))
+      (file/make-dir (path/parent file))
+      (file/write file (json/write @saved)))))
 
 (def (current)
   (buffer-value :epub))
@@ -47,14 +47,14 @@
       [else ""])))
 
 (def (decoded book source)
-  (maybe (await (image/decode (await (zip/read-base64 book.path source))))))
+  (maybe (image/decode (zip/read-base64 book.path source))))
 
 (def (load-chapter book index)
   (let [entry (nth book.chapters index)]
     (if (map? entry)
       (let [cover (decoded book entry.cover)]
         {blocks: (if cover [{kind: :image image: cover alt: "Cover"}] []) ids: {} sources: []})
-      (let [read (html/blocks (xml/parse (await (zip/read book.path entry)) :html true) entry)
+      (let [read (html/blocks (xml/parse (zip/read book.path entry) :html true) entry)
             blocks (vec (map (fn [block]
                                (if (= block.kind :image)
                                  (if-let [image (decoded book block.src)]
@@ -161,11 +161,11 @@
                           :items (fn [] (contents-items state)))]
     (with-buffer buffer (set-buffer-value! :epub state))
     (try
-      (let [rootfile (package/rootfile (await (zip/read place "META-INF/container.xml")))
-            found (package/package (await (zip/read place rootfile)) rootfile)
+      (let [rootfile (package/rootfile (zip/read place "META-INF/container.xml"))
+            found (package/package (zip/read place rootfile) rootfile)
             toc (cond
-                  [found.nav (package/toc-from-nav (await (zip/read place found.nav)) found.nav)]
-                  [found.ncx (package/toc-from-ncx (await (zip/read place found.ncx)) found.ncx)]
+                  [found.nav (package/toc-from-nav (zip/read place found.nav) found.nav)]
+                  [found.ncx (package/toc-from-ncx (zip/read place found.ncx) found.ncx)]
                   [else []])
             kept (remembered-book place)
             book {path: place title: (or found.title (path/stem place)) creator: found.creator
@@ -237,7 +237,7 @@
                       blocks (or (get book.blocks index)
                                  (if (map? entry)
                                    []
-                                   (get (html/blocks (xml/parse (await (zip/read book.path entry)) :html true) entry) :blocks)))]
+                                   (get (html/blocks (xml/parse (zip/read book.path entry) :html true) entry) :blocks)))]
                   (vec (map reading/block-text blocks))))
               (range total)))))
 
@@ -255,7 +255,7 @@
 (defcommand epub-search "Search the whole book, showing every match"
   (with-book
     (fn [state book]
-      (let [query (await (prompt "Search book: " :initial (or book.query "")))]
+      (let [query (prompt "Search book: " :initial (or book.query ""))]
         (when (not (string/blank? query))
           (let [texts (or book.texts (chapter-texts book))
                 matches (reading/find-matches texts query)]
@@ -292,7 +292,7 @@
   (with-book
     (fn [state book]
       (if book.selection
-        (mark state (await (prompt "Note: ")))
+        (mark state (prompt "Note: "))
         (message "Drag over some text first")))))
 
 (defcommand epub-copy "Copy the text dragged over"
@@ -347,7 +347,7 @@
     (if (empty? kept)
       (message "No books read yet")
       (let [labels (map (fn [book] $"{book.title} ({(path/name book.path)})") kept)
-            picked (await (prompt "Open book: " :choices labels))
+            picked (prompt "Open book: " :choices labels)
             at (first (keep (fn [at] (when (= (nth labels at) picked) at)) (range (count labels))))]
         (when at (open-file (get (nth kept at) :path)))))))
 
@@ -366,7 +366,7 @@
     (message $"{(count (get @shelf :books))} books in {(path/abbreviate folder)}")))
 
 (defcommand epub-library "Show the books in a folder as covers"
-  (let [folder (or (setting :library) (await (prompt-path "Library folder: " :directories true)))]
+  (let [folder (or (setting :library) (prompt-path "Library folder: " :directories true))]
     (fill-shelf (path/expand folder))))
 
 (defcommand epub-library-refresh "Read the library folder again"

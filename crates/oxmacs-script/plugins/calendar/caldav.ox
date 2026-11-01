@@ -56,7 +56,7 @@
     {user: nil password: nil}))
 
 (def (request credentials method url {headers {} body nil})
-  (await (http/request method url :headers headers :body body :user credentials.user :password credentials.password)))
+  (http/request method url :headers headers :body body :user credentials.user :password credentials.password))
 
 (def (resource sync href)
   (find (fn [known] (= known.href href)) sync.resources))
@@ -82,7 +82,7 @@
                      (if (or (< response.status 300) (= response.status 404))
                        [(forget sync href) problems]
                        [sync (conj problems (str "couldn't delete " change.file " (" response.status ")"))]))
-                   (let [body (await (file/read (path/join place change.file)))
+                   (let [body (file/read (path/join place change.file))
                          response (request credentials :put url
                                            :headers (merge {"Content-Type" "text/calendar; charset=utf-8"}
                                                            (if known.etag {"If-Match" known.etag} {"If-None-Match" "*"}))
@@ -108,14 +108,14 @@
                               (if (and known (= known.etag item.etag) item.etag)
                                 sync
                                 (let [name (or (get known :file) (file-name item.href))]
-                                  (await (file/write (path/join place name) item.data))
+                                  (file/write (path/join place name) item.data)
                                   (remember sync item.href item.etag name)))))
                           sync found)
           gone (vec (remove (fn [known] (contains? seen known.href)) changed.resources))]
       (reduce (fn [sync known]
                 (let [file (path/join place known.file)]
-                  (when (await (file/exists? file))
-                    (await (file/trash file)))
+                  (when (file/exists? file)
+                    (file/trash file))
                   (forget sync known.href)))
               changed gone))))
 
@@ -123,7 +123,7 @@
   "Sends this calendar's local changes to its CalDAV server and brings in the server's, returning the problems met."
   (let [credentials (login calendar)
         place (store/calendar-folder calendar.name)]
-    (await (file/make-dir place))
+    (file/make-dir place)
     (let [[pushed problems] (push! calendar credentials (store/read-sync calendar.name))
           pulled (pull! calendar credentials pushed)]
       (store/write-sync! calendar.name pulled)

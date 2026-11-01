@@ -59,7 +59,7 @@
   "The wsl.exe WSL 2 is installed as, or nil; the one in Windows' own folder only offers to install WSL, so it is never run to find out."
   (when-let [programs (process/env "ProgramFiles")]
     (let [wsl (path/join programs "WSL" "wsl.exe")]
-      (when (await (file/exists? wsl)) wsl))))
+      (when (file/exists? wsl) wsl))))
 
 (def (detect)
   "What the wsl plugin can do on this computer, as situation tells it."

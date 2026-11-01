@@ -16,8 +16,8 @@
         entry (find mine? found)
         overridden (not= entry.saved entry.custom)
         entries (map (fn [entry] (assoc entry :changed (mine? entry))) found)]
-    (await (file/make-dir (path/parent file)))
-    (await (file/write file (written/text entries)))
+    (file/make-dir (path/parent file))
+    (file/write file (written/text entries))
     (unless (or unsaved overridden)
       (reload-init))
     overridden))

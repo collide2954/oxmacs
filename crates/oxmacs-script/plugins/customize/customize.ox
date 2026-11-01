@@ -67,7 +67,7 @@
 (def (ask entry)
   (let [now (form/effective entry)
         key (name entry.key)
-        answer (await (prompt $"{key}: " :initial (if (nil? now) "" (str now))))
+        answer (prompt $"{key}: " :initial (if (nil? now) "" (str now)))
         trimmed (string/trim answer)
         whole (= entry.kind :integer)]
     (cond ((and (= trimmed "") (or entry.unset entry.owner)) (change entry nil))
@@ -106,8 +106,8 @@
     (cond ((nil? file) (message "There is no oxmacs home folder to save custom.ox in"))
       ((not (some :changed all)) (message "(No changes need to be saved)"))
       (else
-       (await (file/make-dir (path/parent file)))
-       (await (file/write file (written/text all)))
+       (file/make-dir (path/parent file))
+       (file/write file (written/text all))
        (reload-init)
        (message $"Wrote {(path/abbreviate file)}")))))
 

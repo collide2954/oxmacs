@@ -27,18 +27,18 @@
   (when-let [root (folder)]
     (let [place (path/join root (safe network) (safe target))]
       (unless (contains? @made place)
-        (await (file/make-dir place))
+        (file/make-dir place)
         (swap! made conj place))
-      (await (file/append (path/join place (str (time/format message.time "%Y-%m-%d") ".log"))
-                          (str (entry-line message) "\n"))))))
+      (file/append (path/join place (str (time/format message.time "%Y-%m-%d") ".log"))
+                   (str (entry-line message) "\n")))))
 
 (def (dirs-in folder)
-  (if (await (file/exists? folder))
-    (vec (filter :dir (await (file/list folder))))
+  (if (file/exists? folder)
+    (vec (filter :dir (file/list folder)))
     []))
 
 (def (matches-in file query network target)
-  (let [lines (string/lines (await (file/read file.path)))
+  (let [lines (string/lines (file/read file.path))
         wanted (string/lower query)]
     (vec (keep (fn [[number line]]
                  (when (string/includes? (string/lower line) wanted)
@@ -52,7 +52,7 @@
                    (mapcat (fn [target]
                              (mapcat (fn [file] (matches-in file query network.name target.name))
                                      (sort-by :name (filter (fn [file] (string/ends-with? file.name ".log"))
-                                                            (await (file/list target.path))))))
+                                                            (file/list target.path)))))
                            (dirs-in network.path)))
                  (dirs-in root)))
     []))

@@ -35,7 +35,7 @@
         (find (fn [at] (assigns? (nth lines at) name false)) numbers))))
 
 (def (listing folder)
-  (try (sort-by (fn [entry] entry.path) (await (file/list folder)))
+  (try (sort-by (fn [entry] entry.path) (file/list folder))
     (catch error _e [])))
 
 (def (r-file? name)
@@ -58,7 +58,7 @@
 (def (first-definition files name at)
   (when (< at (count files))
     (let [path (nth files at)
-          text (try (await (file/read path)) (catch error _e nil))
+          text (try (file/read path) (catch error _e nil))
           found (when text (line text name))]
       (if found [path found] (first-definition files name (+ at 1))))))
 

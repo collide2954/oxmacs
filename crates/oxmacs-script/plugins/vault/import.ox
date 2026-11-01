@@ -44,7 +44,7 @@
             (cond (entry.dir (if (string/starts-with? entry.name ".") [] (gpg-files entry.path)))
               ((string/ends-with? entry.name ".gpg") [entry.path])
               (else [])))
-          (await (file/list folder))))
+          (file/list folder)))
 
 (def (labeled lines prefixes)
   (some (fn [line]
@@ -55,7 +55,7 @@
         lines))
 
 (def (pass-entry root file)
-  (let [done (await (process/run "gpg" ["--quiet" "--batch" "--decrypt" file]))]
+  (let [done (process/run "gpg" ["--quiet" "--batch" "--decrypt" file])]
     (when (= done.status 0)
       (let [lines (string/lines done.stdout)
             others (vec (rest lines))
@@ -75,4 +75,4 @@
 (def (keepass file password)
   "The entries of a KeePass database."
   (vec (map (fn [entry] (dissoc entry :group))
-            (await (keepass/read file password)))))
+            (keepass/read file password))))

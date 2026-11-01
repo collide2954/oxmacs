@@ -13,19 +13,19 @@
 
 (def (found folder)
   "The .epub files in folder and the folders just inside it, sorted by path."
-  (let [entries (await (file/list folder))
+  (let [entries (file/list folder)
         below (mapcat (fn [entry]
                         (if (and entry.dir (not entry.hidden))
-                          (filter epub? (or (maybe (await (file/list entry.path))) []))
+                          (filter epub? (or (maybe (file/list entry.path)) []))
                           []))
                       entries)]
     (sort (map :path (concat (filter epub? entries) below)))))
 
 (def (read-book place)
-  (let [rootfile (package/rootfile (await (zip/read place "META-INF/container.xml")))
-        found (package/package (await (zip/read place rootfile)) rootfile)
+  (let [rootfile (package/rootfile (zip/read place "META-INF/container.xml"))
+        found (package/package (zip/read place rootfile) rootfile)
         cover (when found.cover
-                (maybe (await (image/thumbnail (image/decode (await (zip/read-base64 place found.cover))) 400))))]
+                (maybe (image/thumbnail (image/decode (zip/read-base64 place found.cover)) 400)))]
     (assoc found :cover cover)))
 
 (def (card place kept)

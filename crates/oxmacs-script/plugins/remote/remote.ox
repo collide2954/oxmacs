@@ -96,8 +96,8 @@
 (def (open-remote! host remote {line nil})
   (let [local (ops/local-copy host remote)]
     (message (str "Fetching " remote "…"))
-    (await (file/make-dir (path/parent local)))
-    (await (file/write local (ops/read-text host remote)))
+    (file/make-dir (path/parent local))
+    (file/write local (ops/read-text host remote))
     (swap! opened assoc local {host: host remote: remote})
     (open-file local)
     (when line
@@ -125,7 +125,7 @@
 (defcommand remote-copy "Copy the remote file on this line to a local folder"
   (let [found (browser)
         entry (or (entry-here) (raise (error "No file on this line")))
-        folder (await (prompt-path (str "Copy " entry.name " to: ") :directories true))
+        folder (prompt-path (str "Copy " entry.name " to: ") :directories true)
         local (path/join folder entry.name)
         remote (ops/join-path found.dir entry.name)]
     (when (= entry.kind :dir)
@@ -138,7 +138,7 @@
 
 (defcommand remote-upload "Copy a local file into this remote folder"
   (let [found (browser)
-        local (await (prompt-path "Upload: "))
+        local (prompt-path "Upload: ")
         remote (ops/join-path found.dir (path/name local))]
     (message (str "Uploading " (path/name local) "…"))
     (ops/upload! found.host local remote)
@@ -148,7 +148,7 @@
 (defcommand remote-rename "Rename the remote file on this line"
   (let [found (browser)
         entry (or (entry-here) (raise (error "No file on this line")))
-        fresh (string/trim (await (prompt "Rename to: " :initial entry.name)))]
+        fresh (string/trim (prompt "Rename to: " :initial entry.name))]
     (ops/rename! found.host (ops/join-path found.dir entry.name) (ops/join-path found.dir fresh))
     (run-command 'remote-refresh)
     (message (str "Renamed " entry.name " to " fresh))))
@@ -156,20 +156,20 @@
 (defcommand remote-delete "Delete the remote file or folder on this line"
   (let [found (browser)
         entry (or (entry-here) (raise (error "No file on this line")))]
-    (when (await (yes-or-no (str "Delete " entry.name (if (= entry.kind :dir) " and everything in it" "") " on " found.host.name "? ")))
+    (when (yes-or-no (str "Delete " entry.name (if (= entry.kind :dir) " and everything in it" "") " on " found.host.name "? "))
       (ops/remove! found.host (ops/join-path found.dir entry.name) (= entry.kind :dir))
       (run-command 'remote-refresh)
       (message (str "Deleted " entry.name)))))
 
 (defcommand remote-make-dir "Make a folder in this remote folder"
   (let [found (browser)
-        wanted (string/trim (await (prompt "New folder: ")))]
+        wanted (string/trim (prompt "New folder: "))]
     (ops/make-dir! found.host (ops/join-path found.dir wanted))
     (run-command 'remote-refresh)))
 
 (defcommand remote-run "Run a command in this remote folder"
   (let [found (browser)
-        command (await (prompt (str "Run on " found.host.name ": ")))
+        command (prompt (str "Run on " found.host.name ": "))
         [program & arguments] (shell/command-of found.host)]
     (unless (ops/can-run? found.host)
       (raise (error (str found.host.name " has no shell to run commands in"))))
@@ -179,7 +179,7 @@
 
 (defcommand remote-search "Search the files below this remote folder"
   (let [found (browser)
-        pattern (await (prompt (str "Search " found.dir " for: ")))
+        pattern (prompt (str "Search " found.dir " for: "))
         results (ops/search found.host found.dir pattern)]
     (show-places search-buffer
                  (vec (map (fn [result] {file: result.path line: result.line text: result.text}) results))
@@ -205,10 +205,10 @@
     (message (str "Disconnected from " host.name))))
 
 (defcommand remote-add-host "Save a host to browse"
-  (let [name (string/trim (await (prompt "Name: ")))
-        protocol (await (prompt "Protocol: " :choices ["ssh" "sftp" "ftp"]))
-        address (string/trim (await (prompt "Address: ")))
-        user (string/trim (await (prompt "User (optional): ")))
+  (let [name (string/trim (prompt "Name: "))
+        protocol (prompt "Protocol: " :choices ["ssh" "sftp" "ftp"])
+        address (string/trim (prompt "Address: "))
+        user (string/trim (prompt "User (optional): "))
         host (merge {name: name protocol: (keyword protocol) address: address}
                     (if (= user "") {} {user: user}))
         others (vec (remove (fn [known] (= known.name name)) (setting :hosts)))]

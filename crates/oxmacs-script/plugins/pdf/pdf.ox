@@ -71,7 +71,7 @@
   (let [doc @state]
     (try
       (library)
-      (let [read (await (pdf/open doc.path))
+      (let [read (pdf/open doc.path)
             changed (and doc.revision (not (= doc.revision read.revision)))]
         (swap! state (fn [doc]
                        (assoc doc :pages read.pages :revision read.revision :title read.title
@@ -150,7 +150,7 @@
 (defcommand pdf-goto-page "Go to a page by its number"
   (with-doc
     (fn [state doc]
-      (let [answer (await (prompt $"Go to page (1-{doc.pages}): "))]
+      (let [answer (prompt $"Go to page (1-{doc.pages}): ")]
         (if-let [page (reading/page-number answer doc.pages)]
           (to-page state doc page)
           (message $"There is no page {answer}"))))))
@@ -202,10 +202,10 @@
 (defcommand pdf-search "Search the document, marking every match"
   (with-doc
     (fn [state doc]
-      (let [query (await (prompt "Search: " :initial (or doc.query "")))]
+      (let [query (prompt "Search: " :initial (or doc.query ""))]
         (if (string/blank? query)
           (swap! state assoc :query nil :matches nil :match nil)
-          (let [matches (await (pdf/search doc.path query))]
+          (let [matches (pdf/search doc.path query)]
             (swap! state assoc :query query :matches matches :match nil)
             (show-match state 1)))))))
 

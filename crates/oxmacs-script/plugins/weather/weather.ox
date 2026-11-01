@@ -12,7 +12,7 @@
 (defonce ticking (atom false))
 
 (def (fetch-json url)
-  (let [reply (await (http/get url))]
+  (let [reply (http/get url)]
     (if (= reply.status 200)
       reply.body
       (raise (error $"Open-Meteo replied {reply.status}")))))

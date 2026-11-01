@@ -38,7 +38,7 @@
 
 (def (refresh state)
   (let [shown @state
-        entries (await (file/list shown.directory :sort shown.order))]
+        entries (file/list shown.directory :sort shown.order)]
     (change state
             (fn [listing]
               (assoc listing :entries entries :marks (keep-marks listing.marks entries)))
@@ -72,7 +72,7 @@
     (place listing focus)))
 
 (def (visit directory focus order details)
-  (let [entries (await (file/list directory :sort order))]
+  (let [entries (file/list directory :sort order)]
     (show {directory: directory entries: entries order: order details: details marks: {}}
           (or focus (when-let [entry (first entries)] entry.name)))))
 
@@ -83,7 +83,7 @@
       (close-buffer old.buffer))))
 
 (defcommand dired "List a directory to manage its files"
-  (visit (await (prompt-path "Dired (directory): " :directories true)) nil :name true))
+  (visit (prompt-path "Dired (directory): " :directories true) nil :name true))
 
 (def (up-directory)
   (when-let [listing (current)]
@@ -181,8 +181,8 @@
         (message (if flagged "(No deletions requested)" "No file on this line"))
         (let [trash (get (settings) :delete-to-trash)
               names (map :name found)]
-          (when (await (yes-or-no $"{(if trash "Trash" "Delete")} {(describe names)}?"))
-            (map (fn [entry] (await (delete-path (path/join listing.directory entry.name)))) found)
+          (when (yes-or-no $"{(if trash "Trash" "Delete")} {(describe names)}?")
+            (map (fn [entry] (delete-path (path/join listing.directory entry.name))) found)
             (refresh-all)
             (message $"{(if trash "Trashed" "Deleted")} {(files (count found))}")))))))
 
@@ -199,9 +199,9 @@
                      [else $"{(if moving "Move" "Copy")} {(files (count found))} to: "])]
       (if (nil? question)
         (message "No file on this line")
-        (let [target (await (prompt-path question))
-              into (await (file/exists? target))
-              into (and into (get (await (file/metadata target)) :dir))]
+        (let [target (prompt-path question)
+              into (file/exists? target)
+              into (and into (get (file/metadata target) :dir))]
           (if (and (> (count found) 1) (not into))
             (message $"Target must be a directory: {(path/abbreviate target)}")
             (do
@@ -209,10 +209,10 @@
                      (let [from (path/join listing.directory entry.name)
                            to (if into (path/join target entry.name) target)]
                        (if moving
-                         (await (move-path from to))
-                         (when (or (not (await (file/exists? to)))
-                                   (await (yes-or-no $"{(path/abbreviate to)} exists; replace it? ")))
-                           (await (file/copy from to))))))
+                         (move-path from to)
+                         (when (or (not (file/exists? to))
+                                   (yes-or-no $"{(path/abbreviate to)} exists; replace it? "))
+                           (file/copy from to)))))
                    found)
               (refresh-all)
               (message $"{(if moving "Moved" "Copied")} {(files (count found))}"))))))))
@@ -222,11 +222,11 @@
 
 (defcommand dired-create-directory "Create a directory"
   (when-let [state (state-here)]
-    (let [target (await (prompt-path "Create directory: " :directories true))]
-      (if (await (file/exists? target))
+    (let [target (prompt-path "Create directory: " :directories true)]
+      (if (file/exists? target)
         (message $"{(path/abbreviate target)} already exists")
         (do
-          (await (file/make-dir target))
+          (file/make-dir target)
           (refresh state)
           (when (= (path/parent target) (get @state :directory))
             (place @state (path/name target))))))))

@@ -762,7 +762,7 @@
                              caps: (set []) offered: (set []) isupport: {} batches: {} channels: {}
                              sasl: sasl quitting: false attempts: (or (get old :attempts) 0) rejoin: (get old :rejoin)}))
     (info! buffer (str "Connecting to " config.host " port " (or config.port 6697) "…"))
-    (let [conn (try (await (net/connect config.host (or config.port 6697) :tls (not= config.tls false)))
+    (let [conn (try (net/connect config.host (or config.port 6697) :tls (not= config.tls false))
                  (catch error e
                    (error! buffer (str "Couldn't connect: " e.message))
                    nil))]

@@ -42,21 +42,21 @@
       (connect-all!))))
 
 (defcommand irc-setup "Add an IRC network to your settings"
-  (let [name (string/trim (await (prompt "Network name: " :initial "Libera")))
-        host (string/trim (await (prompt "Server: " :initial "irc.libera.chat")))
-        port (or (string/to-number (await (prompt "Port: " :initial "6697"))) 6697)
-        tls (await (yes-or-no "Use TLS? "))
-        nick (string/trim (await (prompt "Nick: ")))
-        login (when (await (yes-or-no "Log in with a SASL account? "))
-                (let [account (string/trim (await (prompt "Account: " :initial nick)))
-                      password (await (prompt "Account password (kept in the vault): " :secret true))
+  (let [name (string/trim (prompt "Network name: " :initial "Libera"))
+        host (string/trim (prompt "Server: " :initial "irc.libera.chat"))
+        port (or (string/to-number (prompt "Port: " :initial "6697")) 6697)
+        tls (yes-or-no "Use TLS? ")
+        nick (string/trim (prompt "Nick: "))
+        login (when (yes-or-no "Log in with a SASL account? ")
+                (let [account (string/trim (prompt "Account: " :initial nick))
+                      password (prompt "Account password (kept in the vault): " :secret true)
                       title (str "IRC " name)]
                   (vault/unlock)
                   (if-let [old (vault/find-entry title)]
                     (vault/change! old.id (fn [entry] (merge entry {username: account password: password})))
                     (vault/add! {title: title username: account password: password url: (str "ircs://" host) totp: "" notes: ""}))
                   title))
-        channels (vec (string/words (await (prompt "Channels to join: " :initial "#oxmacs"))))
+        channels (vec (string/words (prompt "Channels to join: " :initial "#oxmacs")))
         config (merge {name: name host: host port: port tls: tls nick: nick}
                       (if login {login: login} {})
                       {channels: channels})
@@ -68,7 +68,7 @@
     (message (if (save/plugin-setting! 'irc :networks (conj others config))
                (str "Saved " name " in custom.ox, but init.ox sets the IRC networks too and wins; move them out of init.ox")
                (str "Saved " name " in custom.ox")))
-    (when (await (yes-or-no (str "Connect to " name " now? ")))
+    (when (yes-or-no (str "Connect to " name " now? "))
       (client/connect! config :show true))))
 
 (def (send-text! buffer typed)
@@ -76,7 +76,7 @@
     (if (string/includes? text "\n")
       (let [lines (vec (remove string/blank? (string/lines text)))
             entry (client/buffer-entry buffer)]
-        (when (await (yes-or-no (str "Send " (count lines) " lines to " entry.target "? ")))
+        (when (yes-or-no (str "Send " (count lines) " lines to " entry.target "? "))
           (client/say-lines! buffer lines)))
       (client/say! buffer text))))
 
@@ -242,7 +242,7 @@
       (raise (error "The server didn't give this message an id, so it can't take reactions")))
     (unless (client/has-cap? entry.network "message-tags")
       (raise (error (str entry.network " doesn't pass on reactions"))))
-    (let [emoji (await (prompt "React with: " :choices reactions))]
+    (let [emoji (prompt "React with: " :choices reactions)]
       (client/send-command! entry.network "TAGMSG" [entry.target] :tags {"+draft/react" emoji "+draft/reply" chosen.id})
       (unless (client/has-cap? entry.network "echo-message")
         (client/react! entry.buffer chosen.id (client/my-nick entry.network) emoji)))))
@@ -253,7 +253,7 @@
 (defcommand irc-join "Join a channel on this network"
   (let [entry (here-or-complain)
         invited (get (client/network entry.network) :invited)
-        channel (string/trim (await (prompt "Join: " :initial (or invited "#"))))]
+        channel (string/trim (prompt "Join: " :initial (or invited "#")))]
     (client/join! entry.network channel)))
 
 (defcommand irc-part "Leave this channel"
@@ -278,14 +278,14 @@
 (defcommand irc-list-filter "Show only the channels whose name or topic has some text; empty shows them all"
   (let [buffer (buffer-name)
         listed (listed-or-complain)
-        wanted (string/trim (await (prompt "Channels with: " :initial (or listed.filter ""))))]
+        wanted (string/trim (prompt "Channels with: " :initial (or listed.filter "")))]
     (client/filter-list! buffer wanted)))
 
 (defcommand irc-switch "Go to an IRC buffer"
   (let [all (client/irc-buffers)]
     (when (empty? all)
       (raise (error "There are no IRC buffers yet; M-x irc connects")))
-    (switch-to-buffer (await (prompt "IRC buffer: " :choices (sort all))))))
+    (switch-to-buffer (prompt "IRC buffer: " :choices (sort all)))))
 
 (defonce came-from (atom nil))
 
@@ -309,7 +309,7 @@
   (let [url (or (format/url-at (or (line-text (current-line)) "") (current-column))
                 (raise (error "Put point on a link to preview it")))]
     (message (str "Fetching " url "…"))
-    (let [response (await (http/get url))
+    (let [response (http/get url)
           kind (or (get response.headers :content-type) "")]
       (cond ((>= response.status 400) (message (str url " answered " response.status)))
         ((string/starts-with? kind "image/")
@@ -324,7 +324,7 @@
             results)))
 
 (defcommand irc-search "Search the IRC logs"
-  (let [query (await (prompt "Search IRC logs for: "))
+  (let [query (prompt "Search IRC logs for: ")
         results (logs/search query)]
     (show-places search-buffer (search-places results)
                  :title (str "IRC logs: " (count results) " lines with " (pr-str query))

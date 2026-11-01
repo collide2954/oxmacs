@@ -191,7 +191,7 @@
       {hour: (string/to-number (first match.groups)) minute: (or (string/to-number (or (second match.groups) "0")) 0)})))
 
 (def (ask question {initial ""})
-  (await (prompt question :initial initial)))
+  (prompt question :initial initial))
 
 (def (ask-date question initial)
   (or (parse-date (ask question :initial (time/format (day-start initial) "%Y-%m-%d")))
@@ -201,7 +201,7 @@
   (let [names (map :name (store/calendars))]
     (if (= (count names) 1)
       (first names)
-      (await (prompt "Calendar: " :choices names :initial (or initial (first names)))))))
+      (prompt "Calendar: " :choices names :initial (or initial (first names))))))
 
 (def (timing day initial)
   "Asks when an event starts and ends on day, returning :start, :end and :all-day."
@@ -221,7 +221,7 @@
       (raise (error "An event needs a title")))
     (let [day (ask-date "Date: " (or (get @view :day) (today)))
           when (timing day nil)
-          repeat (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"]))
+          repeat (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"])
           calendar (choose-calendar nil)
           place (string/trim (ask "Where (optional): "))
           event (merge when
@@ -240,11 +240,11 @@
 (defcommand calendar-edit "Change the event on this line"
   (let [occurrence (target)
         master occurrence.event
-        what (await (prompt "Change: " :choices ["title" "time" "date" "place" "repeats" "reminder" "notes"]))
+        what (prompt "Change: " :choices ["title" "time" "date" "place" "repeats" "reminder" "notes"])
         changed (cond ((= what "title") (assoc master :summary (string/trim (ask "Title: " :initial master.summary))))
                   ((= what "place") (assoc master :location (let [place (string/trim (ask "Where: " :initial (or master.location "")))] (when (not= place "") place))))
                   ((= what "notes") (assoc master :description (ask "Notes: " :initial (or master.description ""))))
-                  ((= what "repeats") (assoc master :rrule (get repeats (await (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"])))))
+                  ((= what "repeats") (assoc master :rrule (get repeats (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"]))))
                   ((= what "reminder") (assoc master :alarms [{before: (time/minutes (or (string/to-number (ask "Minutes before: " :initial (str (default-reminder)))) (default-reminder)))}]))
                   ((= what "date")
                    (let [day (ask-date "Date: " (day-of master.start))
@@ -259,9 +259,9 @@
 
 (defcommand calendar-delete "Delete the event on this line"
   (let [occurrence (target)]
-    (if (and occurrence.rrule (await (yes-or-no (str "Delete only the " (time/format occurrence.start "%-d %B") " one? "))))
+    (if (and occurrence.rrule (yes-or-no (str "Delete only the " (time/format occurrence.start "%-d %B") " one? ")))
       (store/skip-occurrence! occurrence.event occurrence.start)
-      (when (await (yes-or-no (str "Delete " occurrence.summary (if occurrence.rrule " and all its repeats" "") "? ")))
+      (when (yes-or-no (str "Delete " occurrence.summary (if occurrence.rrule " and all its repeats" "") "? "))
         (store/delete-event! occurrence.event)))
     (when (= (buffer-name) event-buffer)
       (close-buffer event-buffer))
@@ -282,7 +282,7 @@
     (let [answered (assoc master :attendees (vec (map (fn [person] (if (= person mine) (assoc person :status status) person)) master.attendees)))
           reply (path/join (or (path/parent (or master.file "")) ".") (str (store/safe master.uid) "-reply.ics"))]
       (store/save-event! answered)
-      (await (file/write reply (ics/write-calendar [(merge answered {attendees: [(assoc mine :status status)]})] :method "REPLY")))
+      (file/write reply (ics/write-calendar [(merge answered {attendees: [(assoc mine :status status)]})] :method "REPLY"))
       (redraw!)
       (show-event! (merge occurrence answered))
       (message (str "Answered " (string/lower status) "; send " reply " to " (or master.organizer.email "the organizer"))))))
@@ -292,8 +292,8 @@
 (defcommand calendar-maybe "Answer maybe to the invitation shown" (answer! "TENTATIVE"))
 
 (defcommand calendar-import "Add the events of an .ics file, such as an invitation"
-  (let [file (await (prompt-path "Import .ics file: "))
-        parsed (ics/parse (await (file/read file)))
+  (let [file (prompt-path "Import .ics file: ")
+        parsed (ics/parse (file/read file))
         found (vec (map ics/event-of (ics/components parsed "VEVENT")))
         calendar (choose-calendar nil)]
     (when (empty? found)
@@ -493,7 +493,7 @@
 (def (start-reminders!)
   (when (and (setting :reminders) (not (reminders/watching?)))
     (when-let [place (store/folder)]
-      (when (await (file/exists? place))
+      (when (file/exists? place)
         (store/load!)
         (unless (empty? (store/events))
           (reminders/watch!))))))

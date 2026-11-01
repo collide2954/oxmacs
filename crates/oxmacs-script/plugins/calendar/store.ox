@@ -31,17 +31,17 @@
 (def (read-sync name)
   "What the last CalDAV sync of calendar name knew: its :resources, each a map of :href, :etag and :file, and the :pending local changes."
   (let [file (sync-file name)]
-    (if (await (file/exists? file))
-      (let [found (json/read (await (file/read file)))]
+    (if (file/exists? file)
+      (let [found (json/read (file/read file))]
         {resources: (vec (or (get found :resources) [])) pending: (vec (or (get found :pending) []))})
       {resources: [] pending: []})))
 
 (def (write-sync! name sync)
-  (await (file/make-dir (calendar-folder name)))
-  (await (file/write (sync-file name) (json/write sync))))
+  (file/make-dir (calendar-folder name))
+  (file/write (sync-file name) (json/write sync)))
 
 (def (read-file calendar file)
-  (let [parsed (ics/parse (await (file/read file)))]
+  (let [parsed (ics/parse (file/read file))]
     (vec (map (fn [component] (merge (ics/event-of component) {calendar: calendar file: file}))
               (ics/components parsed "VEVENT")))))
 
@@ -49,14 +49,14 @@
   "Reads the .ics files of every calendar again and returns their events."
   (let [found (vec (mapcat (fn [calendar]
                              (let [place (calendar-folder calendar.name)]
-                               (if (await (file/exists? place))
+                               (if (file/exists? place)
                                  (mapcat (fn [entry]
                                            (try (read-file calendar.name entry.path)
                                              (catch error e
                                                (message (str "Couldn't read " entry.name ": " e.message))
                                                [])))
                                          (filter (fn [entry] (string/ends-with? (string/lower entry.name) ".ics"))
-                                                 (await (file/list place))))
+                                                 (file/list place)))
                                  [])))
                            (calendars)))]
     (swap! state assoc :events found)
@@ -94,8 +94,8 @@
   "Writes event into its file, or a new file in its calendar, keeping the other events of that file; returns the file."
   (let [file (or event.file (path/join (calendar-folder event.calendar) (str (safe event.uid) ".ics")))
         others (filter (fn [other] (and (= other.file file) (not (same? other event)))) (events))]
-    (await (file/make-dir (path/parent file)))
-    (await (file/write file (ics/write-calendar (conj (vec others) (dissoc event :file :calendar :event)))))
+    (file/make-dir (path/parent file))
+    (file/write file (ics/write-calendar (conj (vec others) (dissoc event :file :calendar :event))))
     (note-change! event.calendar file false)
     (load!)
     file))
@@ -105,8 +105,8 @@
   (let [file event.file
         kept (vec (filter (fn [other] (and (= other.file file) (not= other.uid event.uid))) (events)))]
     (if (empty? kept)
-      (await (file/trash file))
-      (await (file/write file (ics/write-calendar kept))))
+      (file/trash file)
+      (file/write file (ics/write-calendar kept)))
     (note-change! event.calendar file (empty? kept))
     (load!)))
 

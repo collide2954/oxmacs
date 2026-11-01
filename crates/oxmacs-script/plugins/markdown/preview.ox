@@ -24,7 +24,7 @@
 (defcommand markdown-preview-refresh "Read the Markdown file again"
   (when-let [state (buffer-value :markdown-preview)]
     (when-let [source (get @state :source)]
-      (swap! state assoc :text (await (file/read source))))
+      (swap! state assoc :text (file/read source)))
     (draw (current-buffer))))
 
 (on-saved :markdown-preview
@@ -32,7 +32,7 @@
             (each [name (buffer-list)]
               (when-let [state (preview-of name)]
                 (when (= (get @state :source) saved)
-                  (swap! state assoc :text (await (file/read saved)))
+                  (swap! state assoc :text (file/read saved))
                   (draw name))))))
 
 (def (show)

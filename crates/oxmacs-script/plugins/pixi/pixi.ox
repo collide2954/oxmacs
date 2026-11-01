@@ -31,8 +31,8 @@
 (def (choices)
   (try
     (let [file (choices-file)]
-      (if (and file (await (file/exists? file)))
-        (json/read (await (file/read file)))
+      (if (and file (file/exists? file))
+        (json/read (file/read file))
         []))
     (catch error _e [])))
 
@@ -43,13 +43,13 @@
 
 (def (remember! root environment)
   (when-let [file (choices-file)]
-    (await (file/make-dir (path/parent file)))
-    (await (file/write file (json/write (vec (concat (filter (fn [choice] (not= choice.root root)) (choices))
-                                                     [{root: root environment: environment}])))))))
+    (file/make-dir (path/parent file))
+    (file/write file (json/write (vec (concat (filter (fn [choice] (not= choice.root root)) (choices))
+                                              [{root: root environment: environment}]))))))
 
 (def (stamp manifest root)
   "When the manifest and lock file of the project at root last changed."
-  (vec (map (fn [path] (try (get (await (file/metadata path)) :modified) (catch error _e nil)))
+  (vec (map (fn [path] (try (get (file/metadata path) :modified) (catch error _e nil)))
             [manifest (path/join root "pixi.lock")])))
 
 (def (outside root)

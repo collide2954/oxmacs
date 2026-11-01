@@ -24,7 +24,7 @@
 
 (def (package-root)
   (when-let [root (session/project-here)]
-    (when (await (file/exists? (path/join root "DESCRIPTION")))
+    (when (file/exists? (path/join root "DESCRIPTION"))
       root)))
 
 (def tools

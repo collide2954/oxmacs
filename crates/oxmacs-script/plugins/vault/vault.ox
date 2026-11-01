@@ -128,7 +128,7 @@
   (let [found (store/unlock)]
     (when (empty? found)
       (raise (error "The vault has no entries yet")))
-    (let [title (await (prompt question :choices (vec (map :title (sorted found)))))]
+    (let [title (prompt question :choices (vec (map :title (sorted found))))]
       (or (store/find-entry title)
           (raise (error $"No entry is called {title}"))))))
 
@@ -154,10 +154,10 @@
     (message $"Copied the {what}")))
 
 (def (ask question {initial ""})
-  (await (prompt question :initial initial)))
+  (prompt question :initial initial))
 
 (def (ask-password question)
-  (let [typed (await (prompt question :secret true))]
+  (let [typed (prompt question :secret true)]
     (if (string/blank? typed) (store/generate) typed)))
 
 (defcommand vault "List the entries of the password vault"
@@ -208,7 +208,7 @@
 
 (defcommand vault-edit "Change a field of a vault entry"
   (let [entry (target "Edit: ")
-        field (await (prompt "Change: " :choices ["title" "username" "password" "url" "totp" "notes"]))
+        field (prompt "Change: " :choices ["title" "username" "password" "url" "totp" "notes"])
         key (keyword field)
         value (if (= field "password")
                 (ask-password "New password (empty makes one): ")
@@ -220,7 +220,7 @@
 
 (defcommand vault-delete "Delete a vault entry"
   (let [entry (target "Delete: ")]
-    (when (await (yes-or-no $"Delete {entry.title} from the vault? "))
+    (when (yes-or-no $"Delete {entry.title} from the vault? ")
       (store/remove! entry.id)
       (when (= (get @view :shown) entry.id)
         (close-buffer entry-buffer))
@@ -232,9 +232,9 @@
   (message "Vault locked"))
 
 (defcommand vault-generate "Make a new password or passphrase and copy it"
-  (let [kind (await (prompt "Make: " :choices {"password" "20 letters, digits and symbols"
-                                               "passphrase" "7 random words"
-                                               "pin" "6 digits"}))
+  (let [kind (prompt "Make: " :choices {"password" "20 letters, digits and symbols"
+                                        "passphrase" "7 random words"
+                                        "pin" "6 digits"})
         made (cond ((= kind "passphrase") (store/passphrase))
                ((= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6))))
                (else (store/generate)))]
@@ -242,19 +242,19 @@
 
 (def (imported kind)
   (cond ((= kind "keepass")
-         (let [file (await (prompt-path "KeePass database: "))]
-           (import/keepass file (await (prompt "Its password: " :secret true)))))
-    ((= kind "bitwarden") (import/bitwarden (await (file/read (await (prompt-path "Bitwarden CSV: "))))))
-    ((= kind "1password") (import/one-password (await (file/read (await (prompt-path "1Password CSV: "))))))
+         (let [file (prompt-path "KeePass database: ")]
+           (import/keepass file (prompt "Its password: " :secret true))))
+    ((= kind "bitwarden") (import/bitwarden (file/read (prompt-path "Bitwarden CSV: "))))
+    ((= kind "1password") (import/one-password (file/read (prompt-path "1Password CSV: "))))
     ((= kind "pass") (import/pass))
     (else (raise (error $"oxmacs can't import from {kind}")))))
 
 (defcommand vault-import "Import passwords from KeePass, Bitwarden, 1Password or pass"
   (store/unlock)
-  (let [kind (await (prompt "Import from: " :choices {"keepass" "a KeePass .kdbx file"
-                                                      "bitwarden" "a Bitwarden CSV export"
-                                                      "1password" "a 1Password CSV export"
-                                                      "pass" "the pass password store"}))
+  (let [kind (prompt "Import from: " :choices {"keepass" "a KeePass .kdbx file"
+                                               "bitwarden" "a Bitwarden CSV export"
+                                               "1password" "a 1Password CSV export"
+                                               "pass" "the pass password store"})
         found (imported kind)
         added (store/add-all! found)]
     (redraw-list)

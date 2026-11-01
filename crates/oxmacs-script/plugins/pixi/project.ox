@@ -7,9 +7,9 @@
   (let [toml (path/join folder "pixi.toml")
         pyproject (path/join folder "pyproject.toml")]
     (cond
-      [(await (file/exists? toml)) toml]
-      [(and (await (file/exists? pyproject))
-            (string/includes? (await (file/read pyproject)) "[tool.pixi"))
+      [(file/exists? toml) toml]
+      [(and (file/exists? pyproject)
+            (string/includes? (file/read pyproject) "[tool.pixi"))
        pyproject]
       [else nil])))
 
@@ -28,7 +28,7 @@
     "pixi"
     (or (process/which "pixi")
         (let [installed (path/join (path/home) ".pixi" "bin" (if (= (process/os) :windows) "pixi.exe" "pixi"))]
-          (when (await (file/exists? installed)) installed)))))
+          (when (file/exists? installed) installed)))))
 
 (def (variables-of hook)
   "The variables pixi shell-hook --json gives an environment."

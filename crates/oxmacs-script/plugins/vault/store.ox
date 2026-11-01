@@ -25,7 +25,7 @@
 (def (stored-file)
   (let [file (vault-file)
         older (older-file)]
-    (if (and older (not (await (file/exists? file))) (await (file/exists? older)))
+    (if (and older (not (file/exists? file)) (file/exists? older))
       older
       file)))
 
@@ -67,13 +67,13 @@
   (let [file (vault-file)
         fresh (str file ".new")
         older (stored-file)]
-    (await (file/make-dir (path/parent file)))
+    (file/make-dir (path/parent file))
     (when (not= older file)
-      (await (file/rename older file)))
-    (await (file/write fresh (sealed-file key header entries)))
-    (when (await (file/exists? file))
-      (await (file/copy file (str file ".bak"))))
-    (await (file/rename fresh file))))
+      (file/rename older file))
+    (file/write fresh (sealed-file key header entries))
+    (when (file/exists? file)
+      (file/copy file (str file ".bak")))
+    (file/rename fresh file)))
 
 (def (opened key header)
   (swap! state assoc :key key :header header :used (time/now))
@@ -81,26 +81,26 @@
   (get @state :entries))
 
 (def (create)
-  (let [password (await (prompt "New vault password: " :secret true))
-        again (await (prompt "Same password again: " :secret true))]
+  (let [password (prompt "New vault password: " :secret true)
+        again (prompt "Same password again: " :secret true)]
     (cond ((string/blank? password) (raise (error "The vault needs a password")))
       ((not= password again) (raise (error "The passwords differ; nothing was made")))
       (else
        (message "Making the vault key…")
        (let [header (merge {version: file-version salt: (crypto/random 16)} default-cost)
-             key (await (crypto/derive-key password header.salt
-                                           :memory header.memory :iterations header.iterations
-                                           :parallelism header.parallelism))]
+             key (crypto/derive-key password header.salt
+                                    :memory header.memory :iterations header.iterations
+                                    :parallelism header.parallelism)]
          (write! key header [])
          (swap! state assoc :entries [])
          (opened key header))))))
 
 (def (open-existing file)
-  (let [stored (json/read (await (file/read file)))
-        password (await (prompt "Vault password: " :secret true))
-        key (await (crypto/derive-key password stored.salt
-                                      :memory stored.memory :iterations stored.iterations
-                                      :parallelism stored.parallelism))
+  (let [stored (json/read (file/read file))
+        password (prompt "Vault password: " :secret true)
+        key (crypto/derive-key password stored.salt
+                               :memory stored.memory :iterations stored.iterations
+                               :parallelism stored.parallelism)
         inside (try (crypto/open key stored.sealed)
                  (catch error _ (raise (error "Wrong vault password"))))]
     (swap! state assoc :entries (vec (get (json/read inside) :entries)))
@@ -110,7 +110,7 @@
   "The vault's entries, asking for its password first when it is locked, or making a new vault."
   (if (locked?)
     (let [file (if (vault-file) (stored-file) (raise (error "There is no oxmacs home folder for the vault")))]
-      (if (await (file/exists? file))
+      (if (file/exists? file)
         (open-existing file)
         (create)))
     (do (touch!)

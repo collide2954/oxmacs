@@ -50,12 +50,12 @@
 
 (defcommand process-stop "Ask the process on this line to end"
   (on-process (fn [id]
-                (when (await (yes-or-no $"Stop {(named id)}?"))
+                (when (yes-or-no $"Stop {(named id)}?")
                   (stop-process id)))))
 
 (defcommand process-kill "End the process on this line at once"
   (on-process (fn [id]
-                (when (await (yes-or-no $"Kill {(named id)}?"))
+                (when (yes-or-no $"Kill {(named id)}?")
                   (kill-process id)))))
 
 (defcommand process-sort "Sort the processes by the next column"
@@ -68,7 +68,7 @@
   (draw false))
 
 (defcommand process-filter "Show only processes whose name, kind or command contains some text"
-  (let [query (await (prompt "Filter processes: " :initial (get @state :filter)))]
+  (let [query (prompt "Filter processes: " :initial (get @state :filter))]
     (swap! state assoc :filter query)
     (draw false)))
 

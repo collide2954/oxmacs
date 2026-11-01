@@ -76,7 +76,7 @@
 
 (def (first-existing paths)
   (cond ((empty? paths) nil)
-    ((await (file/exists? (first paths))) (first paths))
+    ((file/exists? (first paths)) (first paths))
     (else (first-existing (rest paths)))))
 
 (def (binary home)
@@ -95,13 +95,13 @@
       (second (last (sort-by first found))))))
 
 (def (folders root)
-  (try (map (fn [entry] entry.path) (filter (fn [entry] entry.dir) (await (file/list root))))
+  (try (map (fn [entry] entry.path) (filter (fn [entry] entry.dir) (file/list root)))
     (catch error _e [])))
 
 (def (registry)
   (if (windows?)
     (keep (fn [key]
-            (try (let [found (await (process/run "reg" ["query" key "/v" "InstallPath"]))
+            (try (let [found (process/run "reg" ["query" key "/v" "InstallPath"])
                        line (find (fn [line] (string/includes? line "REG_SZ")) (string/lines found.stdout))]
                    (when line (string/trim (second (string/split line "REG_SZ" 2)))))
               (catch error _e nil)))
@@ -117,7 +117,7 @@
             (if (= (process/os) :macos) ["/Library/Frameworks/R.framework/Resources"] []))))
 
 (def (locate configured sources)
-  (cond (configured (if (await (file/exists? configured)) configured ((get sources :which) configured)))
+  (cond (configured (if (file/exists? configured) configured ((get sources :which) configured)))
     (else (or ((get sources :which) (if (windows?) "Rterm" "R"))
               (when-let [home ((get sources :home))] (binary home))
               (newest ((get sources :installs)))))))
@@ -154,21 +154,21 @@
   (when-let [folder (plugin-folder 'r)]
     (let [file (path/join folder "history")
           older (path/join (oxmacs-home) "r-history")]
-      (unless (await (file/exists? file))
-        (await (file/make-dir folder))
-        (when (await (file/exists? older))
-          (await (file/rename older file))))
+      (unless (file/exists? file)
+        (file/make-dir folder)
+        (when (file/exists? older)
+          (file/rename older file)))
       file)))
 
 (def (load-history session)
   (when-let [file (history-file)]
-    (let [lines (try (string/lines (await (file/read file))) (catch error _e []))
+    (let [lines (try (string/lines (file/read file)) (catch error _e []))
           inputs (keep (fn [line] (try (json/read line) (catch error _e nil))) lines)
           kept (vec (drop (max 0 (- (count inputs) kept-history)) inputs))]
       (set-console-history session kept)
       (swap! state assoc-in [:saved session] (count kept))
       (when (> (count inputs) (* 2 kept-history))
-        (await (file/write file (apply str (map (fn [input] (str (json/write input) "\n")) kept))))))))
+        (file/write file (apply str (map (fn [input] (str (json/write input) "\n")) kept)))))))
 
 (def (save-history session)
   (when-let [file (history-file)]
@@ -177,13 +177,13 @@
           fresh (drop (min saved (count inputs)) inputs)]
       (when (not (empty? fresh))
         (swap! state assoc-in [:saved session] (count inputs))
-        (await (file/append file (apply str (map (fn [input] (str (json/write input) "\n")) fresh))))))))
+        (file/append file (apply str (map (fn [input] (str (json/write input) "\n")) fresh)))))))
 
 (def (idle session)
   (save-history session)
   (when-let [file (helper-of session)]
     (swap! state update :helpers dissoc session)
-    (try (await (file/remove file)) (catch error _e nil)))
+    (try (file/remove file) (catch error _e nil)))
   (map (fn [hook] (hook session)) (vals @ready-hooks))
   (fit session))
 

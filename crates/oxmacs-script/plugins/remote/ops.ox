@@ -62,15 +62,15 @@
 (def (curl host remote arguments)
   (let [login (credentials host)
         config (str "user = " (pr-str (str login.user ":" login.password)) "\n")
-        found (await (process/run "curl" (vec (concat ["-s" "-S" "-K" "-"] arguments [(ftp-url host remote)])) :input config))]
+        found (process/run "curl" (vec (concat ["-s" "-S" "-K" "-"] arguments [(ftp-url host remote)])) :input config)]
     (when (not= found.status 0)
       (raise (error (string/trim (str "curl: " found.stderr)))))
     found))
 
 (def (sftp host commands)
-  (let [found (await (process/run "sftp" (vec (concat ["-b" "-" "-o" "BatchMode=yes"] (if host.port ["-P" (str host.port)] [])
-                                                      [(if host.user (str host.user "@" (or host.address host.name)) (or host.address host.name))]))
-                                  :input (str (string/join "\n" commands) "\n")))]
+  (let [found (process/run "sftp" (vec (concat ["-b" "-" "-o" "BatchMode=yes"] (if host.port ["-P" (str host.port)] [])
+                                               [(if host.user (str host.user "@" (or host.address host.name)) (or host.address host.name))]))
+                           :input (str (string/join "\n" commands) "\n"))]
     (when (not= found.status 0)
       (raise (error (string/trim (str "sftp: " found.stderr)))))
     found))
@@ -120,17 +120,17 @@
     (cond ((= protocol :ftp) (get (curl host remote []) :stdout))
       ((= protocol :sftp)
        (let [local (transfer-file)]
-         (await (file/make-dir (path/parent local)))
+         (file/make-dir (path/parent local))
          (try (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])
-           (await (file/read local))
-           (finally (when (await (file/exists? local))
-                      (await (file/remove local)))))))
+           (file/read local)
+           (finally (when (file/exists? local)
+                      (file/remove local))))))
       (else (crypto/from-base64 (string/join "" (base64-of host remote nil)))))))
 
 (def (download! host remote local {size nil on-progress nil})
   "Copies the file remote on host to local, calling on-progress with the share copied so far."
   (let [protocol (hosts/protocol-of host)]
-    (await (file/make-dir (path/parent local)))
+    (file/make-dir (path/parent local))
     (cond ((= protocol :ftp) (curl host remote ["-o" local]))
       ((= protocol :sftp) (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))]))
       (else
@@ -143,7 +143,7 @@
                                   (when (and on-progress size (> size 65536)
                                              (not= (// (* 10 before) expected) (// (* 10 now) expected)))
                                     (on-progress (min 1 (/ now expected)))))))]
-         (await (file/write-base64 local (string/join "" lines))))))
+         (file/write-base64 local (string/join "" lines)))))
     local))
 
 (def (chunks text size)
@@ -157,7 +157,7 @@
     (cond ((= protocol :ftp) (curl host remote ["-T" local]))
       ((= protocol :sftp) (sftp host [(str "put " (sftp-word local) " " (sftp-word remote))]))
       (else
-       (let [encoded (await (file/read-base64 local))
+       (let [encoded (file/read-base64 local)
              end (str "__OX_END_" (crypto/random 4) "__")]
          (checked (shell/run! host (str "if printf '' | base64 -d >/dev/null 2>&1; then D='base64 -d'; else D='base64 -D'; fi; $D > "
                                         (shell/quoted remote) " <<'" end "'\n" (string/join "\n" (chunks encoded 76)) "\n" end))
@@ -188,7 +188,7 @@
   (unless (can-run? host)
     (raise (error (str host.name " has no shell to run commands in"))))
   (let [[program & arguments] (shell/command-of host)
-        found (await (process/run program (vec arguments) :input (shell/one-shot dir command)))]
+        found (process/run program (vec arguments) :input (shell/one-shot dir command))]
     {status: found.status lines: (string/lines found.stdout)}))
 
 (def (search host dir pattern)

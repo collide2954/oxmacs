@@ -34,7 +34,7 @@
   (or (project-root start) (language-root start) start))
 
 (def (load folder)
-  (let [found (try (await (file/list folder)) (catch error _e []))]
+  (let [found (try (file/list folder) (catch error _e []))]
     (swap! state assoc-in [:entries folder] (vec found))))
 
 (def (absolute root rel)
@@ -42,8 +42,8 @@
 
 (def (git-status root)
   (try
-    (let [result (await (process/run "git" ["--no-optional-locks" "status" "--porcelain=v1" "-z" "--ignored=matching"]
-                                     :cwd root))]
+    (let [result (process/run "git" ["--no-optional-locks" "status" "--porcelain=v1" "-z" "--ignored=matching"]
+                              :cwd root)]
       (if (= result.status 0) (tree/parse-status result.stdout) {}))
     (catch error _e {})))
 
@@ -70,11 +70,11 @@
               [entry.dir (walk-files entry.path (str rel entry.name "/") out)]
               [else (conj out (str rel entry.name))]))
           out
-          (try (await (file/list folder)) (catch error _e []))))
+          (try (file/list folder) (catch error _e []))))
 
 (def (all-files root repo)
   (if repo
-    (let [result (try (await (process/run "git" ["ls-files" "--cached" "--others" "--exclude-standard" "-z"] :cwd root))
+    (let [result (try (process/run "git" ["ls-files" "--cached" "--others" "--exclude-standard" "-z"] :cwd root)
                    (catch error _e nil))]
       (if (and result (= result.status 0))
         (vec (remove string/blank? (string/split result.stdout "\u{0}")))
@@ -139,7 +139,7 @@
 
 (def (open-root root place)
   (swap! state assoc :root root :open #{} :entries {} :filter "" :found nil :current place
-         :repo (await (file/exists? (path/join root ".git"))))
+         :repo (file/exists? (path/join root ".git")))
   (reset! files nil)
   (ensure-buffer root)
   (load root)
@@ -302,12 +302,12 @@
 
 (defcommand explorer-new-file "Make a file in the folder on this line and open it"
   (let [folder (folder-for (here))
-        name (await (prompt $"New file in {(relative folder)}/: "))
+        name (prompt $"New file in {(relative folder)}/: ")
         target (apply path/join folder (string/split name "/"))]
-    (if (await (file/exists? target))
+    (if (file/exists? target)
       (message $"{(relative target)} already exists")
-      (do (await (file/make-dir (path/parent target)))
-        (await (file/write target ""))
+      (do (file/make-dir (path/parent target))
+        (file/write target "")
         (swap! state update :open conj folder)
         (reload-around target)
         (reveal target)
@@ -315,11 +315,11 @@
 
 (defcommand explorer-new-folder "Make a folder in the folder on this line"
   (let [folder (folder-for (here))
-        name (await (prompt $"New folder in {(relative folder)}/: "))
+        name (prompt $"New folder in {(relative folder)}/: ")
         target (apply path/join folder (string/split name "/"))]
-    (if (await (file/exists? target))
+    (if (file/exists? target)
       (message $"{(relative target)} already exists")
-      (do (await (file/make-dir target))
+      (do (file/make-dir target)
         (swap! state update :open conj folder)
         (reload-around target)
         (draw target)))))
@@ -327,14 +327,14 @@
 (def (transfer moving)
   (when-let [row (here)]
     (let [root (get @state :root)
-          answer (await (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path)))
+          answer (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path))
           target (absolute root answer)]
-      (await (file/make-dir (path/parent target)))
+      (file/make-dir (path/parent target))
       (when (if moving
-              (await (move-path row.path target))
-              (when (or (not (await (file/exists? target)))
-                        (await (yes-or-no $"{answer} exists; replace it? ")))
-                (await (file/copy row.path target))
+              (move-path row.path target)
+              (when (or (not (file/exists? target))
+                        (yes-or-no $"{answer} exists; replace it? "))
+                (file/copy row.path target)
                 true))
         (reload-around row.path target)
         (reveal target)
@@ -346,8 +346,8 @@
 (defcommand explorer-delete "Delete the file or folder on this line"
   (when-let [row (here)]
     (let [trash (get (settings) :delete-to-trash)]
-      (when (await (yes-or-no $"{(if trash "Trash" "Delete")} {(relative row.path)}?"))
-        (await (delete-path row.path))
+      (when (yes-or-no $"{(if trash "Trash" "Delete")} {(relative row.path)}?")
+        (delete-path row.path)
         (reload-around row.path)
         (draw (path/parent row.path))
         (message $"{(if trash "Trashed" "Deleted")} {(relative row.path)}")))))
@@ -373,10 +373,10 @@
         (unless (or (same? (path/parent moving.path) into)
                     (same? moving.path into)
                     (inside? into moving.path))
-          (when (await (yes-or-no $"Move {(relative moving.path)} into {(relative into)}/?"))
-            (if (await (file/exists? target))
+          (when (yes-or-no $"Move {(relative moving.path)} into {(relative into)}/?")
+            (if (file/exists? target)
               (message $"{(relative target)} already exists")
-              (do (await (move-path moving.path target))
+              (do (move-path moving.path target)
                 (swap! state update :open conj into)
                 (reload-around moving.path target)
                 (reveal target)))))))))

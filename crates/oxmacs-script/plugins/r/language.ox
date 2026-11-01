@@ -12,7 +12,7 @@
 
 (def (define! program)
   (let [script (rscript program)]
-    (when (and (not= (get @state :defined) script) (await (file/exists? script)))
+    (when (and (not= (get @state :defined) script) (file/exists? script))
       (swap! state assoc :defined script)
       (define-language-server "languageserver"
         :languages {"R" "r" "R Markdown" "rmd"}
@@ -21,7 +21,7 @@
         :install "Run install.packages(\"languageserver\") in R"))))
 
 (def (installed? script)
-  (try (string/includes? (get (await (process/run script ["-e" "cat(nzchar(system.file(package = 'languageserver')))"]))
+  (try (string/includes? (get (process/run script ["-e" "cat(nzchar(system.file(package = 'languageserver')))"])
                               :stdout)
                          "TRUE")
     (catch error _e false)))
@@ -30,7 +30,7 @@
   (when (and (wanted?) (not (get @state :checked)))
     (swap! state assoc :checked true)
     (when-let [program (session/find-r)]
-      (when (and (await (file/exists? (rscript program))) (installed? (rscript program)))
+      (when (and (file/exists? (rscript program)) (installed? (rscript program)))
         (define! program)))))
 
 (def (ready?) (and (wanted?) (get @state :defined) (language-server-ready?)))

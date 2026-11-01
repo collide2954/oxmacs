@@ -301,7 +301,7 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
 
 (def (script-file)
   (let [file (path/join (path/temp) "oxmacs-render.R")]
-    (await (file/write file render-script))
+    (file/write file render-script)
     file))
 
 (def (heard file line)
