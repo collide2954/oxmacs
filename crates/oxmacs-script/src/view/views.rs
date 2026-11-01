@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use ox_lang::heap::{Heap, Hold};
@@ -504,6 +505,7 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
         .iter()
         .map(|view| (view.buffer, view.function))
         .collect();
+    let mut replaced = Vec::new();
     for (buffer, function) in open {
         if editor.buffer_by_id(buffer).is_none() {
             continue;
@@ -522,14 +524,24 @@ pub fn refresh(isolate: &mut Isolate, editor: &mut Editor) {
             .and_then(|views| views.open.iter_mut().find(|view| view.buffer == buffer))
         {
             view.failed = None;
-            for old in std::mem::replace(&mut view.callbacks, callbacks) {
-                isolate.release(old);
-            }
+            replaced.extend(std::mem::replace(&mut view.callbacks, callbacks));
         }
         if let Some((_, shown)) = editor.special_buffer_mut::<ViewBuffer>(buffer)
             && shown.node != node
         {
             shown.node = node;
+        }
+    }
+    if let Some(views) = editor.plugin_state::<Views>() {
+        let used: HashSet<Hold> = views
+            .open
+            .iter()
+            .flat_map(|view| view.callbacks.iter().copied())
+            .collect();
+        for old in replaced {
+            if !used.contains(&old) {
+                isolate.release(old);
+            }
         }
     }
     let writes = isolate.heap().atom_writes();
@@ -874,6 +886,27 @@ mod tests {
         settle(&mut editor, &mut ox);
 
         assert_eq!(shown(&editor, "*count*"), text("5"));
+    }
+
+    #[test]
+    fn a_widget_built_once_keeps_its_button_working_across_redraws() {
+        let (mut editor, mut ox) = opened(
+            r#"(def count (atom 0)) (def more (button "More" :on-click (fn [] (swap! count inc)))) (open-view "*kept*" (fn [] (row (text @count) more)))"#,
+        );
+        let id = editor.buffer_named("*kept*").unwrap();
+
+        for _ in 0..3 {
+            ox.event(
+                &mut editor,
+                UiEvent::Press {
+                    buffer: id,
+                    slot: 0,
+                },
+            );
+            settle(&mut editor, &mut ox);
+        }
+
+        assert_eq!(ox.eval(&mut editor, "@count").unwrap(), "3");
     }
 
     #[test]
