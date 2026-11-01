@@ -60,8 +60,21 @@ fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> 
     })
 }
 
-fn position(whole: &str, byte: usize) -> Value {
-    Value::Int(i64::try_from(whole[..byte].chars().count()).unwrap_or(i64::MAX))
+#[derive(Default)]
+struct Counted {
+    byte: usize,
+    chars: usize,
+}
+
+impl Counted {
+    fn position(&mut self, whole: &str, byte: usize) -> Value {
+        if byte < self.byte {
+            *self = Self::default();
+        }
+        self.chars += whole[self.byte..byte].chars().count();
+        self.byte = byte;
+        Value::Int(i64::try_from(self.chars).unwrap_or(i64::MAX))
+    }
 }
 
 fn found(
@@ -69,6 +82,7 @@ fn found(
     regex: &Regex,
     whole: &str,
     captures: &Captures<'_>,
+    counted: &mut Counted,
 ) -> Result<Value, Error> {
     let all = captures.get(0).map_or(0..0, |matched| matched.range());
     let mut groups = Vec::new();
@@ -89,15 +103,17 @@ fn found(
     let matched = heap.string(&whole[all.clone()])?;
     let groups = heap.vector_from(&groups)?;
     let named = crate::vm::build::make_map(heap, &named)?;
+    let start = counted.position(whole, all.start);
+    let end = counted.position(whole, all.end);
     crate::vm::build::make_map(
         heap,
         &[
             Value::keyword("text"),
             matched,
             Value::keyword("start"),
-            position(whole, all.start),
+            start,
             Value::keyword("end"),
-            position(whole, all.end),
+            end,
             Value::keyword("groups"),
             groups,
             Value::keyword("named"),
@@ -133,7 +149,7 @@ pub fn install(isolate: &mut Isolate) {
             let regex = regex_of(heap, "regex/find", arguments[0])?;
             let whole = text(heap, "find", arguments[1])?.to_owned();
             match regex.captures(&whole) {
-                Some(captures) => found(heap, &regex, &whole, &captures),
+                Some(captures) => found(heap, &regex, &whole, &captures, &mut Counted::default()),
                 None => Ok(Value::Nil),
             }
         });
@@ -144,8 +160,9 @@ pub fn install(isolate: &mut Isolate) {
             let regex = regex_of(heap, "regex/find-all", arguments[0])?;
             let whole = text(heap, "find-all", arguments[1])?.to_owned();
             let mut all = Vec::new();
+            let mut counted = Counted::default();
             for captures in regex.captures_iter(&whole) {
-                all.push(found(heap, &regex, &whole, &captures)?);
+                all.push(found(heap, &regex, &whole, &captures, &mut counted)?);
             }
             heap.vector_from(&all).map_err(Error::from)
         });
