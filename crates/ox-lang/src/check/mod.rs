@@ -115,6 +115,7 @@ pub(crate) struct Import {
     only: Vec<String>,
     exclude: Vec<String>,
     span: Span,
+    restated: Option<Span>,
 }
 
 impl Import {
@@ -129,11 +130,15 @@ impl Import {
             only: Vec::new(),
             exclude: Vec::new(),
             span: spec.span,
+            restated: None,
         };
         let mut options = items[segments.len()..].iter();
         while let (Some(option), Some(value)) = (options.next(), options.next()) {
             match (&option.datum, &value.datum) {
                 (Datum::Keyword(word), Datum::Symbol(name)) if word == "as" => {
+                    if segments.last() == Some(&name.as_str()) {
+                        import.restated = Some(option.span.through(value.span));
+                    }
                     import.alias = Some(name.clone());
                 }
                 (Datum::Keyword(word), Datum::Vector(names)) if word == "only" => {
@@ -197,6 +202,49 @@ pub(crate) fn unused_imports(imports: &[Import], forms: &[&Syntax]) -> Vec<Diagn
         })
         .collect()
 }
+
+pub(crate) fn restated_aliases(imports: &[Import]) -> Vec<Diagnostic> {
+    imports
+        .iter()
+        .filter_map(|import| {
+            let span = import.restated?;
+            let alias = import.alias.as_deref()?;
+            Some(Diagnostic::warning(
+                "alias",
+                format!(
+                    "({}) is imported as {alias} already; drop the :as",
+                    import.module
+                ),
+                span,
+            ))
+        })
+        .collect()
+}
+
+const VECTORS: [&str; 22] = [
+    "concat",
+    "distinct",
+    "drop",
+    "drop-while",
+    "filter",
+    "flatten",
+    "indexed",
+    "interpose",
+    "keep",
+    "keys",
+    "map",
+    "mapcat",
+    "partition",
+    "range",
+    "remove",
+    "reverse",
+    "sort",
+    "sort-by",
+    "take",
+    "take-while",
+    "vals",
+    "vec",
+];
 
 const REGEX_FUNCTIONS: [&str; 5] = ["find", "find-all", "matches?", "replace", "split"];
 
@@ -689,6 +737,7 @@ impl Walker<'_> {
             return;
         };
         self.redundant_await(head, rest);
+        self.redundant_vec(head, rest);
         if let Some(pattern) = regex_literal(head, rest) {
             if let Err(error) = crate::builtins::regex::compile(pattern) {
                 let span = head.span.through(rest[0].span);
@@ -754,6 +803,35 @@ impl Walker<'_> {
                 name,
             } => Some((module, name)),
             Binding::Global { .. } | Binding::Local(_) => None,
+        }
+    }
+
+    fn redundant_vec(&mut self, head: &Syntax, rest: &[Syntax]) {
+        let [value] = rest else {
+            return;
+        };
+        if head.marks.last().is_some()
+            || !self
+                .resolved(head)
+                .is_some_and(|(module, name)| module == "ox" && name == "vec")
+        {
+            return;
+        }
+        let given = if matches!(value.datum, Datum::Vector(_)) {
+            Some("This is a vector already; drop the vec".to_owned())
+        } else {
+            head_of(value)
+                .filter(|callee| {
+                    self.resolved(callee).is_some_and(|(module, name)| {
+                        module == "ox" && VECTORS.contains(&name.as_str())
+                    })
+                })
+                .and_then(symbol)
+                .map(|written| format!("{written} gives a vector already; drop the vec"))
+        };
+        if let Some(message) = given {
+            self.found
+                .push(Diagnostic::warning("vec", message, head.span));
         }
     }
 

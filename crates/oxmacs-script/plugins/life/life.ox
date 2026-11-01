@@ -1,6 +1,6 @@
 (module
   (import (ox ui)
-          (life rules :as rules)))
+          (life rules)))
 
 (def buffer "*Life*")
 (def cell-height 9)
@@ -16,9 +16,9 @@
      (ui/row (ui/text (str "Generation " now.generation "   " (count now.cells) " alive") :face :heading)
              (ui/space)
              (ui/text (str (if now.running "" "Paused   ") "SPC pauses  n steps  r restarts  q quits") :face :comment))
-     (ui/canvas (vec (map (fn [[x y]]
-                            [:rect (/ x rules/width) (* y cell-height) (/ 0.9 rules/width) (dec cell-height) :success])
-                          (filter shown? (rules/points now.cells))))
+     (ui/canvas (map (fn [[x y]]
+                       [:rect (/ x rules/width) (* y cell-height) (/ 0.9 rules/width) (dec cell-height) :success])
+                     (filter shown? (rules/points now.cells)))
                 :height (* rules/height cell-height) :relative true)
      :spacing 6)))
 

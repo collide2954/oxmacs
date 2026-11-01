@@ -1,7 +1,7 @@
 (module
   (import (ox path) (ox file)
-          (customize form :as form)
-          (customize written :as written))
+          (customize form)
+          (customize written))
   (export plugin-setting!))
 
 (def (plugin-setting! plugin key value)

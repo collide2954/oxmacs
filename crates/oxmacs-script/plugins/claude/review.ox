@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox file) (ox path)
-          (git diff :as diff)
-          (git pane :as pane)
+          (git diff)
+          (git pane)
           (claude where :only [in-main]))
   (export review-buffer located hunks-of edits! write! decide! decide-all! finish! closed! reviewing?))
 
@@ -20,24 +20,24 @@
 
 (def (located text edits)
   "Each edit with where its old_text is in text, in order; raises when one isn't there exactly once or two overlap."
-  (let [found (vec (map (fn [i]
-                          (let [edit (nth edits i)
-                                old (get edit :old_text)
-                                new (get edit :new_text)
-                                n (inc i)]
-                            (unless (and (string? old) (string? new))
-                              (raise (error $"Edit {n} needs old_text and new_text")))
-                            (when (= old "")
-                              (raise (error $"Edit {n} has an empty old_text")))
-                            (let [seen (occurrences text old)]
-                              (when (= seen 0)
-                                (raise (error $"Edit {n}'s old_text isn't in the text; read it again")))
-                              (when (> seen 1)
-                                (raise (error $"Edit {n}'s old_text appears {seen} times; give more of the text around it"))))
-                            (let [start (string/index-of text old)]
-                              {index: i start: start end: (+ start (string/length old)) old: old new: new})))
-                        (range (count edits))))
-        sorted (vec (sort-by :start found))]
+  (let [found (map (fn [i]
+                     (let [edit (nth edits i)
+                           old (get edit :old_text)
+                           new (get edit :new_text)
+                           n (inc i)]
+                       (unless (and (string? old) (string? new))
+                         (raise (error $"Edit {n} needs old_text and new_text")))
+                       (when (= old "")
+                         (raise (error $"Edit {n} has an empty old_text")))
+                       (let [seen (occurrences text old)]
+                         (when (= seen 0)
+                           (raise (error $"Edit {n}'s old_text isn't in the text; read it again")))
+                         (when (> seen 1)
+                           (raise (error $"Edit {n}'s old_text appears {seen} times; give more of the text around it"))))
+                       (let [start (string/index-of text old)]
+                         {index: i start: start end: (+ start (string/length old)) old: old new: new})))
+                   (range (count edits)))
+        sorted (sort-by :start found)]
     (each [k (range 1 (count sorted))]
       (when (< (get (nth sorted k) :start) (get (nth sorted (dec k)) :end))
         (raise (error "Two edits overlap; make them one"))))
@@ -50,12 +50,12 @@
   (reduce + 0 (map (fn [row] (inc (string/length row))) (take line rows))))
 
 (def (between rows from to)
-  (vec (take (max 0 (- to from)) (drop from rows))))
+  (take (max 0 (- to from)) (drop from rows)))
 
 (def (line-diff old new)
   (if (> (* (count old) (count new)) widest-match)
-    (vec (concat (map (fn [text] {kind: :removed text: text}) old)
-                 (map (fn [text] {kind: :added text: text}) new)))
+    (concat (map (fn [text] {kind: :removed text: text}) old)
+            (map (fn [text] {kind: :added text: text}) new))
     (let [[left right] (diff/matches old new)]
       (loop [i 0 j 0 out []]
         (cond
@@ -80,7 +80,7 @@
         around (fn [texts] (map (fn [text] {kind: :context text: text}) texts))]
     {old-start: start old-count: (+ (count before) (count old) (count after))
      new-start: (+ start shift) new-count: (+ (count before) (count new) (count after))
-     lines: (vec (concat (around before) (line-diff old new) (around after)))
+     lines: (concat (around before) (line-diff old new) (around after))
      grows: (- (count new) (count old))}))
 
 (def (hunks-of text changes)
@@ -100,11 +100,11 @@
 
 (def (shown-lines state)
   (let [out (pane/render {section: :claude path: state.title label: "Claude's edits"} state.hunks :unified 120)]
-    (vec (map (fn [row]
-                (if (and (map? row) (= row.kind :hunk))
-                  (update row :line (fn [pieces] (conj (vec pieces) (status-piece (nth state.decisions row.hunk)))))
-                  row))
-              out.lines))))
+    (map (fn [row]
+           (if (and (map? row) (= row.kind :hunk))
+             (update row :line (fn [pieces] (conj (vec pieces) (status-piece (nth state.decisions row.hunk)))))
+             row))
+         out.lines)))
 
 (def (show!)
   (let [state @current
@@ -127,7 +127,7 @@
 
 (def (decide-all! decision)
   (when @current
-    (swap! current update :decisions (fn [decisions] (vec (map (fn [_] decision) decisions))))
+    (swap! current update :decisions (fn [decisions] (map (fn [_] decision) decisions)))
     (show!)))
 
 (def (finish!)
@@ -149,7 +149,7 @@
   (let [answer (promise)
         from-chat (get (side-window) :selected)]
     (reset! current {title: title hunks: hunks answer: answer
-                     decisions: (vec (map (fn [_] :pending) hunks))})
+                     decisions: (map (fn [_] :pending) hunks)})
     (show!)
     (when from-chat (select-main-window))
     (try (await answer)
@@ -191,11 +191,11 @@
         changes (located (buffer-contents buffer) edits)
         decisions (reviewed! buffer (hunks-of (buffer-contents buffer) changes))
         numbered (fn [change] (str (inc change.index)))
-        accepted (vec (filter (fn [i] (= (nth decisions i) :accepted)) (range (count changes))))
-        made (vec (filter (fn [i] (apply! buffer (nth changes i))) (reverse accepted)))]
-    (told (vec (map (fn [i] (numbered (nth changes i))) (reverse made)))
-          (vec (map (fn [i] (numbered (nth changes i))) (remove (fn [i] (contains? (set made) i)) accepted)))
-          (vec (map (fn [i] (numbered (nth changes i))) (remove (fn [i] (= (nth decisions i) :accepted)) (range (count changes))))))))
+        accepted (filter (fn [i] (= (nth decisions i) :accepted)) (range (count changes)))
+        made (filter (fn [i] (apply! buffer (nth changes i))) (reverse accepted))]
+    (told (map (fn [i] (numbered (nth changes i))) (reverse made))
+          (map (fn [i] (numbered (nth changes i))) (remove (fn [i] (contains? (set made) i)) accepted))
+          (map (fn [i] (numbered (nth changes i))) (remove (fn [i] (= (nth decisions i) :accepted)) (range (count changes)))))))
 
 (def (write! path content)
   "Shows the file Claude wants written at path for review and writes it when accepted."

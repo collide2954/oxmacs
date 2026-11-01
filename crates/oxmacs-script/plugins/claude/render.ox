@@ -7,13 +7,13 @@
   (let [parts (string/split line "`")]
     (if (< (count parts) 3)
       line
-      (vec (keep (fn [i]
-                   (let [part (nth parts i)]
-                     (cond
-                       [(= part "") nil]
-                       [(odd? i) [part :string]]
-                       [else part])))
-                 (range (count parts)))))))
+      (keep (fn [i]
+              (let [part (nth parts i)]
+                (cond
+                  [(= part "") nil]
+                  [(odd? i) [part :string]]
+                  [else part])))
+            (range (count parts))))))
 
 (def (text-lines text)
   "The lines of Claude's text, with code blocks, headings and inline code set apart."
@@ -46,7 +46,7 @@
     [(= block.type "thinking")
      (if (string/blank? (or block.thinking ""))
        []
-       (vec (map (fn [line] [[(str "· " line) :comment]]) (string/lines block.thinking))))]
+       (map (fn [line] [[(str "· " line) :comment]]) (string/lines block.thinking)))]
     [(= block.type "text") (text-lines block.text)]
     [(= block.type "tool_use") [[[(str "⚙ " block.name " " (summary block.input)) :function]]]]
     [(= block.type "fallback") [[[(str "(" (get block.to :model) " carried on)") :comment]]]]
@@ -56,12 +56,12 @@
   "The lines one entry of a chat shows."
   (cond
     [(= entry.kind :you)
-     (vec (concat [[["You" :keyword]]] (string/split entry.text "\n") [""]))]
+     (concat [[["You" :keyword]]] (string/split entry.text "\n") [""])]
     [(= entry.kind :reply)
-     (vec (concat [[["Claude" :function]]]
-                  (mapcat block-lines entry.content)
-                  (if entry.live [[["…" :comment]]] [])
-                  [""]))]
+     (concat [[["Claude" :function]]]
+             (mapcat block-lines entry.content)
+             (if entry.live [[["…" :comment]]] [])
+             [""])]
     [(= entry.kind :tool)
      [[[(str "  ↳ " (first-line entry.result)) (if entry.error :error :comment)]] ""]]
     [(= entry.kind :note)
@@ -69,7 +69,7 @@
     [else []]))
 
 (def (lines-of log)
-  (vec (mapcat entry-lines log)))
+  (mapcat entry-lines log))
 
 (test "replies set code blocks, headings and inline code apart"
   (expect (= (text-lines "# Plan\nUse `map` here:\n```ox\n(map f xs)\n```")

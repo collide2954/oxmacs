@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox file) (ox process)
           (claude where :only [in-main resolved])
-          (claude review :as review))
+          (claude review))
   (export definitions run! numbered))
 
 (def most-lines 2000)

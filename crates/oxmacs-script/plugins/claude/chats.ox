@@ -12,16 +12,16 @@
 (def (stored chat)
   "chat as it is written: its log's kinds and faces as names."
   (assoc (select-keys chat [:id :title :project :created :updated :messages])
-         :log (vec (map (fn [entry]
-                          (merge entry {kind: (name entry.kind)}
-                                 (if entry.face {face: (name entry.face)} {})))
-                        chat.log))))
+         :log (map (fn [entry]
+                     (merge entry {kind: (name entry.kind)}
+                            (if entry.face {face: (name entry.face)} {})))
+                   chat.log)))
 
 (def (restored written)
-  (assoc written :log (vec (map (fn [entry]
-                                  (merge entry {kind: (keyword entry.kind)}
-                                         (if entry.face {face: (keyword entry.face)} {})))
-                                (or written.log [])))))
+  (assoc written :log (map (fn [entry]
+                             (merge entry {kind: (keyword entry.kind)}
+                                    (if entry.face {face: (keyword entry.face)} {})))
+                           (or written.log []))))
 
 (def (save! chat)
   "Writes chat to the plugin's folder once it has a message."
@@ -40,8 +40,7 @@
          (keep (fn [entry] (try (json/read (file/read entry.path)) (catch error _e nil))))
          (filter (fn [chat] (or (nil? project) (= chat.project project))))
          (sort-by (fn [chat] (- (or chat.updated 0))))
-         (map (fn [chat] (select-keys chat [:id :title :project :updated])))
-         vec)
+         (map (fn [chat] (select-keys chat [:id :title :project :updated]))))
     []))
 
 (def (remove! id)

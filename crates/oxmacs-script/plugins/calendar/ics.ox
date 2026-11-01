@@ -42,13 +42,13 @@
 
 (def (properties component name)
   "Every property of component called name."
-  (vec (filter (fn [found] (= found.name name)) component.properties)))
+  (filter (fn [found] (= found.name name)) component.properties))
 
 (def (components component kind)
   "Every component of kind, such as VEVENT, anywhere inside component."
-  (vec (mapcat (fn [child]
-                 (concat (if (= child.type kind) [child] []) (components child kind)))
-               component.children)))
+  (mapcat (fn [child]
+            (concat (if (= child.type kind) [child] []) (components child kind)))
+          component.children))
 
 (def (unescape text)
   "Property text with its iCalendar escapes undone."
@@ -135,15 +135,15 @@
      description: (text "DESCRIPTION")
      status: (text "STATUS")
      rrule: (when-let [found (property component "RRULE")] found.value)
-     exdates: (vec (mapcat (fn [found]
-                             (map (fn [value] (get (moment {value: value params: found.params}) :time))
-                                  (string/split found.value ",")))
-                           (properties component "EXDATE")))
+     exdates: (mapcat (fn [found]
+                        (map (fn [value] (get (moment {value: value params: found.params}) :time))
+                             (string/split found.value ",")))
+                      (properties component "EXDATE"))
      recurrence-id: (when-let [found (property component "RECURRENCE-ID")] (get (moment found) :time))
      sequence: (or (when-let [found (property component "SEQUENCE")] (string/to-number found.value)) 0)
-     alarms: (vec (keep alarm-of (filter (fn [child] (= child.type "VALARM")) component.children)))
+     alarms: (keep alarm-of (filter (fn [child] (= child.type "VALARM")) component.children))
      organizer: (when-let [found (property component "ORGANIZER")] (attendee-of found))
-     attendees: (vec (map attendee-of (properties component "ATTENDEE")))}))
+     attendees: (map attendee-of (properties component "ATTENDEE"))}))
 
 (def (fold-line line)
   "line folded at 74 characters, as iCalendar wants."
@@ -161,29 +161,29 @@
        ":mailto:" person.email))
 
 (def (event-lines event)
-  (vec (filter some?
-               (concat ["BEGIN:VEVENT"
-                        (str "UID:" event.uid)
-                        (str "DTSTAMP:" (stamp (time/now)))
-                        (when-line "DTSTART" event event.start)
-                        (when-line "DTEND" event event.end)
-                        (str "SUMMARY:" (escape event.summary))
-                        (when event.location (str "LOCATION:" (escape event.location)))
-                        (when event.description (str "DESCRIPTION:" (escape event.description)))
-                        (when event.status (str "STATUS:" event.status))
-                        (when event.rrule (str "RRULE:" event.rrule))
-                        (when (not (empty? (or event.exdates []))) (str "EXDATE:" (string/join "," (map stamp event.exdates))))
-                        (when event.recurrence-id (when-line "RECURRENCE-ID" event event.recurrence-id))
-                        (when (> (or event.sequence 0) 0) (str "SEQUENCE:" event.sequence))
-                        (when event.organizer (attendee-line "ORGANIZER" event.organizer))]
-                       (map (fn [person] (attendee-line "ATTENDEE" person)) (or event.attendees []))
-                       (mapcat (fn [alarm]
-                                 (if alarm.before
-                                   ["BEGIN:VALARM" "ACTION:DISPLAY" (str "DESCRIPTION:" (escape event.summary))
-                                    (str "TRIGGER:-PT" (// alarm.before 60000) "M") "END:VALARM"]
-                                   []))
-                               (or event.alarms []))
-                       ["END:VEVENT"]))))
+  (filter some?
+          (concat ["BEGIN:VEVENT"
+                   (str "UID:" event.uid)
+                   (str "DTSTAMP:" (stamp (time/now)))
+                   (when-line "DTSTART" event event.start)
+                   (when-line "DTEND" event event.end)
+                   (str "SUMMARY:" (escape event.summary))
+                   (when event.location (str "LOCATION:" (escape event.location)))
+                   (when event.description (str "DESCRIPTION:" (escape event.description)))
+                   (when event.status (str "STATUS:" event.status))
+                   (when event.rrule (str "RRULE:" event.rrule))
+                   (when (not (empty? (or event.exdates []))) (str "EXDATE:" (string/join "," (map stamp event.exdates))))
+                   (when event.recurrence-id (when-line "RECURRENCE-ID" event event.recurrence-id))
+                   (when (> (or event.sequence 0) 0) (str "SEQUENCE:" event.sequence))
+                   (when event.organizer (attendee-line "ORGANIZER" event.organizer))]
+                  (map (fn [person] (attendee-line "ATTENDEE" person)) (or event.attendees []))
+                  (mapcat (fn [alarm]
+                            (if alarm.before
+                              ["BEGIN:VALARM" "ACTION:DISPLAY" (str "DESCRIPTION:" (escape event.summary))
+                               (str "TRIGGER:-PT" (// alarm.before 60000) "M") "END:VALARM"]
+                              []))
+                          (or event.alarms []))
+                  ["END:VEVENT"])))
 
 (def (write-calendar events {method nil})
   "A whole iCalendar file holding events."

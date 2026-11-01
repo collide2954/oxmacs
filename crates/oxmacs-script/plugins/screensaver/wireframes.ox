@@ -13,27 +13,27 @@
                 (let [dx (- ax bx) dy (- ay by) dz (- az bz)] (+ (* dx dx) (* dy dy) (* dz dz))))
         pairs (mapcat (fn [i] (map (fn [j] [i j]) (range (inc i) (count vertices)))) (range (count vertices)))
         nearest (reduce min (map (fn [[i j]] (apart (nth vertices i) (nth vertices j))) pairs))]
-    (vec (filter (fn [[i j]] (< (abs (- (apart (nth vertices i) (nth vertices j)) nearest)) 0.001)) pairs))))
+    (filter (fn [[i j]] (< (abs (- (apart (nth vertices i) (nth vertices j)) nearest)) 0.001)) pairs)))
 
 (def cube
-  (vec (for [x (signs) y (signs) z (signs)] [x y z])))
+  (for [x (signs) y (signs) z (signs)] [x y z]))
 
 (def octahedron
   [[1.4 0 0] [-1.4 0 0] [0 1.4 0] [0 -1.4 0] [0 0 1.4] [0 0 -1.4]])
 
 (def icosahedron
-  (vec (mapcat (fn [[a b]] [[0 a (* b golden)] [a (* b golden) 0] [(* b golden) 0 a]])
-               (for [a (signs) b (signs)] [a b]))))
+  (mapcat (fn [[a b]] [[0 a (* b golden)] [a (* b golden) 0] [(* b golden) 0 a]])
+          (for [a (signs) b (signs)] [a b])))
 
 (def dodecahedron
   (let [small (/ 1 golden)]
-    (vec (concat cube
-                 (mapcat (fn [[a b]] [[0 (* a small) (* b golden)] [(* a small) (* b golden) 0] [(* b golden) 0 (* a small)]])
-                         (for [a (signs) b (signs)] [a b]))))))
+    (concat cube
+            (mapcat (fn [[a b]] [[0 (* a small) (* b golden)] [(* a small) (* b golden) 0] [(* b golden) 0 (* a small)]])
+                    (for [a (signs) b (signs)] [a b])))))
 
 (def solids
-  (vec (map (fn [[vertices color]] {vertices: vertices lines: (edges vertices) color: color})
-            [[cube "#4cc9f0"] [octahedron "#f72585"] [icosahedron "#ffd166"] [dodecahedron "#06d6a0"]])))
+  (map (fn [[vertices color]] {vertices: vertices lines: (edges vertices) color: color})
+       [[cube "#4cc9f0"] [octahedron "#f72585"] [icosahedron "#ffd166"] [dodecahedron "#06d6a0"]]))
 
 (def (turned [x y z] seconds)
   (let [a (* 0.47 seconds) b (* 0.31 seconds) c (* 0.19 seconds)
@@ -47,11 +47,11 @@
 
 (def (seen solid seconds alpha cx cy scale floor)
   (let [radius (reduce max (map (fn [[x y z]] (math/sqrt (+ (* x x) (* y y) (* z z)))) solid.vertices))
-        placed (vec (map (fn [vertex]
-                           (let [[x y z] (turned vertex seconds)
-                                 far (/ 4.5 (+ 4.5 (/ z radius)))]
-                             [(+ cx (* scale far (/ x radius))) (+ cy (* scale far (/ y radius))) (/ z radius)]))
-                         solid.vertices))
+        placed (map (fn [vertex]
+                      (let [[x y z] (turned vertex seconds)
+                            far (/ 4.5 (+ 4.5 (/ z radius)))]
+                        [(+ cx (* scale far (/ x radius))) (+ cy (* scale far (/ y radius))) (/ z radius)]))
+                    solid.vertices)
         edge (fn [mirror strength]
                (mapcat (fn [[i j]]
                          (let [[x1 y1 z1] (nth placed i)
@@ -81,9 +81,9 @@
         floor (* 0.80 frame.height)
         now (nth solids (mod which (count solids)))
         coming (nth solids (mod (inc which) (count solids)))]
-    (vec (concat [[:glow cx floor (* 1.2 scale) ["#9ab6ff" 0.06]]]
-                 (seen now seconds (- 1 blend) cx cy scale floor)
-                 (if (> blend 0) (seen coming seconds blend cx cy scale floor) [])))))
+    (concat [[:glow cx floor (* 1.2 scale) ["#9ab6ff" 0.06]]]
+            (seen now seconds (- 1 blend) cx cy scale floor)
+            (if (> blend 0) (seen coming seconds blend cx cy scale floor) []))))
 
 (test "the solids have their edges"
   (expect (= (map (fn [solid] (count solid.lines)) solids) [12 12 30 30])))

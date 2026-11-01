@@ -1,7 +1,7 @@
 (module
   (import (ox string)
-          (git diff :as diff)
-          (git status :as status))
+          (git diff)
+          (git status))
   (export render overview pairs nothing))
 
 (def separator " │ ")
@@ -80,10 +80,10 @@
               gutter [[(numbered left width) :comment] " " [(numbered right width) :comment] " "]
               body (cond
                      [(= kind :note) [[text :comment]]]
-                     [(= kind :removed) (vec (concat [["-" :error]] (marked text (get marks j []) :error)))]
-                     [(= kind :added) (vec (concat [["+" :success]] (marked text (get marks j []) :success)))]
+                     [(= kind :removed) (concat [["-" :error]] (marked text (get marks j []) :error))]
+                     [(= kind :added) (concat [["+" :success]] (marked text (get marks j []) :success))]
                      [else [" " text]])
-              shown (vec (concat gutter body))]
+              shown (concat gutter body)]
           (again (+ j 1)
                  (if (nil? left) old (+ old 1))
                  (if (nil? right) new (+ new 1))
@@ -125,8 +125,8 @@
       (cond
         [(not (= line.kind (if old :removed :added))) [[number :comment] " " shown]]
         [(nil? words) [[$"{number} {shown}" face :pill]]]
-        [else (vec (concat [[number :comment] " "]
-                           (marked shown (visible words text text-width) face)))]))))
+        [else (concat [[number :comment] " "]
+                      (marked shown (visible words text text-width) face))]))))
 
 (def (split out file index hunk width columns)
   (let [half (// (- columns (string/length separator)) 2)
@@ -136,15 +136,15 @@
               (let [left (nth pair 0)
                     right (nth pair 1)]
                 (add out {kind: :pair section: file.section path: file.path hunk: index left: left right: right}
-                     (vec (concat (side hunk left true marks width text-width)
-                                  [[separator :comment]]
-                                  (side hunk right false marks width text-width))))))
+                     (concat (side hunk left true marks width text-width)
+                             [[separator :comment]]
+                             (side hunk right false marks width text-width)))))
             out (pairs hunk))))
 
 (def (header file)
   (let [stats (if (and file.counted (not (= file.counted [0 0]))) (status/stats file.counted) [])]
-    (vec (concat [[(or file.label (get labels file.section)) :link :pill] "  " [file.path :heading]]
-                 (if (empty? stats) [] (concat ["  "] stats))))))
+    (concat [[(or file.label (get labels file.section)) :link :pill] "  " [file.path :heading]]
+            (if (empty? stats) [] (concat ["  "] stats)))))
 
 (def (render file hunks layout columns)
   (let [width (digits hunks)
@@ -165,7 +165,7 @@
               (let [item (nth files i)
                     shown (render item.file item.hunks layout columns)
                     out (if (> i 0) (blank out) out)]
-                {lines: (vec (concat out.lines shown.lines))}))
+                {lines: (concat out.lines shown.lines)}))
             {lines: []} (range (count files)))))
 
 (def (nothing path)

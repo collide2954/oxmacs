@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (ox time) (screensaver shading :as shading))
+  (import (ox math) (ox time) (screensaver shading))
   (export shader spot draw))
 
 (def wide 0.6)

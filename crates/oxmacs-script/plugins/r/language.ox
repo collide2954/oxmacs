@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox path) (ox file) (ox process)
-          (r session :as session))
+          (r session))
   (export rscript define! wanted? check ready?))
 
 (defonce state (atom {defined: nil checked: false}))

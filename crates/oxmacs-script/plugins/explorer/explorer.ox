@@ -1,6 +1,6 @@
 (module
   (import (ox file) (ox path) (ox process) (ox string)
-          (explorer tree :as tree)))
+          (explorer tree)))
 
 (def tree-buffer "*explorer*")
 (def most-files 5000)
@@ -77,7 +77,7 @@
     (let [result (try (process/run "git" ["ls-files" "--cached" "--others" "--exclude-standard" "-z"] :cwd root)
                    (catch error _e nil))]
       (if (and result (= result.status 0))
-        (vec (remove string/blank? (string/split result.stdout "\u{0}")))
+        (remove string/blank? (string/split result.stdout "\u{0}"))
         []))
     (walk-files root "" [])))
 
@@ -111,11 +111,11 @@
   (let [s @state
         rows (compute s)
         width (max 12 (or s.width 32))
-        lines (vec (map (fn [row]
-                          (merge (tree/line row (get s.changes (key-of row.path)) (get s.problems (key-of row.path))
-                                            width (and s.current (= (key-of row.path) (key-of s.current))))
-                                 row))
-                        rows))
+        lines (map (fn [row]
+                     (merge (tree/line row (get s.changes (key-of row.path)) (get s.problems (key-of row.path))
+                                       width (and s.current (= (key-of row.path) (key-of s.current))))
+                            row))
+                   rows)
         at (row-index rows focus)]
     (set-header tree-buffer (header s rows))
     (if at

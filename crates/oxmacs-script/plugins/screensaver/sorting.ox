@@ -1,15 +1,15 @@
 (module
-  (import (ox math) (screensaver noise :as noise) (screensaver tones :as tones))
+  (import (ox math) (screensaver noise) (screensaver tones))
   (export algorithms shuffled replay draw))
 
 (def hues
-  (vec (map (fn [k]
-              (let [t (/ k 64.0)
-                    angle (* 2 math/pi (+ 0.55 (* 0.75 t)))]
-                (tones/rgb [(+ 0.5 (* 0.42 (math/cos angle)))
-                            (+ 0.5 (* 0.42 (math/cos (- angle 2.1))))
-                            (+ 0.5 (* 0.42 (math/cos (- angle 4.2))))])))
-            (range 65))))
+  (map (fn [k]
+         (let [t (/ k 64.0)
+               angle (* 2 math/pi (+ 0.55 (* 0.75 t)))]
+           (tones/rgb [(+ 0.5 (* 0.42 (math/cos angle)))
+                       (+ 0.5 (* 0.42 (math/cos (- angle 2.1))))
+                       (+ 0.5 (* 0.42 (math/cos (- angle 4.2))))])))
+       (range 65)))
 
 (def bars 64)
 (def playing 9.0)
@@ -41,8 +41,8 @@
     (if (>= i (dec bars))
       out
       (let [least (reduce (fn [best k] (if (< (nth v k) (nth v best)) k best)) i (range (inc i) bars))
-            looked (vec (map (fn [k] [k k]) (range i bars)))]
-        (again (swap v i least) (inc i) (vec (concat out looked [[i least]])))))))
+            looked (map (fn [k] [k k]) (range i bars))]
+        (again (swap v i least) (inc i) (concat out looked [[i least]]))))))
 
 (def (shell values)
   "The swaps Shell sort makes, insertion sorting with shrinking gaps."
@@ -64,7 +64,7 @@
     (if (empty? ranges)
       out
       (let [[low high] (last ranges)
-            others (vec (take (dec (count ranges)) ranges))]
+            others (take (dec (count ranges)) ranges)]
         (if (>= low high)
           (again v others out)
           (let [pivot (nth v high)
@@ -84,7 +84,7 @@
    {name: "Quicksort" sort: quick}])
 
 (def (shuffled round)
-  (vec (map last (sort-by first (map (fn [k] [(noise/of [round k]) (inc k)]) (range bars))))))
+  (map last (sort-by first (map (fn [k] [(noise/of [round k]) (inc k)]) (range bars)))))
 
 (defonce plays (atom {}))
 
@@ -112,26 +112,26 @@
         tall (* 0.62 frame.height)
         sorted (>= along playing)
         wave (if sorted (- along playing) -1)]
-    (vec (concat
-          (mapcat (fn [k]
-                    (let [value (nth values k)
-                          h (* tall (/ value bars))
-                          x (+ margin (* k wide))
-                          hot (or (= k hi) (= k hj))
-                          lit (and sorted (< (abs (- (* 40 wave) k)) 3))
-                          color (if hot "#ffffff" (nth hues value))]
-                      (vec (concat
-                            [[:rect (+ x 1) (- floor h) (- wide 2) h color]
-                             [:rect (+ x 1) (- floor h) (- wide 2) 2 ["#ffffff" 0.35]]
-                             [:rect (+ x 1) floor (- wide 2) (* 0.35 h) [color 0.12]]]
-                            (if (or hot lit) [[:glow (+ x (/ wide 2)) (- floor (/ h 2)) (* 0.6 h) [(if hot "#ffffff" color) 0.35]]] [])))))
-                  (range bars))
-          [[:text margin (* 0.07 frame.height) play.name ["#e8ecf4" 0.9] (* 0.045 frame.height)]
-           [:text margin (+ (* 0.07 frame.height) (* 0.06 frame.height)) $"{done} of {(count play.swaps)} steps" ["#8d97ab" 0.9] (* 0.028 frame.height)]]))))
+    (concat
+     (mapcat (fn [k]
+               (let [value (nth values k)
+                     h (* tall (/ value bars))
+                     x (+ margin (* k wide))
+                     hot (or (= k hi) (= k hj))
+                     lit (and sorted (< (abs (- (* 40 wave) k)) 3))
+                     color (if hot "#ffffff" (nth hues value))]
+                 (concat
+                  [[:rect (+ x 1) (- floor h) (- wide 2) h color]
+                   [:rect (+ x 1) (- floor h) (- wide 2) 2 ["#ffffff" 0.35]]
+                   [:rect (+ x 1) floor (- wide 2) (* 0.35 h) [color 0.12]]]
+                  (if (or hot lit) [[:glow (+ x (/ wide 2)) (- floor (/ h 2)) (* 0.6 h) [(if hot "#ffffff" color) 0.35]]] []))))
+             (range bars))
+     [[:text margin (* 0.07 frame.height) play.name ["#e8ecf4" 0.9] (* 0.045 frame.height)]
+      [:text margin (+ (* 0.07 frame.height) (* 0.06 frame.height)) $"{done} of {(count play.swaps)} steps" ["#8d97ab" 0.9] (* 0.028 frame.height)]])))
 
 (test "every algorithm sorts the bars"
   (let [values (shuffled 3)
-        sorted (vec (range 1 (inc bars)))]
+        sorted (range 1 (inc bars))]
     (expect (every? (fn [algorithm]
                       (= (reduce (fn [v [i j]] (swap v i j)) values ((get algorithm :sort) values)) sorted))
                     algorithms))))

@@ -1,6 +1,6 @@
 (module
   (import (ox string)
-          (claude api :as api))
+          (claude api))
   (export request-of tidy text-of suggest!))
 
 (def most-before 4000)
@@ -23,7 +23,7 @@
 (def (unfenced lines)
   (let [lines (if (and (not (empty? lines)) (string/starts-with? (first lines) "```")) (vec (rest lines)) lines)]
     (if (and (not (empty? lines)) (string/starts-with? (string/trim (last lines)) "```"))
-      (vec (take (dec (count lines)) lines))
+      (take (dec (count lines)) lines)
       lines)))
 
 (def (tidy text after)

@@ -1,6 +1,6 @@
 (module
   (import (ox file) (ox path) (ox string) (ox http) (ox regex)
-          (calendar store :as store)
+          (calendar store)
           (vault store :as vault))
   (export sync! responses))
 
@@ -29,11 +29,11 @@
 
 (def (responses body)
   "The responses of a CalDAV multistatus body, each a map of :href, :etag and :data."
-  (vec (keep (fn [match]
-               (let [block match.text]
-                 (when-let [href (tag-text block "href")]
-                   {href: href etag: (tag-text block "getetag") data: (tag-text block "calendar-data")})))
-             (regex/find-all #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>" body))))
+  (keep (fn [match]
+          (let [block match.text]
+            (when-let [href (tag-text block "href")]
+              {href: href etag: (tag-text block "getetag") data: (tag-text block "calendar-data")})))
+        (regex/find-all #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>" body)))
 
 (def (origin url)
   (or (get (regex/find "^[a-zA-Z]+://[^/]+" url) :text) ""))
@@ -65,7 +65,7 @@
   (some (fn [known] (when (= known.file file) known.href)) sync.resources))
 
 (def (forget sync href)
-  (assoc sync :resources (vec (remove (fn [known] (= known.href href)) sync.resources))))
+  (assoc sync :resources (remove (fn [known] (= known.href href)) sync.resources)))
 
 (def (remember sync href etag file)
   (update (forget sync href) :resources conj {href: href etag: etag file: file}))
@@ -101,7 +101,7 @@
         place (store/calendar-folder calendar.name)]
     (when (>= response.status 300)
       (raise (error (str calendar.name " answered " response.status " to the calendar query"))))
-    (let [found (vec (filter :data (responses response.body)))
+    (let [found (filter :data (responses response.body))
           seen (set (map :href found))
           changed (reduce (fn [sync item]
                             (let [known (resource sync item.href)]
@@ -111,7 +111,7 @@
                                   (file/write (path/join place name) item.data)
                                   (remember sync item.href item.etag name)))))
                           sync found)
-          gone (vec (remove (fn [known] (contains? seen known.href)) changed.resources))]
+          gone (remove (fn [known] (contains? seen known.href)) changed.resources)]
       (reduce (fn [sync known]
                 (let [file (path/join place known.file)]
                   (when (file/exists? file)

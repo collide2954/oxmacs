@@ -88,7 +88,7 @@
     [else (first (filter (fn [page] (= page.id id)) guide))]))
 
 (def (order modules)
-  (vec (concat ["top"] (map :id guide) (map (fn [docs] (str "ref:" docs.module)) modules))))
+  (concat ["top"] (map :id guide) (map (fn [docs] (str "ref:" docs.module)) modules)))
 
 (def (spot-of target)
   (cond

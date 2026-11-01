@@ -1,5 +1,5 @@
 (module
-  (import (processes table :as table) (ox time)))
+  (import (processes table) (ox time)))
 
 (def buffer "*Processes*")
 

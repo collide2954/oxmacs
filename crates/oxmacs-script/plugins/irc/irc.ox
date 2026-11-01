@@ -1,11 +1,11 @@
 (module
   (import (ox string) (ox http) (ox regex)
-          (irc protocol :as protocol)
-          (irc format :as format)
-          (irc client :as client)
-          (irc logs :as logs)
+          (irc protocol)
+          (irc format)
+          (irc client)
+          (irc logs)
           (vault store :as vault)
-          (customize save :as save)))
+          (customize save)))
 
 (def nicks-buffer "*irc nicks*")
 (def search-buffer "*irc search*")
@@ -60,7 +60,7 @@
         config (merge {name: name host: host port: port tls: tls nick: nick}
                       (if login {login: login} {})
                       {channels: channels})
-        others (vec (remove (fn [known] (= known.name name)) (networks)))]
+        others (remove (fn [known] (= known.name name)) (networks))]
     (when (string/blank? nick)
       (raise (error "A network needs a nick")))
     (when (nil? (oxmacs-home))
@@ -74,7 +74,7 @@
 (def (send-text! buffer typed)
   (let [text (string/replace (string/replace typed "\r\n" "\n") "\r" "\n")]
     (if (string/includes? text "\n")
-      (let [lines (vec (remove string/blank? (string/lines text)))
+      (let [lines (remove string/blank? (string/lines text))
             entry (client/buffer-entry buffer)]
         (when (yes-or-no (str "Send " (count lines) " lines to " entry.target "? "))
           (client/say-lines! buffer lines)))
@@ -155,18 +155,18 @@
         people (map :nick (client/channel-nicks entry.network entry.target))
         recent (reverse (distinct (keep :nick (reverse entry.messages))))
         ordered (distinct (concat (reverse recent) people))]
-    (vec (filter (fn [nick] (and (string/starts-with? (protocol/casefold nick) wanted)
-                                 (not (protocol/same-nick? nick (client/my-nick entry.network)))))
-                 ordered))))
+    (filter (fn [nick] (and (string/starts-with? (protocol/casefold nick) wanted)
+                            (not (protocol/same-nick? nick (client/my-nick entry.network)))))
+            ordered)))
 
 (def (completions entry start prefix)
   (cond [(and (= start 0) (string/starts-with? prefix "/"))
-         {found: (vec (filter (fn [command] (string/starts-with? command (string/lower prefix)))
-                              (map (fn [command] (str "/" command)) slash-commands)))
+         {found: (filter (fn [command] (string/starts-with? command (string/lower prefix)))
+                         (map (fn [command] (str "/" command)) slash-commands))
           suffix: " " kind: "command"}]
     [(string/starts-with? prefix "#")
-     {found: (vec (filter (fn [channel] (string/starts-with? (protocol/casefold channel) (protocol/casefold prefix)))
-                          (client/joined-channels entry.network)))
+     {found: (filter (fn [channel] (string/starts-with? (protocol/casefold channel) (protocol/casefold prefix)))
+                     (client/joined-channels entry.network))
       suffix: " " kind: "channel"}]
     [else {found: (candidates entry prefix) suffix: (if (= start 0) ": " " ") kind: "nick"}]))
 
@@ -197,18 +197,18 @@
                 (let [chosen (sort-by (fn [person] (protocol/casefold person.nick)) (filter wanted people))]
                   (if (empty? chosen)
                     []
-                    (vec (concat [{line: [[(str title " " (count chosen)) :heading]]}]
-                                 (map (fn [person]
-                                        {line: [[(str person.prefix person.nick) (if person.away :comment (protocol/nick-face person.nick))]]})
-                                      chosen)
-                                 [{line: []}])))))
+                    (concat [{line: [[(str title " " (count chosen)) :heading]]}]
+                            (map (fn [person]
+                                   {line: [[(str person.prefix person.nick) (if person.away :comment (protocol/nick-face person.nick))]]})
+                                 chosen)
+                            [{line: []}]))))
         operator (fn [person] (some (fn [mark] (string/includes? person.prefix mark)) ["~" "&" "@" "%"]))
         voiced (fn [person] (and (not (operator person)) (string/includes? person.prefix "+")))
         plain (fn [person] (and (not (operator person)) (not (voiced person))))]
     {header: [[[entry.target :heading] [(str "  " (count people) " people") :comment]]]
-     lines: (vec (concat (group "Operators" operator)
-                         (group "Voiced" voiced)
-                         (group "Everyone" plain)))}))
+     lines: (concat (group "Operators" operator)
+                    (group "Voiced" voiced)
+                    (group "Everyone" plain))}))
 
 (defcommand irc-nicks "Show or hide the people in this channel beside it"
   (if (buffer-shown? nicks-buffer)
@@ -317,11 +317,11 @@
         [else (message (or (title-of response.body) (str "A page of " kind)))]))))
 
 (def (search-places results)
-  (vec (map (fn [result]
-              {file: result.path line: (+ result.line 1)
-               label: (str result.network " " result.target " " result.day) face: :comment
-               text: result.text})
-            results)))
+  (map (fn [result]
+         {file: result.path line: (+ result.line 1)
+          label: (str result.network " " result.target " " result.day) face: :comment
+          text: result.text})
+       results))
 
 (defcommand irc-search "Search the IRC logs"
   (let [query (prompt "Search IRC logs for: ")

@@ -1,6 +1,6 @@
 (module
   (import (ox time)
-          (calendar store :as store))
+          (calendar store))
   (export default-minutes alarm-times remind! watching? watch!))
 
 (defonce state (atom {reminded: (set []) checked: nil watching: false}))

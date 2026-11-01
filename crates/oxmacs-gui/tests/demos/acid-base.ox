@@ -95,7 +95,7 @@
 
 (def (fresh acid ghost)
   (let [state {acid: acid
-               particles: (vec (concat (scatter :water water-count) (scatter acid acid-count)))
+               particles: (concat (scatter :water water-count) (scatter acid acid-count))
                ka: ka drops: 0 falling: [] hops: [] log: [] wait: 0 time: 0 ph: 7.0 ghost: ghost}]
     (assoc state :curve [[0 (target state)]])))
 
@@ -137,7 +137,7 @@
     (assoc state :particles (map (fn [p] (jiggle p dt kicks state.time)) state.particles))))
 
 (def (logged log text at)
-  (if text (vec (take 4 (cons {text: text at: at} log))) log))
+  (if text (take 4 (cons {text: text at: at} log)) log))
 
 (def (seekers counts)
   "Which kinds move toward which: the scarcer kind of each attracting pair seeks the other."

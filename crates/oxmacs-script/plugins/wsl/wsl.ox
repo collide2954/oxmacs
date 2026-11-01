@@ -1,8 +1,8 @@
 (module
   (import (ox string) (ox process) (ox wsl)
-          (wsl distros :as distros)
-          (remote hosts :as hosts)
-          (remote shell :as shell)))
+          (wsl distros)
+          (remote hosts)
+          (remote shell)))
 
 (def page "*WSL*")
 (def output "*wsl output*")
@@ -28,7 +28,7 @@
 (when (= (process/os) :windows)
   (wsl/route! true)
   (hosts/add-hosts! (fn [] (if (= (situation) :ready)
-                             (try (vec (map host-of (distros/listed))) (catch error _ []))
+                             (try (map host-of (distros/listed)) (catch error _ []))
                              []))))
 
 (spawn (let [now (situation)]
@@ -50,16 +50,16 @@
         buffer (open-buffer page
                             (if (empty? listed)
                               [[[$"  {why}" :comment]]]
-                              (vec (map distro-line listed)))
+                              (map distro-line listed))
                             :keys {"RET" 'wsl-open-home "s" 'wsl-shell "r" 'wsl-run "f" 'wsl-find-file
                                    "S" 'wsl-start "k" 'wsl-terminate "d" 'wsl-set-default "X" 'wsl-shutdown
                                    "g" 'wsl "q" 'quit-window}
                             :line 0)]
     (set-header buffer (if (empty? listed)
                          [[["WSL distributions" :heading] ["   g checks again  q quits" :comment]]]
-                         (vec (concat [[["WSL distributions" :heading] ["   * is the default" :comment]]
-                                       [["RET opens home  f finds a file  s shell  r runs  S starts  k stops  d makes default  X shuts WSL down  g refreshes  q quits" :comment]]]
-                                      (if why [[[why :comment]]] [])))))))
+                         (concat [[["WSL distributions" :heading] ["   * is the default" :comment]]
+                                  [["RET opens home  f finds a file  s shell  r runs  S starts  k stops  d makes default  X shuts WSL down  g refreshes  q quits" :comment]]]
+                                 (if why [[[why :comment]]] []))))))
 
 (defcommand wsl "List the WSL distributions to open, start, stop and work in, or say why there are none"
   (show-page))

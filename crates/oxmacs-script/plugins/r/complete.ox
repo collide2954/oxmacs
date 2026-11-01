@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox regex)
-          (r session :as session)
-          (r language :as language))
+          (r session)
+          (r language))
   (export complete answered indent-or-complete call-name signature signed forget-signatures
           settled))
 

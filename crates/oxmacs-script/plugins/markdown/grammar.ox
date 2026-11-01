@@ -47,7 +47,7 @@
 
 (def (tokens text)
   "The inline tokens of a line: maps of :start, :end, :kind (:code, :strong or :link), :text and, for links, :target."
-  (vec (map token-of (regex/find-all inline text))))
+  (map token-of (regex/find-all inline text)))
 
 (def (step state text)
   "Reads one line of a document, given the state the line before left: nil, or the fence of the code block it is in. A map of the line's :kind (:fence-open, :fence-close, :code, :heading, :quote, :bullet, :blank or :text), the fields of that kind, and the :state for the next line."

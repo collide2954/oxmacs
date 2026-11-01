@@ -1,6 +1,6 @@
 (module
   (import (ox crypto) (ox json) (ox file) (ox path) (ox string) (ox time)
-          (vault words :as words))
+          (vault words))
   (export vault-file locked? unlock lock entries find-entry save! add! add-all! change! remove!
           login touch! generate passphrase))
 
@@ -145,18 +145,18 @@
 (def (add-all! found)
   "Adds the entries that aren't in the vault yet, judged by title and user name, and says how many were new."
   (let [known (set (map (fn [entry] [entry.title entry.username]) (entries)))
-        fresh (vec (filter (fn [entry] (not (contains? known [entry.title entry.username]))) found))]
-    (save! (vec (concat (entries) (map stamped fresh))))
+        fresh (filter (fn [entry] (not (contains? known [entry.title entry.username]))) found)]
+    (save! (concat (entries) (map stamped fresh)))
     (count fresh)))
 
 (def (change! id edit)
   "Replaces the entry with id by what edit returns for it and writes the vault."
-  (save! (vec (map (fn [entry] (if (= entry.id id) (assoc (edit entry) :modified (time/now)) entry))
-                   (entries)))))
+  (save! (map (fn [entry] (if (= entry.id id) (assoc (edit entry) :modified (time/now)) entry))
+              (entries))))
 
 (def (remove! id)
   "Removes the entry with id and writes the vault."
-  (save! (vec (remove (fn [entry] (= entry.id id)) (entries)))))
+  (save! (remove (fn [entry] (= entry.id id)) (entries))))
 
 (def (login title)
   "The :user and :password of the entry titled title, asking for the vault's password first when it is locked, and an error when there is no such entry. Other plugins log in with it."
@@ -168,7 +168,7 @@
 
 (def (pick choices wanted)
   (let [size (count choices)]
-    (vec (map (fn [_] (nth choices (crypto/random-below size))) (range wanted)))))
+    (map (fn [_] (nth choices (crypto/random-below size))) (range wanted))))
 
 (def (generate {length 20 symbols? true})
   "A random password of length characters from letters, digits and, unless symbols? is false, symbols."

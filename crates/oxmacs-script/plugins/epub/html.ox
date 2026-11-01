@@ -1,6 +1,6 @@
 (module
   (import (ox regex) (ox string) (ox xml)
-          (epub package :as package))
+          (epub package))
   (export blocks))
 
 (def heading-levels {"h1" 1 "h2" 2 "h3" 3 "h4" 4 "h5" 5 "h6" 6})
@@ -44,12 +44,12 @@
                              text (if (= at (dec n)) (string/trim-end text) text)]
                          (assoc run :text text)))
                      (range n))]
-    (vec (keep (fn [run]
-                 (cond
-                   [(= run.text "") nil]
-                   [(plain? run) run.text]
-                   [else run]))
-               trimmed))))
+    (keep (fn [run]
+            (cond
+              [(= run.text "") nil]
+              [(plain? run) run.text]
+              [else run]))
+          trimmed)))
 
 (def (flush state kind)
   (let [runs (cleaned state.runs)

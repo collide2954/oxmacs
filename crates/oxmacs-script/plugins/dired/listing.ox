@@ -64,8 +64,8 @@
 (def (render listing now)
   "The lines of the listing at now: the parent folder's line, carrying :parent, then each entry's, carrying its :name and :entry."
   (let [width (size-width listing)]
-    (vec (concat
-          (if (has-parent listing)
-            [{line: [(string/repeat " " (name-column listing)) [".." :link]] parent: true}]
-            [])
-          (map (fn [entry] (entry-line listing entry width now)) listing.entries)))))
+    (concat
+     (if (has-parent listing)
+       [{line: [(string/repeat " " (name-column listing)) [".." :link]] parent: true}]
+       [])
+     (map (fn [entry] (entry-line listing entry width now)) listing.entries))))

@@ -1,6 +1,6 @@
 (module
   (import (ox path) (ox string) (ox ui) (ox pdf)
-          (pdf reading :as reading)))
+          (pdf reading)))
 
 (def (current)
   (buffer-value :pdf))
@@ -184,9 +184,9 @@
 (def (outline-items state)
   "The document's outline as items for M-g i, each turning to its heading's page."
   (let [outline (or (get @state :outline) [])]
-    (vec (map (fn [[label heading]]
-                {label: label go: (fn [] (when (get @state :pages) (to-page state @state heading.page)))})
-              (map vector (reading/outline-labels outline) outline)))))
+    (map (fn [[label heading]]
+           {label: label go: (fn [] (when (get @state :pages) (to-page state @state heading.page)))})
+         (map vector (reading/outline-labels outline) outline))))
 
 (def (show-match state by)
   (let [doc @state

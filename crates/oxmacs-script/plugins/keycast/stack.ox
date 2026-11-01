@@ -40,11 +40,11 @@
     (if (and newest event.repeat (same? newest event))
       (conj (pop casts) (assoc newest :count (inc newest.count) :at now))
       (let [all (conj casts {keys: event.keys command: event.command count: 1 at: now})]
-        (vec (drop (max 0 (- (count all) most)) all))))))
+        (drop (max 0 (- (count all) most)) all)))))
 
 (def (live casts now)
   "The casts pressed less than linger milliseconds before now."
-  (vec (filter (fn [cast] (< (- now cast.at) linger)) casts)))
+  (filter (fn [cast] (< (- now cast.at) linger)) casts))
 
 (def (opacity casts index now)
   (let [cast (nth casts index)
@@ -59,8 +59,8 @@
 
 (def (rows casts now)
   "Overlay rows for casts at now, oldest first and faintest, each fading out in its last moments."
-  (vec (map (fn [index] {line: (pieces (nth casts index)) opacity: (opacity casts index now)})
-            (range (count casts)))))
+  (map (fn [index] {line: (pieces (nth casts index)) opacity: (opacity casts index now)})
+       (range (count casts))))
 
 (def (caption cast)
   "The mode-line text for cast, or nil when there is none."

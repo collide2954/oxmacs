@@ -13,7 +13,7 @@
 (defonce dark (atom false))
 
 (def (mix a b t)
-  (vec (map (fn [x y] (+ x (* t (- y x)))) a b)))
+  (map (fn [x y] (+ x (* t (- y x)))) a b))
 
 (def (lit [r g b a])
   (let [k (+ 0.16 (* 0.84 @light))]
@@ -219,10 +219,10 @@
   (when (rodeo/pressed? :feed) (swap! food into (for [_ (range 20)] (flake))))
   (swap! light (fn [l] (+ l (* 0.015 (- (if @dark 0 1) l)))))
   (let [all @school]
-    (reset! school (vec (for [f all] (swim f all))))
-    (swap! food (fn [flakes] (vec (for [p flakes :when (not (eaten? p all))] (drift p))))))
+    (reset! school (for [f all] (swim f all)))
+    (swap! food (fn [flakes] (for [p flakes :when (not (eaten? p all))] (drift p)))))
   (when (random/chance? 0.3 :from seed) (swap! bubbles conj (bubble)))
-  (swap! bubbles (fn [all] (vec (for [b all :when (> (second b.at) 34)] (lift b))))))
+  (swap! bubbles (fn [all] (for [b all :when (> (second b.at) 34)] (lift b)))))
 
 (def (air)
   (rodeo/line stone [(first stone) 0] [40 60 50 200] :width 2)

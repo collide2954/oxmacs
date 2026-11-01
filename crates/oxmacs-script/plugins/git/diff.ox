@@ -112,7 +112,7 @@
         (again (- j 1) value (cons value acc))))))
 
 (def (lcs-table items others)
-  (let [zeros (vec (map (fn [_] 0) (range (+ (count others) 1))))]
+  (let [zeros (map (fn [_] 0) (range (+ (count others) 1)))]
     (loop [i (- (count items) 1) acc (list zeros)]
       (if (< i 0)
         (vec acc)

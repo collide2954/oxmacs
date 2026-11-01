@@ -1,6 +1,6 @@
 (module
   (import (ox process) (ox string) (ox path) (ox file)
-          (git diff :as diff))
+          (git diff))
   (export run git git-with locate read-status files-of find-change located diffs))
 
 (def base ["--no-pager" "--no-optional-locks" "-c" "color.ui=false" "-c" "core.quotepath=false"])
@@ -11,7 +11,7 @@
   (if (= (path/separator) "\\") (string/replace path "/" "\\") path))
 
 (def (run root args)
-  (process/run "git" (vec (concat base args)) :cwd root))
+  (process/run "git" (concat base args) :cwd root))
 
 (def (reason ran)
   (let [said (filter (fn [line] (not (string/blank? line)))
@@ -25,7 +25,7 @@
   (output (await (run root args))))
 
 (def (git-with root args input)
-  (output (process/run "git" (vec (concat base args)) :cwd root :input input)))
+  (output (process/run "git" (concat base args) :cwd root :input input)))
 
 (def (climb directory cdup)
   (reduce (fn [dir part] (if (= part "..") (path/parent dir) dir))
@@ -44,7 +44,7 @@
                      [else (native metadata)])}))))
 
 (def (records text)
-  (vec (filter (fn [record] (not (= record ""))) (string/split text "\0"))))
+  (filter (fn [record] (not (= record ""))) (string/split text "\0")))
 
 (def kinds {"M" :modified "T" :type-change "A" :added "D" :deleted
             "R" :renamed "C" :copied "U" :conflict})
@@ -195,8 +195,8 @@
     [(= section :unstaged)
      (diff/parse (git root ["diff" "--no-ext-diff" "--" change.path]))]
     [else
-     (diff/parse (git root (vec (concat ["diff" "--cached" "--no-ext-diff" "-M" "--" change.path]
-                                        (if change.from [change.from] [])))))]))
+     (diff/parse (git root (concat ["diff" "--cached" "--no-ext-diff" "-M" "--" change.path]
+                                   (if change.from [change.from] []))))]))
 
 (def (diffs root snapshot opened)
   (reduce (fn [found key]

@@ -1,7 +1,7 @@
 (module
   (import (ox path) (ox file) (ox regex)
-          (r session :as session)
-          (r language :as language))
+          (r session)
+          (r language))
   (export start rscript heard-app))
 
 (def (start buffer program args directory {on-line nil on-exit nil title nil})

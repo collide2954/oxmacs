@@ -1,5 +1,5 @@
 (module
-  (import (screensaver shading :as shading))
+  (import (screensaver shading))
   (export shader))
 
 (def shader

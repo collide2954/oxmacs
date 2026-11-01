@@ -1,9 +1,9 @@
 (module
   (import (ox string) (ox regex) (ox path) (ox file)
-          (r session :as session)
+          (r session)
           (r jobs :as jobs)
-          (markdown grammar :as grammar)
-          (markdown style :as style)
+          (markdown grammar)
+          (markdown style)
           (markdown preview :as preview))
   (export parse highlight render-with script-file saved))
 
@@ -259,7 +259,7 @@
                                 label: $"chunk {(or chunk.name (+ at 1))}"
                                 note: $"{chunk.language}  L{(+ chunk.start 1)}"}))
                     (range (count chunks)))]
-    (vec (sort-by (fn [item] item.line) (concat headings blocks)))))
+    (sort-by (fn [item] item.line) (concat headings blocks))))
 
 (defonce rendering (atom #{}))
 

@@ -1,5 +1,5 @@
 (module
-  (import (r session :as session)
+  (import (r session)
           (r plots :as plots)
           (r data :as data)))
 

@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver noise :as noise) (screensaver shading :as shading))
+  (import (ox math) (screensaver noise) (screensaver shading))
   (export shader rocket place draw))
 
 (def palette ["#ff4d6d" "#ffd166" "#3ddc97" "#4cc9f0" "#f72585" "#fff3d6" "#ff9f1c" "#c77dff"])
@@ -104,7 +104,7 @@
         depth (- (* 2 (noise/of [r.id k :depth])) 1)
         pace (* r.speed (if ring 0.9 (* (+ 0.92 (* 0.08 (noise/of [r.id k :pace]))) (math/sqrt (- 1 (* depth depth))))))
         tail (cond [(= r.kind 1) 0.7] [ring 0.25] [else 0.5])
-        trail (vec (map (fn [s] (place r angle pace (max 0 (- dt (* tail (/ s 5)))))) [5 4 3 2 1 0]))
+        trail (map (fn [s] (place r angle pace (max 0 (- dt (* tail (/ s 5)))))) [5 4 3 2 1 0])
         [x y] (last trail)
         color (nth palette (if (= r.kind 1) 6 r.hue))
         twinkle (if (> dt 1.6) (+ 0.5 (* 0.5 (math/sin (+ (* 41 dt) (* 7 k))))) 1.0)
@@ -120,7 +120,7 @@
       [(< age rise)
        (let [height-at (fn [a] (- r.ground (* (- r.ground r.peak) (- 1 (math/pow (- 1 (/ a rise)) 2)))))
              wobble (fn [a] (+ r.x (* 3 (math/sin (* 30 a)))))
-             trail (vec (map (fn [s] (let [a (max 0 (- age (* 0.06 s)))] [(wobble a) (height-at a)])) [5 4 3 2 1 0]))
+             trail (map (fn [s] (let [a (max 0 (- age (* 0.06 s)))] [(wobble a) (height-at a)])) [5 4 3 2 1 0])
              [x y] (last trail)]
          {shapes: [[:curve trail ["#ffd9a0" 0.6] 1.4 1.0]
                    [:glow x y 9 ["#ffcc88" 0.8]]
@@ -131,7 +131,7 @@
              fade (math/pow (- 1 (/ dt burn)) 1.4)
              flash (max 0 (- 1 (/ dt 0.25)))
              core (if (> flash 0) [[:glow r.x r.peak (* 60 flash) [(nth palette r.hue) (* 0.5 flash)]]] [])]
-         {shapes: (vec (concat core (mapcat (fn [k] (spark r k dt fade)) (range r.sparks))))
+         {shapes: (concat core (mapcat (fn [k] (spark r k dt fade)) (range r.sparks)))
           light: [r.x r.peak (+ (* 2.5 flash) (* 0.6 fade)) r.hue]})]
       [else {shapes: [] light: nil}])))
 
@@ -141,8 +141,8 @@
         shells (map (fn [i] (shell (rocket i frame.width frame.height) seconds))
                     (range oldest (+ 2 (int (/ (+ seconds rise) period)))))
         lights (take 4 (reverse (keep (fn [s] s.light) shells)))]
-    {shapes: (vec (mapcat (fn [s] s.shapes) shells))
-     inputs: (vec (mapcat (fn [[x y bright hue]] [(/ x frame.width) (/ y frame.height) bright hue]) lights))}))
+    {shapes: (mapcat (fn [s] s.shapes) shells)
+     inputs: (mapcat (fn [[x y bright hue]] [(/ x frame.width) (/ y frame.height) bright hue]) lights)}))
 
 (test "rockets burst high above the skyline"
   (expect (every? (fn [i]

@@ -14,9 +14,9 @@
     (if host.user (str host.user "@" address) address)))
 
 (def (ssh-words host)
-  (vec (concat ["ssh" "-T" "-o" "BatchMode=yes"]
-               (if host.port ["-p" (str host.port)] [])
-               [(target host)])))
+  (concat ["ssh" "-T" "-o" "BatchMode=yes"]
+          (if host.port ["-p" (str host.port)] [])
+          [(target host)]))
 
 (def (command-of host)
   "The program and arguments that start a shell on host."

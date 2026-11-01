@@ -3,11 +3,11 @@
 
 (def (insert-at items at item)
   "items with item put in before the one at index at."
-  (vec (concat (take at items) [item] (drop at items))))
+  (concat (take at items) [item] (drop at items)))
 
 (def (remove-at items at)
   "items without the one at index at."
-  (vec (concat (take at items) (drop (inc at) items))))
+  (concat (take at items) (drop (inc at) items)))
 
 (def (move-item items from to)
   "items with the one at index from moved to index to."

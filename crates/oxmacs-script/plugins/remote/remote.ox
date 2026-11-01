@@ -1,9 +1,9 @@
 (module
   (import (ox string) (ox file) (ox path)
-          (remote hosts :as hosts)
-          (remote shell :as shell)
-          (remote ops :as ops)
-          (customize save :as save)))
+          (remote hosts)
+          (remote shell)
+          (remote ops)
+          (customize save)))
 
 (def hosts-buffer "*Remote*")
 (def output-buffer "*remote output*")
@@ -26,7 +26,7 @@
         buffer (open-buffer hosts-buffer
                             (if (empty? found)
                               [[["  No hosts yet: a adds one, or name them in ~/.ssh/config" :comment]]]
-                              (vec (map host-line found)))
+                              (map host-line found))
                             :keys {"RET" 'remote-browse "s" 'remote-shell "a" 'remote-add-host "g" 'remote "q" 'quit-window}
                             :line 0)]
     (set-header buffer [[["Remote hosts" :heading]]
@@ -57,7 +57,7 @@
 (def (browser-lines entries)
   (if (empty? entries)
     [[["  (empty)" :comment]]]
-    (vec (map entry-line entries))))
+    (map entry-line entries)))
 
 (def (browse! host dir)
   (message (str "Listing " (browser-name host dir) "…"))
@@ -182,7 +182,7 @@
         pattern (prompt (str "Search " found.dir " for: "))
         results (ops/search found.host found.dir pattern)]
     (show-places search-buffer
-                 (vec (map (fn [result] {file: result.path line: result.line text: result.text}) results))
+                 (map (fn [result] {file: result.path line: result.line text: result.text}) results)
                  :title (str (count results) " lines with " (pr-str pattern) " below " (browser-name found.host found.dir))
                  :root found.dir
                  :empty "Nothing below here has that"
@@ -211,7 +211,7 @@
         user (string/trim (prompt "User (optional): "))
         host (merge {name: name protocol: (keyword protocol) address: address}
                     (if (= user "") {} {user: user}))
-        others (vec (remove (fn [known] (= known.name name)) (setting :hosts)))]
+        others (remove (fn [known] (= known.name name)) (setting :hosts))]
     (when (string/blank? name)
       (raise (error "A host needs a name")))
     (message (if (save/plugin-setting! 'remote :hosts (conj others host))

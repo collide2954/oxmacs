@@ -1,6 +1,6 @@
 (module
   (import (ox lexer)
-          (go spec :as spec)))
+          (go spec)))
 
 (def (highlighter rules)
   (let [lexer (lexer/spec rules)]

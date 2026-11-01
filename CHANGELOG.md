@@ -84,6 +84,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `ox check` warns about an `:as` that names a module by the name it has anyway, as in `(git diff :as diff)`, and about `vec` around a value that is already a vector, such as the result of `map`, `filter` or `concat`. The bundled plugins no longer do either.
 - Ox's `cond` takes its clauses in brackets only, as `[test body…]`, so every `cond` reads the same; a clause in parentheses raises an error that says so, and `ox migrate` rewrites them.
 - In Ox, `@state.current` reads the field `current` of the atom's value, so state kept in an atom reads with a dot like any map, where it used to look for a field of the atom itself. `@(. m :cell)` or `(deref m.cell)` reads an atom kept in a field.
 - `C-h t` opens your copy of the tutorial at the top every time, with your edits kept, instead of where you last were, and no longer writes `tutorial.place`. The Ox manual on `C-h i` still reopens at the page you were reading.

@@ -1,8 +1,8 @@
 (module
   (import (ox string) (ox path) (ox file) (ox regex)
-          (r session :as session)
-          (r help :as help)
-          (r language :as language))
+          (r session)
+          (r help)
+          (r language))
   (export line find-definition answered))
 
 (def skipped #{"renv" "node_modules" "packrat"})

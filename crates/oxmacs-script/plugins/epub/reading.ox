@@ -42,24 +42,24 @@
 (def (find-matches texts query)
   "Every place query appears in texts, a vector per chapter of block texts, ignoring case: maps of :chapter, :block, :start and :end."
   (let [needle (string/lower query)]
-    (vec (mapcat (fn [chapter]
-                   (let [blocks (nth texts chapter)]
-                     (mapcat (fn [block]
-                               (map (fn [start] {chapter: chapter block: block start: start end: (+ start (count needle))})
-                                    (positions (string/lower (nth blocks block)) needle)))
-                             (range (count blocks)))))
-                 (range (count texts))))))
+    (mapcat (fn [chapter]
+              (let [blocks (nth texts chapter)]
+                (mapcat (fn [block]
+                          (map (fn [start] {chapter: chapter block: block start: start end: (+ start (count needle))})
+                               (positions (string/lower (nth blocks block)) needle)))
+                        (range (count blocks)))))
+            (range (count texts)))))
 
 (def (chapter-marks chapter highlights matches highlight-face)
   "The marks ui/pages draws in chapter: highlights in highlight-face, those with notes in :added, and search matches in :link."
-  (vec (concat (keep (fn [mark]
-                       (when (= mark.chapter chapter)
-                         {from: mark.from to: mark.to face: (if mark.note :added highlight-face)}))
-                     highlights)
-               (keep (fn [match]
-                       (when (= match.chapter chapter)
-                         {from: [match.block match.start] to: [match.block match.end] face: :link}))
-                     matches))))
+  (concat (keep (fn [mark]
+                  (when (= mark.chapter chapter)
+                    {from: mark.from to: mark.to face: (if mark.note :added highlight-face)}))
+                highlights)
+          (keep (fn [match]
+                  (when (= match.chapter chapter)
+                    {from: [match.block match.start] to: [match.block match.end] face: :link}))
+                matches)))
 
 (def (block-text block)
   "The text of a block made for ui/document."

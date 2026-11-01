@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox time) (ox regex)
-          (irc protocol :as protocol))
+          (irc protocol))
   (export message-lines marker-line fill-segments linkify segments-of clock day-of url-at fresh-context channel-lines))
 
 (def time-width 6)
@@ -27,7 +27,7 @@
         [out at] (reduce (fn [[out at] match]
                            [(conj out (piece (string/slice text at match.start) face) [match.text :link]) match.end])
                          [[] 0] found)]
-    (vec (filter some? (conj out (piece (string/slice text at) face))))))
+    (filter some? (conj out (piece (string/slice text at) face)))))
 
 (def (url-at text column)
   "The web address in text that column falls on, or nil."
@@ -37,25 +37,25 @@
 
 (def (segments-of text face)
   "The segments of a message's text: its mIRC formatting as faces, and links."
-  (vec (mapcat (fn [part]
-                 (if (string? part)
-                   (linkify part face)
-                   (linkify (first part) (second part))))
-               (protocol/styled text))))
+  (mapcat (fn [part]
+            (if (string? part)
+              (linkify part face)
+              (linkify (first part) (second part))))
+          (protocol/styled text)))
 
 (def (words-of segments)
-  (vec (mapcat (fn [segment]
-                 (let [[text face] (if (string? segment) [segment nil] segment)]
-                   (map (fn [match] [match.text face]) (regex/find-all #"\s+|\S+" text))))
-               segments)))
+  (mapcat (fn [segment]
+            (let [[text face] (if (string? segment) [segment nil] segment)]
+              (map (fn [match] [match.text face]) (regex/find-all #"\s+|\S+" text))))
+          segments))
 
 (def (chop word width)
   (let [[text face] word
         size (count text)]
     (if (<= size width)
       [word]
-      (vec (map (fn [at] [(string/slice text at (min size (+ at width))) face])
-                (range 0 size width))))))
+      (map (fn [at] [(string/slice text at (min size (+ at width))) face])
+           (range 0 size width)))))
 
 (def (shown [text face])
   (if face [text face] text))
@@ -89,7 +89,7 @@
         text (or message.text "")]
     (cond [(= kind :privmsg) (segments-of text nil)]
       [(= kind :notice) (segments-of text :comment)]
-      [(= kind :action) (vec (concat [[message.nick (protocol/nick-face message.nick)] " "] (segments-of text :string)))]
+      [(= kind :action) (concat [[message.nick (protocol/nick-face message.nick)] " "] (segments-of text :string))]
       [(= kind :error) (segments-of text :error)]
       [else (segments-of text :comment)])))
 
@@ -119,13 +119,13 @@
         having (if (string/blank? (or wanted "")) "" (str " with " (pr-str wanted)))]
     {header: [[[(str "Channels on " network) :heading] [(str "  " shown total " channels" having) :comment]]
               [["RET joins  / filters  g lists again  q quits" :comment]]]
-     lines: (vec (map (fn [channel]
-                        {line: (vec (concat [[(string/pad-end channel.name width) :keyword]
-                                             [(string/pad-start (str channel.users) 5) :comment]
-                                             "  "]
-                                            (segments-of channel.topic nil)))
-                         channel: channel})
-                      channels))}))
+     lines: (map (fn [channel]
+                   {line: (concat [[(string/pad-end channel.name width) :keyword]
+                                   [(string/pad-start (str channel.users) 5) :comment]
+                                   "  "]
+                                  (segments-of channel.topic nil))
+                    channel: channel})
+                 channels)}))
 
 (def (marker-line)
   "The line that marks where unread messages start."
@@ -143,7 +143,7 @@
         room (max 20 (- width time-width nick-width 1))
         filled (fill-segments (body message) room)
         background (when message.mention :marked)
-        first-line (vec (concat [[stamp :comment] [padded face] " "] (first filled)))
+        first-line (concat [[stamp :comment] [padded face] " "] (first filled))
         rest-lines (map (fn [line] (vec (cons indent line))) (rest filled))
         text-lines (map (fn [line] {line: line background: background}) (cons first-line rest-lines))
         lines (concat (if (= day context.day) [] [(day-line message.time)])

@@ -16,9 +16,9 @@
                (let [words (string/words (string/trim (first (string/split line "#" 2))))
                      key (string/lower (or (first words) ""))
                      value (second words)
-                     set-field (fn [field] (vec (map (fn [host] (if (contains? (set current) host.name) (assoc host field value) host)) hosts)))]
+                     set-field (fn [field] (map (fn [host] (if (contains? (set current) host.name) (assoc host field value) host)) hosts))]
                  (cond [(= key "host")
-                        (let [names (vec (remove wildcard? (rest words)))]
+                        (let [names (remove wildcard? (rest words))]
                           [(into hosts (map (fn [found] {name: found protocol: :ssh from: "~/.ssh/config"}) names)) names])]
                    [(= key "match") [hosts []]]
                    [(and value (= key "hostname")) [(set-field :address) current]]
@@ -42,10 +42,10 @@
 
 (def (all-hosts)
   "The saved hosts, then those of ~/.ssh/config and those other plugins add, leaving out names already listed."
-  (let [saved (vec (map (fn [host] (assoc host :protocol (protocol-of host))) (setting :hosts)))
+  (let [saved (map (fn [host] (assoc host :protocol (protocol-of host))) (setting :hosts))
         known (set (map :name saved))
         more (concat (ssh-hosts) (mapcat (fn [source] (source)) @sources))]
-    (vec (concat saved (remove (fn [host] (contains? known host.name)) more)))))
+    (concat saved (remove (fn [host] (contains? known host.name)) more))))
 
 (def (find-host name)
   (or (find (fn [host] (= host.name name)) (all-hosts))

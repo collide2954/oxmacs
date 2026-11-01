@@ -37,24 +37,24 @@
 (def (tasks-of listing environment)
   "The tasks pixi task list --json gives for environment, as maps of :name, :command and :description."
   (let [found (or (find (fn [entry] (= entry.environment environment)) (json/read listing)) {})]
-    (vec (for [feature (get found :features [])
-               task (get feature :tasks [])]
-           {name: task.name command: (or task.cmd "") description: task.description}))))
+    (for [feature (get found :features [])
+          task (get feature :tasks [])]
+      {name: task.name command: (or task.cmd "") description: task.description})))
 
 (def (environments-of info)
   "The environments pixi info --json describes, as maps of :name, :features, :dependencies and :tasks."
-  (vec (map (fn [environment]
-              {name: environment.name
-               features: (or environment.features [])
-               dependencies: (vec (concat (or environment.dependencies []) (or environment.pypi_dependencies [])))
-               tasks: (or environment.tasks [])})
-            (get (json/read info) :environments_info []))))
+  (map (fn [environment]
+         {name: environment.name
+          features: (or environment.features [])
+          dependencies: (concat (or environment.dependencies []) (or environment.pypi_dependencies []))
+          tasks: (or environment.tasks [])})
+       (get (json/read info) :environments_info [])))
 
 (def (packages-of listing)
   "The packages pixi list --json gives, as maps of :name, :version, :kind and :explicit."
-  (vec (map (fn [package]
-              {name: package.name version: package.version kind: package.kind explicit: (= package.is_explicit true)})
-            (json/read listing))))
+  (map (fn [package]
+         {name: package.name version: package.version kind: package.kind explicit: (= package.is_explicit true)})
+       (json/read listing)))
 
 (def (reason ran)
   "What a failed pixi run said, in a line."

@@ -1,9 +1,9 @@
 (module
   (import (ox string) (ox time) (ox file) (ox path) (ox ui) (ox regex)
-          (calendar ics :as ics)
-          (calendar store :as store)
-          (calendar caldav :as caldav)
-          (calendar reminders :as reminders)))
+          (calendar ics)
+          (calendar store)
+          (calendar caldav)
+          (calendar reminders)))
 
 (def agenda-buffer "*Calendar*")
 (def month-buffer "*Calendar month*")
@@ -61,7 +61,7 @@
                (let [here (filter (fn [found] (and (< found.start (day-start (inc day)))
                                                    (> (max found.end (inc found.start)) (day-start day))))
                                   found)
-                     here (vec (concat (filter :all-day here) (remove :all-day here)))]
+                     here (concat (filter :all-day here) (remove :all-day here))]
                  (if (and (empty? here) (not= day now))
                    lines
                    (let [heading [[(time/format (day-start day) "%A %-d %B") (if (= day now) :keyword :heading)]
@@ -69,7 +69,7 @@
                          body (if (empty? here)
                                 [[["  Nothing planned" :comment]]]
                                 (map (fn [found] (event-line found day)) here))]
-                     (vec (concat lines [heading] body [""]))))))]
+                     (concat lines [heading] body [""])))))]
     {header: [[["Calendar" :heading] (str "  " title)]
               [["RET shows  a adds  e edits  d deletes  f/b weeks  t today  m month  w week  i imports  s syncs  q quits" :comment]]]
      lines: (reduce step [] (range from (+ from days)))}))
@@ -148,21 +148,21 @@
    [["e edits  d deletes  a accepts  x declines  ? maybe  q quits" :comment]]])
 
 (def (event-lines occurrence)
-  (vec (filter some?
-               (concat [(field "When" (when-text occurrence))
-                        (when occurrence.location (field "Where" occurrence.location))
-                        (field "Calendar" [occurrence.calendar (calendar-face occurrence.calendar)])
-                        (when occurrence.rrule (field "Repeats" (repeat-text occurrence.rrule)))
-                        (field "Reminder" (let [alarm (first (or occurrence.alarms []))]
-                                            (cond [(nil? alarm) (str (reminders/default-minutes) " minutes before, by default")]
-                                              [alarm.before (str (// alarm.before 60000) " minutes before")]
-                                              [else (time/format alarm.at "%-d %B %H:%M")])))
-                        (when occurrence.organizer (field "Organizer" (or occurrence.organizer.name occurrence.organizer.email)))
-                        (when (not (empty? (or occurrence.attendees []))) (field "Guests" ""))]
-                       (map attendee-line (or occurrence.attendees []))
-                       (if occurrence.description
-                         (concat [""] (string/lines occurrence.description))
-                         [])))))
+  (filter some?
+          (concat [(field "When" (when-text occurrence))
+                   (when occurrence.location (field "Where" occurrence.location))
+                   (field "Calendar" [occurrence.calendar (calendar-face occurrence.calendar)])
+                   (when occurrence.rrule (field "Repeats" (repeat-text occurrence.rrule)))
+                   (field "Reminder" (let [alarm (first (or occurrence.alarms []))]
+                                       (cond [(nil? alarm) (str (reminders/default-minutes) " minutes before, by default")]
+                                         [alarm.before (str (// alarm.before 60000) " minutes before")]
+                                         [else (time/format alarm.at "%-d %B %H:%M")])))
+                   (when occurrence.organizer (field "Organizer" (or occurrence.organizer.name occurrence.organizer.email)))
+                   (when (not (empty? (or occurrence.attendees []))) (field "Guests" ""))]
+                  (map attendee-line (or occurrence.attendees []))
+                  (if occurrence.description
+                    (concat [""] (string/lines occurrence.description))
+                    []))))
 
 (def (show-event! occurrence)
   (swap! view assoc :shown occurrence)
@@ -279,7 +279,7 @@
       (raise (error "Set your :email in the calendar plugin's config to answer invitations")))
     (unless mine
       (raise (error "You aren't among this event's guests")))
-    (let [answered (assoc master :attendees (vec (map (fn [person] (if (= person mine) (assoc person :status status) person)) master.attendees)))
+    (let [answered (assoc master :attendees (map (fn [person] (if (= person mine) (assoc person :status status) person)) master.attendees))
           reply (path/join (or (path/parent (or master.file "")) ".") (str (store/safe master.uid) "-reply.ics"))]
       (store/save-event! answered)
       (file/write reply (ics/write-calendar [(merge answered {attendees: [(assoc mine :status status)]})] :method "REPLY"))
@@ -294,7 +294,7 @@
 (defcommand calendar-import "Add the events of an .ics file, such as an invitation"
   (let [file (prompt-path "Import .ics file: ")
         parsed (ics/parse (file/read file))
-        found (vec (map ics/event-of (ics/components parsed "VEVENT")))
+        found (map ics/event-of (ics/components parsed "VEVENT"))
         calendar (choose-calendar nil)]
     (when (empty? found)
       (raise (error "That file has no events")))
@@ -311,10 +311,10 @@
   (let [remote (filter :url (store/calendars))]
     (if (empty? remote)
       (message "No calendar has a CalDAV :url to sync with")
-      (let [problems (vec (mapcat (fn [calendar]
-                                    (message (str "Syncing " calendar.name "…"))
-                                    (map (fn [problem] (str calendar.name ": " problem)) (caldav/sync! calendar)))
-                                  remote))]
+      (let [problems (mapcat (fn [calendar]
+                               (message (str "Syncing " calendar.name "…"))
+                               (map (fn [problem] (str calendar.name ": " problem)) (caldav/sync! calendar)))
+                             remote)]
         (store/load!)
         (redraw!)
         (message (if (empty? problems) "Calendars synced" (string/join "; " problems)))))))
@@ -336,32 +336,32 @@
                  (if face [shown face] shown)))
         week-lines (fn [week]
                      (let [days (range (+ start (* week 7)) (+ start (* week 7) 7))
-                           numbers (vec (map (fn [day]
-                                               (let [date (time/date-of day)
-                                                     face (cond [(= day selected) :keyword]
-                                                            [(= day (today)) :success]
-                                                            [(not= date.month shown.month) :comment]
-                                                            [else :heading])]
-                                                 (if (= day selected)
-                                                   [(string/pad-end (str "[" date.day "]") width) face :pill]
-                                                   (cell (str " " date.day) face))))
-                                             days))
+                           numbers (map (fn [day]
+                                          (let [date (time/date-of day)
+                                                face (cond [(= day selected) :keyword]
+                                                       [(= day (today)) :success]
+                                                       [(not= date.month shown.month) :comment]
+                                                       [else :heading])]
+                                            (if (= day selected)
+                                              [(string/pad-end (str "[" date.day "]") width) face :pill]
+                                              (cell (str " " date.day) face))))
+                                        days)
                            entry (fn [row]
-                                   (vec (map (fn [day]
-                                               (let [here (vec (on-day day))]
-                                                 (cond [(and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment)]
-                                                   [(< row (count here))
-                                                    (let [found (nth here row)]
-                                                      (cell (str " " (if found.all-day "" (str (clock (max found.start (day-start day))) " ")) found.summary)
-                                                            (calendar-face found.calendar)))]
-                                                   [else (cell "" nil)])))
-                                             days)))]
-                       (vec (concat [numbers] (map entry (range 3)) [""]))))]
-    (set-lines month-buffer (vec (mapcat week-lines (range 6))))
+                                   (map (fn [day]
+                                          (let [here (vec (on-day day))]
+                                            (cond [(and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment)]
+                                              [(< row (count here))
+                                               (let [found (nth here row)]
+                                                 (cell (str " " (if found.all-day "" (str (clock (max found.start (day-start day))) " ")) found.summary)
+                                                       (calendar-face found.calendar)))]
+                                              [else (cell "" nil)])))
+                                        days))]
+                       (concat [numbers] (map entry (range 3)) [""])))]
+    (set-lines month-buffer (mapcat week-lines (range 6)))
     (set-header month-buffer
                 [[[(time/format (day-start first-day) "%B %Y") :heading]]
                  [["f/b days  n/p weeks  </> months  t today  RET agenda  w week  q quits" :comment]]
-                 (vec (map (fn [name] [(string/pad-end (str " " name) width) :comment]) day-names))])))
+                 (map (fn [name] [(string/pad-end (str " " name) width) :comment]) day-names)])))
 
 (def month-keys
   {"f" 'calendar-month-forward "b" 'calendar-month-backward "n" 'calendar-month-down "p" 'calendar-month-up
@@ -423,40 +423,40 @@
                  (+ top (* (- (if (> (day-of millis) day) last-hour hour) first-hour) hour-height))))
         now (time/now)
         today-day (today)]
-    (vec (concat
-          (map (fn [index]
-                 (let [day (+ start index)]
-                   [:text (+ gutter (* index column) 0.005) 4 (time/format (day-start day) "%a %-d")
-                    (if (= day today-day) :keyword :heading)]))
-               (range 7))
-          (mapcat (fn [hour]
-                    (let [y (+ top (* (- hour first-hour) hour-height))]
-                      [[:line gutter y 1 y [:comment 0.3] 1]
-                       [:text 0 (- y 7) (str (if (< hour 10) "0" "") hour ":00") :comment]]))
-                  (range first-hour (inc last-hour)))
-          (map (fn [index] [:line (+ gutter (* index column)) top (+ gutter (* index column)) (+ top (* (- last-hour first-hour) hour-height)) [:comment 0.3] 1])
-               (range 8))
-          (mapcat (fn [found]
-                    (mapcat (fn [index]
-                              (let [day (+ start index)
-                                    begins (max found.start (day-start day))
-                                    ends (min found.end (day-start (inc day)))]
-                                (if (< begins ends)
-                                  (let [y (y-of begins day)
-                                        bottom (max (+ y 18) (y-of ends day))
-                                        x (+ gutter (* index column) 0.003)
-                                        face (calendar-face found.calendar)]
-                                    [[:rect x y (- column 0.006) (- bottom y 2) [face 0.3]]
-                                     [:rect x y 0.003 (- bottom y 2) face]
-                                     [:text (+ x 0.006) (+ y 3) (str (clock begins) " " found.summary) :foreground]])
-                                  [])))
-                            (range 7)))
-                  timed)
-          (if (and (>= today-day start) (< today-day (+ start 7)))
-            (let [index (- today-day start)
-                  y (y-of now today-day)]
-              [[:line (+ gutter (* index column)) y (+ gutter (* (inc index) column)) y :error 2]])
-            [])))))
+    (concat
+     (map (fn [index]
+            (let [day (+ start index)]
+              [:text (+ gutter (* index column) 0.005) 4 (time/format (day-start day) "%a %-d")
+               (if (= day today-day) :keyword :heading)]))
+          (range 7))
+     (mapcat (fn [hour]
+               (let [y (+ top (* (- hour first-hour) hour-height))]
+                 [[:line gutter y 1 y [:comment 0.3] 1]
+                  [:text 0 (- y 7) (str (if (< hour 10) "0" "") hour ":00") :comment]]))
+             (range first-hour (inc last-hour)))
+     (map (fn [index] [:line (+ gutter (* index column)) top (+ gutter (* index column)) (+ top (* (- last-hour first-hour) hour-height)) [:comment 0.3] 1])
+          (range 8))
+     (mapcat (fn [found]
+               (mapcat (fn [index]
+                         (let [day (+ start index)
+                               begins (max found.start (day-start day))
+                               ends (min found.end (day-start (inc day)))]
+                           (if (< begins ends)
+                             (let [y (y-of begins day)
+                                   bottom (max (+ y 18) (y-of ends day))
+                                   x (+ gutter (* index column) 0.003)
+                                   face (calendar-face found.calendar)]
+                               [[:rect x y (- column 0.006) (- bottom y 2) [face 0.3]]
+                                [:rect x y 0.003 (- bottom y 2) face]
+                                [:text (+ x 0.006) (+ y 3) (str (clock begins) " " found.summary) :foreground]])
+                             [])))
+                       (range 7)))
+             timed)
+     (if (and (>= today-day start) (< today-day (+ start 7)))
+       (let [index (- today-day start)
+             y (y-of now today-day)]
+         [[:line (+ gutter (* index column)) y (+ gutter (* (inc index) column)) y :error 2]])
+       []))))
 
 (def (week-view)
   (let [start (week-start)

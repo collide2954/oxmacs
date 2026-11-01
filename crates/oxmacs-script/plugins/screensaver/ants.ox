@@ -1,5 +1,5 @@
 (module
-  (import (screensaver noise :as noise))
+  (import (screensaver noise))
   (export walk draw))
 (def cell 9)
 (def pace 1500)
@@ -11,11 +11,11 @@
 
 (def (fresh columns rows)
   {columns: columns rows: rows steps: 0 cells: {}
-   ants: (vec (map (fn [k]
-                     {x: (int (* columns (+ 0.3 (* 0.4 (noise/of [k :x])))))
-                      y: (int (* rows (+ 0.3 (* 0.4 (noise/of [k :y])))))
-                      facing: (mod k 4) id: k})
-                   (range (count colors))))})
+   ants: (map (fn [k]
+                {x: (int (* columns (+ 0.3 (* 0.4 (noise/of [k :x])))))
+                 y: (int (* rows (+ 0.3 (* 0.4 (noise/of [k :y])))))
+                 facing: (mod k 4) id: k})
+              (range (count colors)))})
 
 (def (step now)
   "One move of every ant: on an empty cell turn right, on a filled one turn left, flip the cell and go on."
@@ -47,17 +47,17 @@
                 known)
         moved (walk state (int (* pace seconds)))]
     (reset! world moved)
-    (vec (concat (map (fn [key]
-                        [:rect (+ 1 (* cell (mod key columns))) (+ 1 (* cell (int (/ key columns)))) (- cell 2) (- cell 2)
-                         [(nth colors (get moved.cells key)) 0.7]])
-                      (keys moved.cells))
-                 (mapcat (fn [ant]
-                           (let [x (+ (* cell ant.x) (/ cell 2))
-                                 y (+ (* cell ant.y) (/ cell 2))
-                                 color (nth colors ant.id)]
-                             [[:glow x y (* 3 cell) [color 0.45]]
-                              [:circle x y (* 0.45 cell) "#ffffff"]]))
-                         moved.ants)))))
+    (concat (map (fn [key]
+                   [:rect (+ 1 (* cell (mod key columns))) (+ 1 (* cell (int (/ key columns)))) (- cell 2) (- cell 2)
+                    [(nth colors (get moved.cells key)) 0.7]])
+                 (keys moved.cells))
+            (mapcat (fn [ant]
+                      (let [x (+ (* cell ant.x) (/ cell 2))
+                            y (+ (* cell ant.y) (/ cell 2))
+                            color (nth colors ant.id)]
+                        [[:glow x y (* 3 cell) [color 0.45]]
+                         [:circle x y (* 0.45 cell) "#ffffff"]]))
+                    moved.ants))))
 
 (test "an ant walks a square out of its first four steps"
   (let [start (assoc (fresh 20 20) :ants [{x: 10 y: 10 facing: 0 id: 0}])

@@ -1,6 +1,6 @@
 (module
   (import (ox lexer)
-          (javascript spec :as spec)))
+          (javascript spec)))
 
 (def (highlighter rules)
   (let [lexer (lexer/spec rules)]

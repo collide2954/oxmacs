@@ -1,7 +1,7 @@
 (module
   (import (ox path) (ox file) (ox string)
-          (customize form :as form)
-          (customize written :as written)))
+          (customize form)
+          (customize written)))
 
 (def buffer "*Settings*")
 
@@ -59,7 +59,7 @@
       (message e.message))))
 
 (def (next-choice entry)
-  (let [options (vec (concat (if entry.unset [nil] []) entry.choices))
+  (let [options (concat (if entry.unset [nil] []) entry.choices)
         now (form/effective entry)
         at (or (find (fn [index] (= (nth options index) now)) (range (count options))) -1)]
     (nth options (mod (+ at 1) (count options)))))

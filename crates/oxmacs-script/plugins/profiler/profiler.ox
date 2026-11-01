@@ -1,5 +1,5 @@
 (module
-  (import (profiler report :as report)))
+  (import (profiler report)))
 
 (def buffer "*ox profile*")
 

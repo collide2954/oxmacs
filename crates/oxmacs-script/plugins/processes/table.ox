@@ -71,7 +71,7 @@
     (if (or (<= (span shown widths details) room) (empty? left))
       [shown details]
       (let [cut (first left)
-            kept (vec (remove (fn [column] (= column cut)) shown))]
+            kept (remove (fn [column] (= column cut)) shown)]
         (if (= cut :details)
           (let [spare (- room (span kept widths 0) gap)]
             (if (>= spare least-details)
@@ -114,13 +114,13 @@
     [else nil]))
 
 (def (laid-out shown widths details texts faces)
-  (vec (map (fn [i]
-              (let [column (nth shown i)
-                    text (aligned column (get texts column) (if (= column :details) details (get widths column)))
-                    spaced (if (< (+ i 1) (count shown)) (str text "  ") text)
-                    face (get faces column)]
-                (if face [spaced face] spaced)))
-            (range (count shown)))))
+  (map (fn [i]
+         (let [column (nth shown i)
+               text (aligned column (get texts column) (if (= column :details) details (get widths column)))
+               spaced (if (< (+ i 1) (count shown)) (str text "  ") text)
+               face (get faces column)]
+           (if face [spaced face] spaced)))
+       (range (count shown))))
 
 (def (title-text column options)
   (let [title (get titles column)]
@@ -129,20 +129,20 @@
 (def (details-rows p now)
   (let [field (fn [label value] {line: [(str "      " (string/pad-end label 13)) [value :comment]] id: p.id})
         env (keys (or p.env {}))]
-    (vec (concat
-          [(field "Command" (command-line p))
-           (field "Folder" (or p.directory "-"))
-           (field "Status" (str (status-text p) " after " (runtime (- (or p.ended now) p.started))))
-           (field "Started" (time/format p.started "%Y-%m-%d %H:%M:%S"))
-           (field "Buffer" (or p.buffer "-"))]
-          (map (fn [key] (field (if (= key (first env)) "Environment" "") (str key "=" (get p.env key)))) env)))))
+    (concat
+     [(field "Command" (command-line p))
+      (field "Folder" (or p.directory "-"))
+      (field "Status" (str (status-text p) " after " (runtime (- (or p.ended now) p.started))))
+      (field "Started" (time/format p.started "%Y-%m-%d %H:%M:%S"))
+      (field "Buffer" (or p.buffer "-"))]
+     (map (fn [key] (field (if (= key (first env)) "Environment" "") (str key "=" (get p.env key)))) env))))
 
 (def (rows processes now width options)
   "The :header and :lines that list processes at now in width columns, sorted and filtered as options say; each process line carries its :id."
   (let [shown-processes (arranged processes now options)
-        header (vec (concat [[["Processes" :heading]]
-                             [[(string/truncate help width) :comment]]]
-                            (if (string/blank? options.filter) [] [[["Filter: " :comment] options.filter]])))]
+        header (concat [[["Processes" :heading]]
+                        [[(string/truncate help width) :comment]]]
+                       (if (string/blank? options.filter) [] [[["Filter: " :comment] options.filter]]))]
     (if (empty? shown-processes)
       {header: header
        lines: [[[(if (string/blank? options.filter) "Nothing running" "Nothing matches the filter") :comment]]]}
@@ -156,12 +156,12 @@
                                                      (laid-out shown widths details heading {}))))
                     :comment]]]
         {header: (conj header title)
-         lines: (vec (mapcat (fn [pair]
-                               (let [p (first pair)
-                                     texts (second pair)
-                                     faces (into {} (map (fn [column] [column (face-of column p)]) columns))
-                                     row {line: (laid-out shown widths details texts faces) id: p.id}]
-                                 (if (contains? options.open p.id)
-                                   (concat [row] (details-rows p now))
-                                   [row])))
-                             (zip shown-processes table)))}))))
+         lines: (mapcat (fn [pair]
+                          (let [p (first pair)
+                                texts (second pair)
+                                faces (into {} (map (fn [column] [column (face-of column p)]) columns))
+                                row {line: (laid-out shown widths details texts faces) id: p.id}]
+                            (if (contains? options.open p.id)
+                              (concat [row] (details-rows p now))
+                              [row])))
+                        (zip shown-processes table))}))))

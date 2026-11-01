@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
+  (import (ox math) (screensaver noise))
   (export swing curve draw))
 
 (def cycle 26.0)
@@ -22,13 +22,13 @@
 (def (curve k)
   "Where the pen of drawing k goes, as steps points from -1.5 to 1.5."
   (let [s (swing k)]
-    (vec (map (fn [i]
-                (let [t (* reach (/ i steps))
-                      decay (math/exp (* -1 s.damping t))
-                      slower (math/exp (* -1.4 s.damping t))]
-                  [(+ (* decay (math/sin (+ (* s.fx t) s.px))) (* 0.5 slower (math/sin (+ (* s.gx t) s.qx))))
-                   (+ (* decay (math/sin (+ (* s.fy t) s.py))) (* 0.5 slower (math/sin (+ (* s.gy t) s.qy))))]))
-              (range (inc steps))))))
+    (map (fn [i]
+           (let [t (* reach (/ i steps))
+                 decay (math/exp (* -1 s.damping t))
+                 slower (math/exp (* -1.4 s.damping t))]
+             [(+ (* decay (math/sin (+ (* s.fx t) s.px))) (* 0.5 slower (math/sin (+ (* s.gx t) s.qx))))
+              (+ (* decay (math/sin (+ (* s.fy t) s.py))) (* 0.5 slower (math/sin (+ (* s.gy t) s.qy))))]))
+         (range (inc steps)))))
 
 (defonce drawn (atom {key: nil points: []}))
 
@@ -39,7 +39,7 @@
             cx (/ width 2.0)
             cy (/ height 2.0)]
         (reset! drawn {key: key
-                       points: (vec (map (fn [[x y]] [(+ cx (* scale x)) (+ cy (* scale y))]) (curve k)))})))
+                       points: (map (fn [[x y]] [(+ cx (* scale x)) (+ cy (* scale y))]) (curve k))})))
     (get @drawn :points)))
 
 (def (draw frame)
@@ -49,15 +49,15 @@
         shown (int (* steps (min 1 (/ into-cycle drawing))))
         fade (min 1 (/ (- cycle into-cycle) 2.0))
         ink (nth inks (mod k (count inks)))
-        pen (vec (take (inc shown) (points k frame.width frame.height)))
+        pen (take (inc shown) (points k frame.width frame.height))
         tip (if (and (< into-cycle drawing) (> (count pen) 1))
               (let [[x y] (last pen)] [[:circle x y 2.2 [ink 0.9]] [:glow x y 7 [ink 0.25]]])
               [])]
     (if (< (count pen) 2)
       []
-      (vec (concat [[:curve pen [ink (* 0.07 fade)] 3.2]
-                    [:curve pen [ink (* 0.8 fade)] 1.0]]
-                   tip)))))
+      (concat [[:curve pen [ink (* 0.07 fade)] 3.2]
+               [:curve pen [ink (* 0.8 fade)] 1.0]]
+              tip))))
 
 (test "the pendulums die down"
   (let [points (curve 4)

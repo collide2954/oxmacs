@@ -1,6 +1,6 @@
 (module
   (import (ox file) (ox path) (ox process) (ox string) (ox crypto) (ox json)
-          (r helper :as helper))
+          (r helper))
   (export label sessions known? current-session running? link! linked own! project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request send script?
           r-string helper-of on-marker on-ready use-keys! use-patterns! use-hooks! directory-of))
@@ -164,7 +164,7 @@
   (when-let [file (history-file)]
     (let [lines (try (string/lines (file/read file)) (catch error _e []))
           inputs (keep (fn [line] (try (json/read line) (catch error _e nil))) lines)
-          kept (vec (drop (max 0 (- (count inputs) kept-history)) inputs))]
+          kept (drop (max 0 (- (count inputs) kept-history)) inputs)]
       (set-console-history session kept)
       (swap! state assoc-in [:saved session] (count kept))
       (when (> (count inputs) (* 2 kept-history))

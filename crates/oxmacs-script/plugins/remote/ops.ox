@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox regex) (ox file) (ox path) (ox process) (ox crypto)
-          (remote shell :as shell)
-          (remote hosts :as hosts)
+          (remote shell)
+          (remote hosts)
           (vault store :as vault))
   (export home list-dir parse-listing read-text download! upload! remove! rename! make-dir! run search join-path
           parent-of ftp-url can-run? transfer-file local-copy))
@@ -37,7 +37,7 @@
 
 (def (parse-listing lines)
   "The entries of ls -l output, each a map of :name, :dir, :kind, :mode, :size, :date and :target, in the order file/list gives."
-  (file/sorted (vec (keep entry-of lines))))
+  (file/sorted (keep entry-of lines)))
 
 (def (can-run? host)
   "True when host has a shell to run commands in."
@@ -62,14 +62,14 @@
 (def (curl host remote arguments)
   (let [login (credentials host)
         config (str "user = " (pr-str (str login.user ":" login.password)) "\n")
-        found (process/run "curl" (vec (concat ["-s" "-S" "-K" "-"] arguments [(ftp-url host remote)])) :input config)]
+        found (process/run "curl" (concat ["-s" "-S" "-K" "-"] arguments [(ftp-url host remote)]) :input config)]
     (when (not= found.status 0)
       (raise (error (string/trim (str "curl: " found.stderr)))))
     found))
 
 (def (sftp host commands)
-  (let [found (process/run "sftp" (vec (concat ["-b" "-" "-o" "BatchMode=yes"] (if host.port ["-P" (str host.port)] [])
-                                               [(if host.user (str host.user "@" (or host.address host.name)) (or host.address host.name))]))
+  (let [found (process/run "sftp" (concat ["-b" "-" "-o" "BatchMode=yes"] (if host.port ["-P" (str host.port)] [])
+                                          [(if host.user (str host.user "@" (or host.address host.name)) (or host.address host.name))])
                            :input (str (string/join "\n" commands) "\n"))]
     (when (not= found.status 0)
       (raise (error (string/trim (str "sftp: " found.stderr)))))
@@ -149,7 +149,7 @@
 (def (chunks text size)
   (if (<= (count text) size)
     [text]
-    (vec (map (fn [at] (string/slice text at (min (count text) (+ at size)))) (range 0 (count text) size)))))
+    (map (fn [at] (string/slice text at (min (count text) (+ at size)))) (range 0 (count text) size))))
 
 (def (upload! host local remote)
   "Copies the file local to remote on host."
@@ -194,11 +194,11 @@
 (def (search host dir pattern)
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."
   (let [found (run host dir (str "grep -rnI -- " (shell/quoted pattern) " . | head -n 1000"))]
-    (vec (keep (fn [line]
-                 (when-let [match (regex/find #"^\./(.*?):(\d+):(.*)$" line)]
-                   (let [[file number text] match.groups]
-                     {path: (join-path dir file) line: (string/to-number number) text: text})))
-               found.lines))))
+    (keep (fn [line]
+            (when-let [match (regex/find #"^\./(.*?):(\d+):(.*)$" line)]
+              (let [[file number text] match.groups]
+                {path: (join-path dir file) line: (string/to-number number) text: text})))
+          found.lines)))
 
 (test "ls listings are read with folders first and links apart"
   (expect (= (map (fn [entry] [entry.name entry.kind entry.size entry.target])

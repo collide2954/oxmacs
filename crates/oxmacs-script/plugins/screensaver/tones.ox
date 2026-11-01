@@ -2,7 +2,7 @@
   (import (ox string))
   (export hex rgb blend))
 
-(def digits (vec (map str (string/chars "0123456789abcdef"))))
+(def digits (map str (string/chars "0123456789abcdef")))
 
 (def (hex level)
   "level from 0 to 255 as two hex digits."

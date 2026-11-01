@@ -1,7 +1,7 @@
 (module
   (import (ox string)
-          (r session :as session)
-          (r help :as help))
+          (r session)
+          (r help))
   (export listed tabled described described-column peeked environment-due environment-buffer ask-environment))
 
 (def help "RET opens   g refreshes   q quits")
@@ -54,7 +54,7 @@
                 (let [members (filter (fn [entry] (= entry.group group)) found)]
                   (if (empty? members)
                     lines
-                    (vec (concat lines (if (empty? lines) [] [[]]) [[[title :heading]]] (map line members))))))
+                    (concat lines (if (empty? lines) [] [[]]) [[[title :heading]]] (map line members)))))
               []
               groups))))
 
@@ -145,8 +145,8 @@
          decreasing: (= (field 6 "FALSE") "TRUE")
          filter: (field 7 "")
          names: (vec (rest (string/split (nth lines 1) "\t")))
-         types: (vec (map short-type (rest (string/split (nth lines 2) "\t"))))
-         cells: (vec (map (fn [line] (string/split line "\t")) (drop 3 lines)))}))))
+         types: (map short-type (rest (string/split (nth lines 2) "\t")))
+         cells: (map (fn [line] (string/split line "\t")) (drop 3 lines))}))))
 
 (def (clipped text width) (string/truncate (or text "") width))
 

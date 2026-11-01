@@ -1,6 +1,6 @@
 (module
   (import (ox time)
-          (screensaver savers :as savers)))
+          (screensaver savers)))
 
 (def (chosen)
   (let [kind (setting :kind)]

@@ -7,7 +7,7 @@
 (def tag-specials {";" "\\:" " " "\\s" "\\" "\\\\" "\r" "\\r" "\n" "\\n"})
 
 (def (letters text)
-  (vec (map str (string/chars text))))
+  (map str (string/chars text)))
 
 (def (split-once text separator)
   (if-let [at (string/index-of text separator)]
@@ -84,7 +84,7 @@
                                                     (str key "=" (escape (str value)))))
                                                 (entries tags)))
                       " "))
-        middle (vec (take (dec (count params)) params))
+        middle (take (dec (count params)) params)
         final (last params)]
     (str tagged command
          (apply str (map (fn [param] (str " " param)) middle))
@@ -159,11 +159,11 @@
                       [code (again (inc at) (update state code not) "" (conj out [current (face-of state)]))]
                       [(= c "\u{4}") (again (+ at 7) state current out)]
                       [else (again (inc at) state (str current c) out)]))))]
-    (vec (keep (fn [[shown face]]
-                 (cond [(= shown "") nil]
-                   [(nil? face) shown]
-                   [else [shown face]]))
-               parts))))
+    (keep (fn [[shown face]]
+            (cond [(= shown "") nil]
+              [(nil? face) shown]
+              [else [shown face]]))
+          parts)))
 
 (def (plain-text text)
   "text without its mIRC formatting codes."

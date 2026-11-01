@@ -1,12 +1,12 @@
 (module
   (import (ox string) (ox time)
-          (claude api :as api)
-          (claude render :as render)
-          (claude tools :as tools)
-          (claude review :as review)
-          (claude chats :as chats)
-          (claude suggest :as suggest)
-          (claude where :as where)))
+          (claude api)
+          (claude render)
+          (claude tools)
+          (claude review)
+          (claude chats)
+          (claude suggest)
+          (claude where)))
 
 (def chat-buffer "*claude*")
 (def chats-buffer "*claude chats*")
@@ -59,7 +59,7 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
   (let [kept (api/echoed reply.content)]
     (if (and (not stopped) (contains? finished-stops reply.stop))
       kept
-      (vec (filter (fn [block] (= block.type "text")) kept)))))
+      (filter (fn [block] (= block.type "text")) kept))))
 
 (def (reply!)
   "Asks Claude for the next reply, showing it as it streams in, and adds it to the chat."
@@ -92,14 +92,14 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
 (def (use-tools! reply)
   "Runs the tools reply asks for, one after another, and adds their results to the chat."
   (let [calls (filter (fn [block] (= block.type "tool_use")) reply.content)
-        results (vec (map (fn [call]
-                            (if (get @state :stopped)
-                              {block: {type: "tool_result" tool_use_id: call.id content: "The person stopped this" is_error: true}}
-                              (let [done (tools/run! call)]
-                                (log! {kind: :tool name: call.name result: done.text error: done.error})
-                                done)))
-                          calls))]
-    (swap! state update :messages conj {role: "user" content: (vec (map (fn [result] result.block) results))})))
+        results (map (fn [call]
+                       (if (get @state :stopped)
+                         {block: {type: "tool_result" tool_use_id: call.id content: "The person stopped this" is_error: true}}
+                         (let [done (tools/run! call)]
+                           (log! {kind: :tool name: call.name result: done.text error: done.error})
+                           done)))
+                     calls)]
+    (swap! state update :messages conj {role: "user" content: (map (fn [result] result.block) results)})))
 
 (def (refusal reply)
   (let [category (get reply.details :category)]
@@ -228,7 +228,7 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
     (open-buffer chats-buffer
                  (if (empty? found)
                    [[["No saved chats in this project yet" :comment]]]
-                   (vec (map chat-row found)))
+                   (map chat-row found))
                  :keys chats-keys :label "Claude chats" :cursor :line :line 0)))
 
 (defcommand claude-open-chat "Carry on the chat at point"

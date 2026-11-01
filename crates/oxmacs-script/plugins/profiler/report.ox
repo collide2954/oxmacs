@@ -69,7 +69,7 @@
 (def (rows found folded flat)
   "The :header and :lines of the report on found, with the branches in folded closed, or the functions by self time when flat; each function's line carries its :file and :line-number, and each branch's its :path too."
   {header: (header found flat)
-   lines: (vec (concat (ticks found)
-                       (if flat
-                         (concat [(titles "Functions by self time" "self" "total")] (function-rows found))
-                         (concat [(titles "Call tree" "total" "self")] (branch-rows found.tree 0 [] folded)))))})
+   lines: (concat (ticks found)
+                  (if flat
+                    (concat [(titles "Functions by self time" "self" "total")] (function-rows found))
+                    (concat [(titles "Call tree" "total" "self")] (branch-rows found.tree 0 [] folded))))})

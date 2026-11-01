@@ -1,6 +1,6 @@
 (module
   (import (ox lexer)
-          (typescript spec :as spec)))
+          (typescript spec)))
 
 (def (highlighter rules)
   (let [lexer (lexer/spec rules)]

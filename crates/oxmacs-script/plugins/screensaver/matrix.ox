@@ -1,21 +1,21 @@
 (module
-  (import (ox string) (screensaver noise :as noise))
+  (import (ox string) (screensaver noise))
   (export drop draw))
 
-(def glyphs (vec (map str (string/chars "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ=+*<>:;|#$%&@"))))
+(def glyphs (map str (string/chars "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ=+*<>:;|#$%&@")))
 
 (def scramble
-  (vec (map (fn [i] (nth glyphs (int (* (count glyphs) (noise/of [i :glyph])))))
-            (range 997))))
+  (map (fn [i] (nth glyphs (int (* (count glyphs) (noise/of [i :glyph])))))
+       (range 997)))
 
 (def columns
-  (vec (map (fn [column]
-              {length: (+ 6 (int (* 12 (noise/of [column :length]))))
-               gap: (noise/of [column :gap])
-               speed: (+ 6 (* 14 (noise/of [column :speed])))
-               start: (noise/of [column :start])
-               flicker: (+ 0.08 (* 0.3 (noise/of [column :flicker])))})
-            (range 400))))
+  (map (fn [column]
+         {length: (+ 6 (int (* 12 (noise/of [column :length]))))
+          gap: (noise/of [column :gap])
+          speed: (+ 6 (* 14 (noise/of [column :speed])))
+          start: (noise/of [column :start])
+          flicker: (+ 0.08 (* 0.3 (noise/of [column :flicker])))})
+       (range 400)))
 
 (def ^:shadow (drop column seconds rows)
   (let [c (nth columns (mod column (count columns)))

@@ -1,7 +1,7 @@
 (module
   (import (ox file)
           (ox string)
-          (ox ui :as ui)
+          (ox ui)
           (ox synth :as s)))
 
 (def workbench "*bellow*")

@@ -1,17 +1,17 @@
 (module
-  (import (screensaver noise :as noise))
+  (import (screensaver noise))
   (export star draw))
 
 (def tints [:foreground :foreground :foreground :link :keyword :string])
 
 (def field
-  (vec (map (fn [i]
-              {x: (- (* 2 (noise/of [i :x])) 1)
-               y: (- (* 2 (noise/of [i :y])) 1)
-               speed: (+ 0.06 (* 0.14 (noise/of [i :speed])))
-               phase: (noise/of [i :phase])
-               tint: (nth tints (mod i (count tints)))})
-            (range 240))))
+  (map (fn [i]
+         {x: (- (* 2 (noise/of [i :x])) 1)
+          y: (- (* 2 (noise/of [i :y])) 1)
+          speed: (+ 0.06 (* 0.14 (noise/of [i :speed])))
+          phase: (noise/of [i :phase])
+          tint: (nth tints (mod i (count tints)))})
+       (range 240)))
 
 (def (star i seconds)
   (let [s (nth field i)]

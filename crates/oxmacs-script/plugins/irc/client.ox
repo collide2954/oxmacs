@@ -1,8 +1,8 @@
 (module
   (import (ox string) (ox time) (ox net) (ox crypto) (ox regex)
-          (irc protocol :as protocol)
-          (irc format :as format)
-          (irc logs :as logs)
+          (irc protocol)
+          (irc format)
+          (irc logs)
           (vault store :as vault))
   (export state network buffer-entry server-buffer buffer-of ensure-buffer! render! connect! quit! send! send-command!
           say! say-lines! act! join! part! has-cap? my-nick channel-nicks info! error! note-seen! toggle-noise!
@@ -50,7 +50,7 @@
 
 (def (irc-buffers)
   "The names of every IRC buffer."
-  (vec (keys (get @state :buffers))))
+  (keys (get @state :buffers)))
 
 (def (buffer-of name target)
   "The buffer already showing target on the network called name, or nil."
@@ -112,7 +112,7 @@
 
 (def (keep-last messages)
   (if (> (count messages) max-messages)
-    (vec (drop (- (count messages) max-messages) messages))
+    (drop (- (count messages) max-messages) messages)
     messages))
 
 (def (show-activity!)
@@ -124,14 +124,14 @@
   (swap! state update :activity
          (fn [items]
            (let [old (find (fn [item] (= item.buffer buffer)) items)]
-             (conj (vec (remove (fn [item] (= item.buffer buffer)) items))
+             (conj (remove (fn [item] (= item.buffer buffer)) items)
                    {buffer: buffer mention: (or mention (and old old.mention))}))))
   (show-activity!))
 
 (def (note-seen! buffer)
   "Forgets the activity in buffer, now that it has been seen."
   (when (some (fn [item] (= item.buffer buffer)) (get @state :activity))
-    (swap! state update :activity (fn [items] (vec (remove (fn [item] (= item.buffer buffer)) items))))
+    (swap! state update :activity (fn [items] (remove (fn [item] (= item.buffer buffer)) items)))
     (show-activity!)))
 
 (def (next-active)
@@ -161,7 +161,7 @@
               lines (if mark (vec (cons (format/marker-line) made.lines)) made.lines)
               rows (concat (if mark [nil] []) (repeat (count made.lines) index))]
           (swap! state update-in [:buffers buffer] merge {context: made.context
-                                                          rows: (vec (concat (get (buffer-entry buffer) :rows) rows))})
+                                                          rows: (concat (get (buffer-entry buffer) :rows) rows)})
           (when (buffer-exists? buffer)
             (append-lines buffer lines))))
       (when (and hidden chat (not message.self))
@@ -204,7 +204,7 @@
 
 (def (channel-nicks name channel)
   "The people in channel on the network called name, as maps of :nick, :prefix and :away."
-  (vec (vals (or (get (channel-entry name channel) :names) {}))))
+  (vals (or (get (channel-entry name channel) :names) {})))
 
 (def (prefixes name)
   (or (get-in (network name) [:isupport :prefixes]) "~&@%+"))
@@ -212,7 +212,7 @@
 (def (split-prefix name given)
   (let [marks (prefixes name)
         chars (protocol/letters given)
-        taken (vec (take-while (fn [c] (string/includes? marks c)) chars))]
+        taken (take-while (fn [c] (string/includes? marks c)) chars)]
     [(apply str taken) (string/slice given (count taken))]))
 
 (def (add-name! name channel nick prefix)
@@ -225,8 +225,8 @@
     (swap! state update-in [:networks name :channels (fold channel) :names] dissoc (fold nick))))
 
 (def (channels-with name nick)
-  (vec (keep (fn [[_ channel]] (when (get channel.names (fold nick)) channel.name))
-             (entries (or (get (network name) :channels) {})))))
+  (keep (fn [[_ channel]] (when (get channel.names (fold nick)) channel.name))
+        (entries (or (get (network name) :channels) {}))))
 
 (def (mentions? name text)
   (let [words (map (fn [match] (fold match.text)) (regex/find-all #"[^\s,.:;!?()<>\"']+" text))
@@ -431,12 +431,12 @@
   (when (message-by-id buffer id)
     (swap! state update-in [:buffers buffer :messages]
            (fn [messages]
-             (vec (map (fn [message]
-                         (if (= message.id id)
-                           (update message :reactions
-                                   (fn [found] (update (or found {}) emoji (fn [nicks] (vec (distinct (conj (or nicks []) nick)))))))
-                           message))
-                       messages))))
+             (map (fn [message]
+                    (if (= message.id id)
+                      (update message :reactions
+                              (fn [found] (update (or found {}) emoji (fn [nicks] (distinct (conj (or nicks []) nick))))))
+                      message))
+                  messages)))
     (render! buffer)))
 
 (def (on-tagmsg! name line)
@@ -492,11 +492,11 @@
 (def (merge-history! name target lines)
   (when-let [buffer (buffer-of name target)]
     (let [known (set (keep :id (get (buffer-entry buffer) :messages)))
-          older (vec (filter (fn [message] (or (nil? message.id) (not (contains? known message.id))))
-                             (keep (fn [line] (history-message name line)) lines)))]
+          older (filter (fn [message] (or (nil? message.id) (not (contains? known message.id))))
+                        (keep (fn [line] (history-message name line)) lines))]
       (swap! state update-in [:buffers buffer]
              (fn [entry]
-               (merge entry {messages: (keep-last (vec (sort-by :time (concat older entry.messages))))
+               (merge entry {messages: (keep-last (sort-by :time (concat older entry.messages)))
                              marker: nil
                              spoke: (reduce (fn [spoke message] (assoc spoke (fold message.nick) message.time))
                                             entry.spoke older)})))
@@ -624,7 +624,7 @@
   (let [listed (listing buffer)
         wanted (string/lower (or listed.filter ""))
         has (fn [text] (string/includes? (string/lower (protocol/plain-text (or text ""))) wanted))
-        chosen (vec (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels))
+        chosen (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels)
         page (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
     (if (or show (not (buffer-exists? buffer)))
       (open-buffer buffer page.lines :keys list-keys :line 0 :label "IRC channel lists")
@@ -654,7 +654,7 @@
     (change-network! name dissoc :listing)
     (swap! state assoc-in [:lists buffer]
            {network: name filter: ""
-            channels: (vec (sort-by (fn [channel] [(- channel.users) (fold channel.name)]) found))})
+            channels: (sort-by (fn [channel] [(- channel.users) (fold channel.name)]) found)})
     (draw-list! buffer :show true)))
 
 (def (dispatch! name line)
@@ -784,7 +784,7 @@
   (sort (map :name (vals (or (get (network name) :channels) {})))))
 
 (def (network-buffers name)
-  (vec (keep (fn [[buffer entry]] (when (= entry.network name) buffer)) (entries (get @state :buffers)))))
+  (keep (fn [[buffer entry]] (when (= entry.network name) buffer)) (entries (get @state :buffers))))
 
 (def (retry! name)
   (let [old (network name)
@@ -872,7 +872,7 @@
   "Sends several lines from buffer: one multiline message where the server allows it, else a line every half second."
   (let [entry (buffer-entry buffer)
         name entry.network
-        lines (vec (remove string/blank? lines))]
+        lines (remove string/blank? lines)]
     (if (has-cap? name "draft/multiline")
       (let [reference (crypto/random 4)]
         (send-command! name "BATCH" [(str "+" reference) "draft/multiline" entry.target] :tags (reply-tags entry))

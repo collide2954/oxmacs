@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox path) (ox regex)
-          (r session :as session)
-          (r help :as help))
+          (r session)
+          (r help))
   (export prompts watches heard))
 
 (def prompts [#"^Browse\[\d+\]> $"])

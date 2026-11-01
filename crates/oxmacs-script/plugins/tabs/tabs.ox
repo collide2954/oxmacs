@@ -1,6 +1,6 @@
 (module
   (import (ox string)
-          (tabs strip :as strip)))
+          (tabs strip)))
 
 (def most-closed 10)
 
@@ -68,7 +68,7 @@
     (each [old dropped] (forget-windows (key-of old.tab)))
     (swap! state assoc
            :tabs (strip/remove-at s.tabs at)
-           :closed (vec (drop (count dropped) closed)))))
+           :closed (drop (count dropped) closed))))
 
 (def (close-at at)
   (atomically

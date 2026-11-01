@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver tones :as tones))
+  (import (ox math) (screensaver tones))
   (export spot draw))
 
 (def tilt 0.34)
@@ -14,11 +14,11 @@
    {size: 0.78 eccentric: 0.04 turn: 4.2 period: 70 radius: 7 color: [0.62 0.85 0.88] moons: 1 ring: false}])
 
 (def shades
-  (vec (map (fn [planet]
-              (let [dark (tones/blend planet.color [0 0 0] 0.85)
-                    light (tones/blend planet.color [1 1 1] 0.2)]
-                (vec (map (fn [i] (tones/rgb (tones/blend dark light (/ i 5.0)))) (range 6)))))
-            planets)))
+  (map (fn [planet]
+         (let [dark (tones/blend planet.color [0 0 0] 0.85)
+               light (tones/blend planet.color [1 1 1] 0.2)]
+           (map (fn [i] (tones/rgb (tones/blend dark light (/ i 5.0)))) (range 6))))
+       planets))
 
 (def (anomaly mean eccentric)
   "Kepler's equation, solved by a few Newton steps."
@@ -46,16 +46,16 @@
         b (* a (math/sqrt (- 1 (* planet.eccentric planet.eccentric))))
         c (math/cos planet.turn)
         s (math/sin planet.turn)
-        points (vec (map (fn [i]
-                           (let [angle (/ (* 2 math/pi i) 96)
-                                 x (- (* a (math/cos angle)) (* a planet.eccentric))
-                                 y (* b (math/sin angle))]
-                             (seen [(- (* x c) (* y s)) (+ (* x s) (* y c))] cx cy)))
-                         (range 97)))]
+        points (map (fn [i]
+                      (let [angle (/ (* 2 math/pi i) 96)
+                            x (- (* a (math/cos angle)) (* a planet.eccentric))
+                            y (* b (math/sin angle))]
+                        (seen [(- (* x c) (* y s)) (+ (* x s) (* y c))] cx cy)))
+                    (range 97))]
     [:curve points ["#9aa6c8" 0.10] 1]))
 
 (def (trail planet seconds reach cx cy)
-  (let [points (vec (map (fn [i] (seen (spot planet (- seconds (* planet.period 0.012 i)) reach) cx cy)) [8 7 6 5 4 3 2 1 0]))]
+  (let [points (map (fn [i] (seen (spot planet (- seconds (* planet.period 0.012 i)) reach) cx cy)) [8 7 6 5 4 3 2 1 0])]
     [:curve points [(tones/rgb planet.color) 0.35] (* 0.7 planet.radius) 1.0]))
 
 (def (globe k planet x y cx cy)
@@ -66,18 +66,18 @@
         apart (max 1 (math/sqrt (+ (* dx dx) (* dy dy))))
         lx (/ dx apart)
         ly (/ dy apart)]
-    (vec (concat [[:glow x y (* 2.4 r) [(tones/rgb planet.color) 0.18]]]
-                 (map (fn [i]
-                        (let [t (/ i 5.0)
-                              shift (* r 0.45 t)]
-                          [:circle (+ x (* lx shift)) (+ y (* ly shift)) (* r (- 1 (* 0.75 t))) (nth layers i)]))
-                      (range 6))))))
+    (concat [[:glow x y (* 2.4 r) [(tones/rgb planet.color) 0.18]]]
+            (map (fn [i]
+                   (let [t (/ i 5.0)
+                         shift (* r 0.45 t)]
+                     [:circle (+ x (* lx shift)) (+ y (* ly shift)) (* r (- 1 (* 0.75 t))) (nth layers i)]))
+                 (range 6)))))
 
 (def (ring planet x y)
-  (let [points (vec (map (fn [i]
-                           (let [angle (/ (* 2 math/pi i) 64)]
-                             [(+ x (* 2.3 planet.radius (math/cos angle))) (+ y (* 0.75 planet.radius (math/sin angle)))]))
-                         (range 65)))]
+  (let [points (map (fn [i]
+                      (let [angle (/ (* 2 math/pi i) 64)]
+                        [(+ x (* 2.3 planet.radius (math/cos angle))) (+ y (* 0.75 planet.radius (math/sin angle)))]))
+                    (range 65))]
     [[:curve points ["#e8dcb0" 0.55] 2.2]
      [:curve points ["#fff3cc" 0.25] 5]]))
 
@@ -92,10 +92,10 @@
                           [[:circle mx my 1.6 "#cfd3dc"] [:glow mx my 4 ["#cfd3dc" 0.3]]]))
                       (range planet.moons))]
     {behind: (< y 0)
-     shapes: (vec (concat [(trail planet seconds reach cx cy)]
-                          (globe k planet px py cx cy)
-                          (if planet.ring (ring planet px py) [])
-                          moons))}))
+     shapes: (concat [(trail planet seconds reach cx cy)]
+                     (globe k planet px py cx cy)
+                     (if planet.ring (ring planet px py) [])
+                     moons)}))
 
 (def (sun cx cy reach)
   [[:glow cx cy (* reach 0.42) ["#ff9a3c" 0.22]]
@@ -109,10 +109,10 @@
         cy (/ frame.height 2.0)
         reach (* 0.6 frame.width)
         bodies (map (fn [k] (body k (nth planets k) seconds reach cx cy)) (range (count planets)))]
-    (vec (concat (map (fn [planet] (orbit planet reach cx cy)) planets)
-                 (mapcat (fn [b] b.shapes) (filter (fn [b] b.behind) bodies))
-                 (sun cx cy reach)
-                 (mapcat (fn [b] b.shapes) (filter (fn [b] (not b.behind)) bodies))))))
+    (concat (map (fn [planet] (orbit planet reach cx cy)) planets)
+            (mapcat (fn [b] b.shapes) (filter (fn [b] b.behind) bodies))
+            (sun cx cy reach)
+            (mapcat (fn [b] b.shapes) (filter (fn [b] (not b.behind)) bodies)))))
 
 (test "planets come back around after their period"
   (let [planet (nth planets 2)

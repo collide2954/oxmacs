@@ -1,6 +1,6 @@
 (module
   (import (ox lexer)
-          (json spec :as spec)))
+          (json spec)))
 
 (def (highlighter rules)
   (let [lexer (lexer/spec rules)]

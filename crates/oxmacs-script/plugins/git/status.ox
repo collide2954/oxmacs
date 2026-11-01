@@ -1,7 +1,7 @@
 (module
   (import (ox string)
-          (git repo :as repo)
-          (git diff :as diff))
+          (git repo)
+          (git diff))
   (export render ago shorten author-face stats))
 
 (def path-column 60)
@@ -61,7 +61,7 @@
                  [["No commits yet" :comment]]
                  (let [latest (first snapshot.recent)]
                    [[latest.id :constant] " " latest.summary]))
-        out (add out {kind: :info} (vec (concat [["Head:     " :comment] branch "  "] commit)))
+        out (add out {kind: :info} (concat [["Head:     " :comment] branch "  "] commit))
         upstream snapshot.upstream]
     (if upstream
       (add out {kind: :info}
@@ -72,9 +72,9 @@
 
 (def (heading out section n folds)
   (add out {kind: :section section: section}
-       (vec (concat [[(get titles section) :heading]]
-                    (if n [[$" ({n})" :comment]] [])
-                    (if (get folds.closed section) [[" …" :comment]] [])))))
+       (concat [[(get titles section) :heading]]
+               (if n [[$" ({n})" :comment]] [])
+               (if (get folds.closed section) [[" …" :comment]] []))))
 
 (def (letter section kind)
   (if (= section :untracked) ["?" :comment] (get letters kind ["M" :warning])))
@@ -86,16 +86,16 @@
     [else
      (let [added (nth counted 0)
            removed (nth counted 1)]
-       (vec (concat (if (> added 0) [[$"+{added}" :success]] [])
-                    (if (and (> added 0) (> removed 0)) [" "] [])
-                    (if (> removed 0) [[$"-{removed}" :error]] []))))]))
+       (concat (if (> added 0) [[$"+{added}" :success]] [])
+               (if (and (> added 0) (> removed 0)) [" "] [])
+               (if (> removed 0) [[$"-{removed}" :error]] [])))]))
 
 (def (file-line section change column counted)
   (let [shown (letter section change.kind)
         segments ["  " [(nth shown 0) (nth shown 1) :pill] "  " change.path]
         segments (if change.from (conj segments [$" ← {change.from}" :comment]) segments)]
     (if (and counted (not (= counted [0 0])))
-      (vec (concat (pad-past segments column) (stats counted)))
+      (concat (pad-past segments column) (stats counted))
       segments)))
 
 (def (diff-line line)

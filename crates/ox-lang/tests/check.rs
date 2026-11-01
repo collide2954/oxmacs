@@ -38,6 +38,44 @@ fn awaiting_a_call_that_already_waits_is_pointed_out() {
 }
 
 #[test]
+fn vec_around_a_vector_is_pointed_out() {
+    let found = Isolate::new().check(
+        "user",
+        "(def (f xs) [(vec (map inc xs)) (vec [1]) (vec (rest xs)) (->> xs (filter some?) vec)])\n\
+         (def (g xs) (let [map (fn [_f x] (list x))] (vec (map inc xs))))\n\
+         (def (h xs) (for [x xs] x))",
+    );
+
+    assert_eq!(
+        messages(&found),
+        [
+            "map gives a vector already; drop the vec",
+            "This is a vector already; drop the vec",
+            "filter gives a vector already; drop the vec",
+        ]
+    );
+    assert!(
+        found
+            .iter()
+            .all(|found| found.severity == Severity::Warning)
+    );
+}
+
+#[test]
+fn an_alias_that_restates_the_default_is_pointed_out() {
+    let found = Isolate::new().check(
+        "user",
+        "(module (import (ox string :as string) (ox math :as m)) (export f))\n\
+         (def (f s) [(string/trim s) (m/fixed 1.5 1)])",
+    );
+
+    assert_eq!(
+        messages(&found),
+        ["(ox string) is imported as string already; drop the :as"]
+    );
+}
+
+#[test]
 fn regex_literals_are_checked_before_they_run() {
     let found = Isolate::new().check("user", "(def (ok) #\"\\d+\")\n(def (bad) #\"(\")");
 

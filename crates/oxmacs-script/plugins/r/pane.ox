@@ -1,6 +1,6 @@
 (module
-  (import (r session :as session)
-          (r help :as help))
+  (import (r session)
+          (r help))
   (export show-help ask-help))
 
 (def help-buffer "*R help*")
@@ -25,7 +25,7 @@
         again (and current (= current.topic topic))
         history (if again
                   (assoc known.history known.at {topic: topic text: text})
-                  (conj (vec (take (+ known.at 1) known.history)) {topic: topic text: text}))]
+                  (conj (take (+ known.at 1) known.history) {topic: topic text: text}))]
     (swap! state assoc :history history :at (if again known.at (- (count history) 1)) :pending nil)
     (render text)))
 

@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox path) (ox file)
-          (r session :as session)
-          (r language :as language))
+          (r session)
+          (r language))
   (export available tested installed))
 
 (def tests-buffer "*R tests*")
@@ -88,12 +88,12 @@
         tally (fn [status] (count (filter (fn [row] (= row.status status)) rows)))
         folder (path/join root "tests" "testthat")]
     (show-places tests-buffer
-                 (vec (map (fn [row]
-                             (let [[mark face] (or (get marks row.status) ["?" :warning])]
-                               {file: (path/join folder row.file) line: (or row.line 1)
-                                label: mark face: face
-                                text: (if (string/blank? row.message) row.test (str row.test "  " row.message))}))
-                           rows))
+                 (map (fn [row]
+                        (let [[mark face] (or (get marks row.status) ["?" :warning])]
+                          {file: (path/join folder row.file) line: (or row.line 1)
+                           label: mark face: face
+                           text: (if (string/blank? row.message) row.test (str row.test "  " row.message))}))
+                      rows)
                  :title $"{(tally "passed")} passed, {(tally "failed")} failed, {(tally "skipped")} skipped"
                  :root folder
                  :on-refresh (fn [] (run-command 'r-test)))))
@@ -107,18 +107,18 @@
 
 (def (package-lines rows)
   (let [width (apply max 0 (map (fn [row] (count row.name)) rows))]
-    (vec (map (fn [row] {line: [(if row.attached "* " "  ")
-                                [(string/pad-end row.name width) (if row.attached :keyword :link)]
-                                "  " [row.version :comment]]
-                         package: row})
-              rows))))
+    (map (fn [row] {line: [(if row.attached "* " "  ")
+                           [(string/pad-end row.name width) (if row.attached :keyword :link)]
+                           "  " [row.version :comment]]
+                    package: row})
+         rows)))
 
 (def (installed session payload)
-  (let [rows (vec (keep (fn [line]
-                          (let [fields (string/split line "\t")]
-                            (when (>= (count fields) 3)
-                              {name: (nth fields 0) version: (nth fields 1) attached: (= (nth fields 2) "TRUE")})))
-                        (string/lines payload)))]
+  (let [rows (keep (fn [line]
+                     (let [fields (string/split line "\t")]
+                       (when (>= (count fields) 3)
+                         {name: (nth fields 0) version: (nth fields 1) attached: (= (nth fields 2) "TRUE")})))
+                   (string/lines payload))]
     (reset! listing {session: session rows: rows})
     (open-buffer packages-buffer (package-lines rows) :keys package-keys :beside true :select true)
     (set-header packages-buffer [[[packages-help :comment]]])))
@@ -133,7 +133,7 @@
       (session/evaluate running (if row.attached
                                   $"detach({(session/r-string (str "package:" row.name))})"
                                   $"library({row.name})"))
-      (swap! listing update :rows (fn [rows] (vec (map (fn [other] (if (= other.name row.name) (assoc other :attached (not row.attached)) other)) rows))))
+      (swap! listing update :rows (fn [rows] (map (fn [other] (if (= other.name row.name) (assoc other :attached (not row.attached)) other)) rows)))
       (set-lines packages-buffer (package-lines (get @listing :rows))))
     (message "No package on this line")))
 

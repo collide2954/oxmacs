@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
+  (import (ox math) (screensaver noise))
   (export heading draw))
 (def streams 150)
 (def length 24)
@@ -26,7 +26,7 @@
            out [[x y]]]
       (if (= k length)
         (let [split (max 2 (int (* length (min 1 (max 0 head)))))
-              behind (vec (take (inc split) out))
+              behind (take (inc split) out)
               [hx hy] (last behind)]
           [[:curve out [color (* 0.16 fade)] 1.2]
            [:curve behind [color (* 0.8 fade)] 1.6 1.0]
@@ -38,7 +38,7 @@
 
 (def (draw frame)
   (let [seconds (/ frame.time 1000.0)]
-    (vec (mapcat (fn [i] (stream i seconds frame.width frame.height)) (range streams)))))
+    (mapcat (fn [i] (stream i seconds frame.width frame.height)) (range streams))))
 
 (test "the currents turn slowly"
   (let [a (heading 300 200 10)

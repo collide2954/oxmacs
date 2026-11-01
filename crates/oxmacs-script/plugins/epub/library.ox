@@ -1,6 +1,6 @@
 (module
   (import (ox file) (ox image) (ox path) (ox string) (ox ui) (ox zip)
-          (epub package :as package))
+          (epub package))
   (export buffer found card view per-row same-place?))
 
 (def buffer "*epub library*")

@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox path) (ox file) (ox process) (ox json) (ox wsl)
-          (pixi project :as project)))
+          (pixi project)))
 
 (def page "*pixi*")
 (def output "*pixi run*")
@@ -44,13 +44,13 @@
 (def (remember! root environment)
   (when-let [file (choices-file)]
     (file/make-dir (path/parent file))
-    (file/write file (json/write (vec (concat (filter (fn [choice] (not= choice.root root)) (choices))
-                                              [{root: root environment: environment}]))))))
+    (file/write file (json/write (concat (filter (fn [choice] (not= choice.root root)) (choices))
+                                         [{root: root environment: environment}])))))
 
 (def (stamp manifest root)
   "When the manifest and lock file of the project at root last changed."
-  (vec (map (fn [path] (try (get (file/metadata path) :modified) (catch error _e nil)))
-            [manifest (path/join root "pixi.lock")])))
+  (map (fn [path] (try (get (file/metadata path) :modified) (catch error _e nil)))
+       [manifest (path/join root "pixi.lock")]))
 
 (def (outside root)
   "Where to start pixi itself for the project at root, so it doesn't get root's own environment."
@@ -140,7 +140,7 @@
 
 (def (asked root args)
   "The output of pixi run with args for the project at root, raising what pixi said when it fails."
-  (let [ran (process/run (pixi-for root) (vec (concat args ["--manifest-path" (manifest-of root)])) :cwd (outside root))]
+  (let [ran (process/run (pixi-for root) (concat args ["--manifest-path" (manifest-of root)]) :cwd (outside root))]
     (if (= ran.status 0)
       ran.stdout
       (raise (error $"pixi {(first args)}: {(project/reason ran)}")))))
@@ -166,7 +166,7 @@
 
 (defcommand pixi-run "Run a task of the pixi project here in its environment"
   (let [root (here!)
-        names (vec (map (fn [task] task.name) (tasks root)))]
+        names (map (fn [task] task.name) (tasks root))]
     (when (empty? names)
       (raise (error "This pixi project has no tasks yet; pixi task add makes one")))
     (run-task root (prompt "Run pixi task: " :choices names))))
@@ -178,7 +178,7 @@
 
 (defcommand pixi-environment "Choose the pixi environment programs in the project here run in"
   (let [root (here!)
-        names (vec (map (fn [environment] environment.name) (environments root)))
+        names (map (fn [environment] environment.name) (environments root))
         picked (prompt $"Environment for {(path/name root)}: " :choices names)]
     (unless (some (fn [name] (= name picked)) names)
       (raise (error $"{(path/name root)} has no environment named {picked}")))
@@ -241,19 +241,19 @@
    explicit: package.explicit})
 
 (def (section title rows empty)
-  (vec (concat [[[title :heading]]]
-               (if (empty? rows) [[[$"  {empty}" :comment]]] rows)
-               [""])))
+  (concat [[[title :heading]]]
+          (if (empty? rows) [[[$"  {empty}" :comment]]] rows)
+          [""]))
 
 (def (show-page root)
   (let [current (chosen root)
         found (or (get @projects root) {})
         listed (packages root)
-        rows (vec (concat (section "Environments" (map (fn [e] (environment-line e current)) (environments root)) "none")
-                          (section "Tasks" (map task-line (tasks root)) "none yet: pixi task add makes one")
-                          (section "Packages" (map package-line (concat (filter (fn [p] p.explicit) listed)
-                                                                        (filter (fn [p] (not p.explicit)) listed)))
-                                   "none yet: a adds one")))
+        rows (concat (section "Environments" (map (fn [e] (environment-line e current)) (environments root)) "none")
+                     (section "Tasks" (map task-line (tasks root)) "none yet: pixi task add makes one")
+                     (section "Packages" (map package-line (concat (filter (fn [p] p.explicit) listed)
+                                                                   (filter (fn [p] (not p.explicit)) listed)))
+                              "none yet: a adds one"))
         buffer (open-buffer page rows
                             :directory root
                             :keys {"RET" 'pixi-select "r" 'pixi-run "e" 'pixi-environment "a" 'pixi-add

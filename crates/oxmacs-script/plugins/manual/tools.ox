@@ -27,7 +27,7 @@ Outside the editor there is no editor API. `ox FILE`, `ox test` and the REPL hav
 
 ## Checking
 
-`ox check` reads files and folders and reports unknown names, wrong numbers of arguments, unused variables and malformed forms, with the line and column of each. It knows the editor API in `init.ox` and in a plugin folder, along with the plugin's own modules. oxmacs runs the same checks as you type.
+`ox check` reads files and folders and reports unknown names, wrong numbers of arguments, unused variables and malformed forms, with the line and column of each. It also points out code that asks for what Ox does anyway, such as `vec` around `map`, which gives a vector already, or an `:as` naming a module by its own last name. It knows the editor API in `init.ox` and in a plugin folder, along with the plugin's own modules. oxmacs runs the same checks as you type.
 
 - `--strict` fails on warnings as well as errors.
 - `--root DIR` adds a folder to find imports in.

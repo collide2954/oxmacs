@@ -1,9 +1,9 @@
 (module
   (import (ox file) (ox image) (ox json) (ox path) (ox string) (ox time) (ox ui) (ox xml) (ox zip)
-          (epub package :as package)
-          (epub html :as html)
-          (epub reading :as reading)
-          (epub library :as library)))
+          (epub package)
+          (epub html)
+          (epub reading)
+          (epub library)))
 
 (defonce saved (atom nil))
 (defonce shelf (atom {folder: nil books: [] width: 900}))
@@ -55,13 +55,13 @@
       (let [cover (decoded book entry.cover)]
         {blocks: (if cover [{kind: :image image: cover alt: "Cover"}] []) ids: {} sources: []})
       (let [read (html/blocks (xml/parse (zip/read book.path entry) :html true) entry)
-            blocks (vec (map (fn [block]
-                               (if (= block.kind :image)
-                                 (if-let [image (decoded book block.src)]
-                                   {kind: :image image: image alt: block.alt}
-                                   {kind: :center runs: [{text: $"[{(if (string/blank? block.alt) "image" block.alt)}]" italic: true}]})
-                                 block))
-                             read.blocks))]
+            blocks (map (fn [block]
+                          (if (= block.kind :image)
+                            (if-let [image (decoded book block.src)]
+                              {kind: :image image: image alt: block.alt}
+                              {kind: :center runs: [{text: $"[{(if (string/blank? block.alt) "image" block.alt)}]" italic: true}]})
+                            block))
+                        read.blocks)]
         {blocks: blocks ids: read.ids sources: (keep :src read.blocks)}))))
 
 (def (show-progress)
@@ -224,22 +224,22 @@
 
 (def (contents-items state)
   "The book's table of contents as items for M-g i, each following its link."
-  (vec (map (fn [item]
-              {label: (str (string/repeat "  " item.depth) item.title)
-               go: (fn [] (follow state (if item.fragment (str item.entry "#" item.fragment) item.entry)))})
-            (or (get @state :toc) []))))
+  (map (fn [item]
+         {label: (str (string/repeat "  " item.depth) item.title)
+          go: (fn [] (follow state (if item.fragment (str item.entry "#" item.fragment) item.entry)))})
+       (or (get @state :toc) [])))
 
 (def (chapter-texts book)
   (let [total (count book.chapters)]
-    (vec (map (fn [index]
-                (when (= 0 (mod index 5)) (message $"Searching {(inc index)}/{total}…"))
-                (let [entry (nth book.chapters index)
-                      blocks (or (get book.blocks index)
-                                 (if (map? entry)
-                                   []
-                                   (get (html/blocks (xml/parse (zip/read book.path entry) :html true) entry) :blocks)))]
-                  (vec (map reading/block-text blocks))))
-              (range total)))))
+    (map (fn [index]
+           (when (= 0 (mod index 5)) (message $"Searching {(inc index)}/{total}…"))
+           (let [entry (nth book.chapters index)
+                 blocks (or (get book.blocks index)
+                            (if (map? entry)
+                              []
+                              (get (html/blocks (xml/parse (zip/read book.path entry) :html true) entry) :blocks)))]
+             (map reading/block-text blocks)))
+         (range total))))
 
 (def (show-match state step)
   (let [book @state
@@ -303,15 +303,15 @@
         (message "Drag over some text first")))))
 
 (def (notes-lines book)
-  (vec (mapcat (fn [kept]
-                 (let [entry (nth book.chapters kept.chapter)
-                       found (when (string? entry) (find (fn [item] (= item.entry entry)) book.toc))
-                       title (if found found.title $"Chapter {(inc kept.chapter)}")]
-                   (concat [{line: [[title :heading]] highlight: kept}
-                            {line: ["  " [(string/truncate (package/tidy kept.text) 120) (if kept.note :added :marked)]] highlight: kept}]
-                           (if kept.note [{line: ["    " [kept.note :comment]] highlight: kept}] [])
-                           [""])))
-               book.highlights)))
+  (mapcat (fn [kept]
+            (let [entry (nth book.chapters kept.chapter)
+                  found (when (string? entry) (find (fn [item] (= item.entry entry)) book.toc))
+                  title (if found found.title $"Chapter {(inc kept.chapter)}")]
+              (concat [{line: [[title :heading]] highlight: kept}
+                       {line: ["  " [(string/truncate (package/tidy kept.text) 120) (if kept.note :added :marked)]] highlight: kept}]
+                      (if kept.note [{line: ["    " [kept.note :comment]] highlight: kept}] [])
+                      [""])))
+          book.highlights))
 
 (defcommand epub-notes "List the highlights and notes of this book"
   (with-book

@@ -1,5 +1,5 @@
 (module
-  (import (zen look :as look)))
+  (import (zen look)))
 
 (defonce on (atom false))
 (defonce wrapped (atom nil))

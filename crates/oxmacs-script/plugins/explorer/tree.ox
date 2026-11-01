@@ -30,8 +30,8 @@
 (def (order-key [rel dir])
   (let [parts (string/split rel "/")
         last-at (dec (count parts))]
-    (vec (map (fn [at] [(if (or dir (< at last-at)) 0 1) (string/lower (nth parts at))])
-              (range (count parts))))))
+    (map (fn [at] [(if (or dir (< at last-at)) 0 1) (string/lower (nth parts at))])
+         (range (count parts)))))
 
 (def (filtered files text join)
   "Rows for the files, given as /-separated paths, whose names hold text ignoring case, under open rows for the folders holding them; join turns a vector of path parts into a path."
@@ -108,13 +108,13 @@
   (let [errors (if problems problems.errors 0)
         warnings (if problems problems.warnings 0)
         mark (get marks change)]
-    (vec (keep identity
-               [(when (> errors 0) [(str errors) :error])
-                (when (> warnings 0) [(str warnings) :warning])
-                (when mark (if row.dir ["●" (second mark)] mark))]))))
+    (keep identity
+          [(when (> errors 0) [(str errors) :error])
+           (when (> warnings 0) [(str warnings) :warning])
+           (when mark (if row.dir ["●" (second mark)] mark))])))
 
 (def (spaced parts)
-  (vec (mapcat (fn [at] (if (= at 0) [(nth parts 0)] [" " (nth parts at)])) (range (count parts)))))
+  (mapcat (fn [at] (if (= at 0) [(nth parts 0)] [" " (nth parts at)])) (range (count parts))))
 
 (def (named row change)
   (let [face (get name-faces change)]
@@ -126,7 +126,7 @@
         right (spaced (badges row change problems))
         used (+ (string/width lead) (string/width row.name) (reduce + 0 (map (fn [part] (string/width (if (string? part) part (first part)))) right)))
         gap (string/repeat " " (max 1 (- width used 1)))]
-    {line: (vec (concat [[lead :comment] (named row change) gap] right))
+    {line: (concat [[lead :comment] (named row change) gap] right)
      background: (when current :region)}))
 
 (test "folders come first, then names ignoring case"

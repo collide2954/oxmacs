@@ -6,7 +6,7 @@
 
 (def ^:shadow (entries schema)
   "Every setting of schema to list, the editor's and then each plugin's, marking whether it :changed since the init files ran."
-  (vec (map (fn [setting] (assoc setting :changed (not= setting.value setting.saved))) schema)))
+  (map (fn [setting] (assoc setting :changed (not= setting.value setting.saved))) schema))
 
 (def (effective entry)
   "The value in use for entry, its default when nothing is set."
@@ -42,7 +42,7 @@
 (def (setting-lines entry index width)
   (let [marker (if entry.changed ["* " :warning] "  ")
         note (when (set-in-init? entry) ["  set in init.ox" :comment])]
-    [{line: (vec (filter some? [marker (string/pad-end (name entry.key) width) [(shown entry) :link] note]))
+    [{line: (filter some? [marker (string/pad-end (name entry.key) width) [(shown entry) :link] note])
       index: index
       column: (+ 2 width)}
      [[(str "    " (hint-of entry)) :comment]]]))

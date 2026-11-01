@@ -1,7 +1,7 @@
 (module
   (import (ox crypto) (ox file) (ox string) (ox time)
-          (vault store :as store)
-          (vault import :as import)))
+          (vault store)
+          (vault import)))
 
 (def list-buffer "*Vault*")
 (def entry-buffer "*Vault entry*")
@@ -42,7 +42,7 @@
               [["RET shows  c copies the password  u the user  t the code  a adds  e edits  d deletes  L locks  q quits" :comment]]]
      lines: (if (empty? found)
               [[["No entries yet: a adds one and M-x vault-import brings in others" :comment]]]
-              (vec (map (fn [entry] {line: (row entry) id: entry.id}) found)))}))
+              (map (fn [entry] {line: (row entry) id: entry.id}) found))}))
 
 (def (show-list)
   (let [page (list-page)]
@@ -86,16 +86,16 @@
 (def (entry-lines entry)
   (let [reveal (get @view :reveal)
         password (text entry.password)]
-    (vec (filter some?
-                 (concat [(field "User" [(text entry.username) :string])
-                          (field "Password" (if reveal password (string/repeat "•" (min 16 (count password)))))
-                          (when (not (blank? entry.url))
-                            (field "URL" [entry.url :link]))
-                          (when (not (blank? entry.totp))
-                            (field "Code" [(str (code entry) "   " (seconds-left entry) " s left") :keyword]))]
-                         (if (blank? entry.notes)
-                           []
-                           (concat [""] (string/lines entry.notes))))))))
+    (filter some?
+            (concat [(field "User" [(text entry.username) :string])
+                     (field "Password" (if reveal password (string/repeat "•" (min 16 (count password)))))
+                     (when (not (blank? entry.url))
+                       (field "URL" [entry.url :link]))
+                     (when (not (blank? entry.totp))
+                       (field "Code" [(str (code entry) "   " (seconds-left entry) " s left") :keyword]))]
+                    (if (blank? entry.notes)
+                      []
+                      (concat [""] (string/lines entry.notes)))))))
 
 (def (redraw-entry)
   (when-let [entry (by-id (get @view :shown))]
@@ -128,7 +128,7 @@
   (let [found (store/unlock)]
     (when (empty? found)
       (raise (error "The vault has no entries yet")))
-    (let [title (prompt question :choices (vec (map :title (sorted found))))]
+    (let [title (prompt question :choices (map :title (sorted found)))]
       (or (store/find-entry title)
           (raise (error $"No entry is called {title}"))))))
 

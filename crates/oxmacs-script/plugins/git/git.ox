@@ -1,10 +1,10 @@
 (module
   (import (ox file) (ox path) (ox string) (ox time)
-          (git repo :as repo)
-          (git status :as status)
-          (git pane :as pane)
-          (git diff :as diff)
-          (git commit :as commit)))
+          (git repo)
+          (git status)
+          (git pane)
+          (git diff)
+          (git commit)))
 
 (def status-keys
   {"n" 'git-next-section "p" 'git-previous-section "TAB" 'git-toggle "RET" 'git-visit
@@ -301,11 +301,11 @@
            (repo/git state.root ["add" "--intent-to-add" "--" chosen.path]))
          (apply-hunk git chosen false ["apply" "--cached" "-"]))]
       [(and (= chosen.kind :section) (= section :untracked))
-       (change git (vec (concat ["add" "--"] state.snapshot.untracked)))]
+       (change git (concat ["add" "--"] state.snapshot.untracked))]
       [(and (= chosen.kind :section) (= section :unstaged))
        (change git ["add" "--update" "--" "."])]
       [(and (= chosen.kind :files) (or (= section :untracked) (= section :unstaged)))
-       (change git (vec (concat ["add" "--"] chosen.paths)))]
+       (change git (concat ["add" "--"] chosen.paths))]
       [else (message "Nothing to stage here")])))
 
 (defcommand git-stage "Stage the file, section, hunk or lines at point"
@@ -316,15 +316,15 @@
         state.snapshot.staged))
 
 (def (forget git paths)
-  (change git (vec (concat (if (get-in @git [:snapshot :born]) ["reset" "-q" "--"] ["rm" "--cached" "-r" "-q" "--"])
-                           paths))))
+  (change git (concat (if (get-in @git [:snapshot :born]) ["reset" "-q" "--"] ["rm" "--cached" "-r" "-q" "--"])
+                      paths)))
 
 (def (unstage git chosen)
   (cond
     [(not (= chosen.section :staged)) (message "Nothing staged here")]
     [(= chosen.kind :hunk) (apply-hunk git chosen true ["apply" "--cached" "--reverse" "-"])]
     [(= chosen.kind :section) (forget git ["."])]
-    [else (forget git (vec (concat chosen.paths (renamed-from @git chosen.paths))))]))
+    [else (forget git (concat chosen.paths (renamed-from @git chosen.paths)))]))
 
 (defcommand git-unstage "Unstage the file, section, hunk or lines at point"
   (acting "Nothing staged here" unstage))
@@ -357,7 +357,7 @@
          (change git ["restore" "--" "."]))]
       [else
        (when (yes-or-no $"Discard changes to {(describe chosen.paths)}?")
-         (change git (vec (concat ["restore" "--"] chosen.paths))))])))
+         (change git (concat ["restore" "--"] chosen.paths)))])))
 
 (defcommand git-discard "Discard the changes in the file, section, hunk or lines at point"
   (acting "Nothing to discard here" discard))
@@ -403,11 +403,11 @@
       [else
        (let [file (path/join state.metadata "COMMIT_EDITMSG")
              text (if (= kind :create) "" (head-message state.root))
-             args (vec (concat ["commit" "--cleanup=strip" "-F" "-"] flags
-                               (cond
-                                 [(= kind :amend) ["--amend"]]
-                                 [(= kind :reword) ["--amend" "--only"]]
-                                 [else []])))
+             args (concat ["commit" "--cleanup=strip" "-F" "-"] flags
+                          (cond
+                            [(= kind :amend) ["--amend"]]
+                            [(= kind :reword) ["--amend" "--only"]]
+                            [else []]))
              history (messages state.root)]
          (when (buffer-exists? "COMMIT_EDITMSG") (close-buffer "COMMIT_EDITMSG"))
          (file/write file (commit/template text snapshot))
@@ -421,7 +421,7 @@
     (if (not state.snapshot.born)
       (message "There is no commit to change yet")
       (do
-        (repo/git state.root (vec (concat ["commit" "--amend" "--no-edit"] flags)))
+        (repo/git state.root (concat ["commit" "--amend" "--no-edit"] flags))
         (refresh git)
         (report-commit state.root)))))
 

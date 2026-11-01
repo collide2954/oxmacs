@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver shading :as shading))
+  (import (ox math) (screensaver shading))
   (export shader figures project draw))
 
 (def shader
@@ -100,41 +100,41 @@
         decs (map (fn [s] (nth s 1)) figure.stars)
         ra0 (/ (reduce + ras) (count ras))
         dec0 (/ (reduce + decs) (count decs))
-        flat (vec (map (fn [s] (project s ra0 dec0)) figure.stars))
+        flat (map (fn [s] (project s ra0 dec0)) figure.stars)
         reach (reduce max 0.1 (map (fn [[x y]] (max (abs x) (abs y))) flat))
         scale (/ (* 0.36 frame.height) reach)
         spin (* 0.004 seconds)
         cx (+ (/ frame.width 2.0) (* 0.06 frame.width (math/sin (+ (* 0.2 seconds) index))))
         cy (/ frame.height 2.0)
-        placed (vec (map (fn [[x y]]
-                           (let [rx (- (* x (math/cos spin)) (* y (math/sin spin)))
-                                 ry (+ (* x (math/sin spin)) (* y (math/cos spin)))]
-                             [(+ cx (* scale rx)) (- cy (* scale ry))]))
-                         flat))
+        placed (map (fn [[x y]]
+                      (let [rx (- (* x (math/cos spin)) (* y (math/sin spin)))
+                            ry (+ (* x (math/sin spin)) (* y (math/cos spin)))]
+                        [(+ cx (* scale rx)) (- cy (* scale ry))]))
+                    flat)
         shown (* (min 1 (/ into 1.5)) (min 1 (max 0 (/ (- cycle into) 1.5))))
         drawn (* (count figure.lines) (min 1 (max 0 (/ (- into 1.5) 4.5))))
         label (* shown (min 1 (max 0 (- into 6.0))))
-        lines (vec (keep (fn [k]
-                           (let [[a b] (nth figure.lines k)
-                                 [x1 y1] (nth placed a)
-                                 [x2 y2] (nth placed b)
-                                 part (min 1 (max 0 (- drawn k)))]
-                             (when (> part 0)
-                               [:line x1 y1 (+ x1 (* part (- x2 x1))) (+ y1 (* part (- y2 y1))) ["#8fb3ff" (* 0.35 shown)] 1.2])))
-                         (range (count figure.lines))))
-        stars (vec (mapcat (fn [k]
-                             (let [[x y] (nth placed k)
-                                   [_ _ magnitude warmth] (nth figure.stars k)
-                                   size (+ 5 (* 4 (- 4.5 magnitude)))
-                                   color (tint warmth)
-                                   twinkle (+ 0.85 (* 0.15 (math/sin (+ (* 3 seconds) (* 7 k)))))]
-                               [[:glow x y (* 2.2 size) [color (* 0.45 shown twinkle)]]
-                                [:glow x y size [color (* 0.9 shown)]]
-                                [:circle x y (+ 0.8 (* 0.35 (- 4.5 magnitude))) ["#ffffff" (* 0.95 shown)]]]))
-                           (range (count figure.stars))))
+        lines (keep (fn [k]
+                      (let [[a b] (nth figure.lines k)
+                            [x1 y1] (nth placed a)
+                            [x2 y2] (nth placed b)
+                            part (min 1 (max 0 (- drawn k)))]
+                        (when (> part 0)
+                          [:line x1 y1 (+ x1 (* part (- x2 x1))) (+ y1 (* part (- y2 y1))) ["#8fb3ff" (* 0.35 shown)] 1.2])))
+                    (range (count figure.lines)))
+        stars (mapcat (fn [k]
+                        (let [[x y] (nth placed k)
+                              [_ _ magnitude warmth] (nth figure.stars k)
+                              size (+ 5 (* 4 (- 4.5 magnitude)))
+                              color (tint warmth)
+                              twinkle (+ 0.85 (* 0.15 (math/sin (+ (* 3 seconds) (* 7 k)))))]
+                          [[:glow x y (* 2.2 size) [color (* 0.45 shown twinkle)]]
+                           [:glow x y size [color (* 0.9 shown)]]
+                           [:circle x y (+ 0.8 (* 0.35 (- 4.5 magnitude))) ["#ffffff" (* 0.95 shown)]]]))
+                      (range (count figure.stars)))
         [lx ly] (reduce (fn [[bx by] [x y]] (if (> y by) [x y] [bx by])) [0 0] placed)]
-    (vec (concat lines stars
-                 [[:text (- lx 40) (+ ly 28) figure.name ["#c9d6ff" (* 0.8 label)] (* 0.035 frame.height)]]))))
+    (concat lines stars
+            [[:text (- lx 40) (+ ly 28) figure.name ["#c9d6ff" (* 0.8 label)] (* 0.035 frame.height)]])))
 
 (test "a constellation's stars land around the middle of its chart"
   (let [orion (first figures)

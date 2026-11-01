@@ -1,6 +1,6 @@
 (module
   (import (ox string)
-          (markdown grammar :as grammar))
+          (markdown grammar))
   (export inline wrap render body))
 
 (def (body text)

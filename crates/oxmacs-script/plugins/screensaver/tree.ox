@@ -1,5 +1,5 @@
 (module
-  (import (ox math) (screensaver noise :as noise))
+  (import (ox math) (screensaver noise))
   (export branches draw))
 
 (def cycle 24.0)
@@ -29,10 +29,10 @@
                    (nth bark depth)]]
         (if (< shown 1)
           [piece]
-          (vec (concat [piece]
-                       (branches season tx ty (- heading spread) (* length shrink) (inc depth) grown seconds (* 2 path))
-                       (branches season tx ty (+ heading spread) (* length shrink 0.94) (inc depth) grown seconds (inc (* 2 path)))
-                       (if (= depth deepest) [{leaf: [tx ty] path: path}] []))))))))
+          (concat [piece]
+                  (branches season tx ty (- heading spread) (* length shrink) (inc depth) grown seconds (* 2 path))
+                  (branches season tx ty (+ heading spread) (* length shrink 0.94) (inc depth) grown seconds (inc (* 2 path)))
+                  (if (= depth deepest) [{leaf: [tx ty] path: path}] [])))))))
 
 (def blossoms ["#ffb3c6" "#ff8fab" "#ffc8dd" "#fb6f92" "#fff0f3"])
 
@@ -60,11 +60,11 @@
         parts (branches season (/ frame.width 2.0) ground (- (/ math/pi 2)) (* 0.22 frame.height) 0 grown seconds 1)
         pieces (filter vector? parts)
         leaves (filter map? parts)]
-    (vec (concat [[:glow (/ frame.width 2.0) ground (* 0.35 frame.height) ["#000000" 0.35]]]
-                 pieces
-                 (if (>= grown 1)
-                   (mapcat (fn [l] (leaf l.leaf l.path season along frame.height)) leaves)
-                   [])))))
+    (concat [[:glow (/ frame.width 2.0) ground (* 0.35 frame.height) ["#000000" 0.35]]]
+            pieces
+            (if (>= grown 1)
+              (mapcat (fn [l] (leaf l.leaf l.path season along frame.height)) leaves)
+              []))))
 
 (test "the tree grows from its trunk to its tips"
   (let [young (branches 0 400 600 -1.57 100 0 0.2 0 1)

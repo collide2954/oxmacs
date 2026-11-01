@@ -1,7 +1,7 @@
 (module
   (import (ox file) (ox path) (ox string) (ox crypto) (ox json)
-          (calendar ics :as ics)
-          (calendar rrule :as rrule))
+          (calendar ics)
+          (calendar rrule))
   (export folder calendars calendar-of calendar-folder load! events occurrences save-event! delete-event!
           skip-occurrence! new-uid safe sync-file read-sync write-sync!))
 
@@ -42,23 +42,23 @@
 
 (def (read-file calendar file)
   (let [parsed (ics/parse (file/read file))]
-    (vec (map (fn [component] (merge (ics/event-of component) {calendar: calendar file: file}))
-              (ics/components parsed "VEVENT")))))
+    (map (fn [component] (merge (ics/event-of component) {calendar: calendar file: file}))
+         (ics/components parsed "VEVENT"))))
 
 (def (load!)
   "Reads the .ics files of every calendar again and returns their events."
-  (let [found (vec (mapcat (fn [calendar]
-                             (let [place (calendar-folder calendar.name)]
-                               (if (file/exists? place)
-                                 (mapcat (fn [entry]
-                                           (try (read-file calendar.name entry.path)
-                                             (catch error e
-                                               (message (str "Couldn't read " entry.name ": " e.message))
-                                               [])))
-                                         (filter (fn [entry] (string/ends-with? (string/lower entry.name) ".ics"))
-                                                 (file/list place)))
-                                 [])))
-                           (calendars)))]
+  (let [found (mapcat (fn [calendar]
+                        (let [place (calendar-folder calendar.name)]
+                          (if (file/exists? place)
+                            (mapcat (fn [entry]
+                                      (try (read-file calendar.name entry.path)
+                                        (catch error e
+                                          (message (str "Couldn't read " entry.name ": " e.message))
+                                          [])))
+                                    (filter (fn [entry] (string/ends-with? (string/lower entry.name) ".ics"))
+                                            (file/list place)))
+                            [])))
+                      (calendars))]
     (swap! state assoc :events found)
     found))
 
@@ -69,13 +69,13 @@
   "Every occurrence that overlaps from up to to, sorted by start: the event's fields with that occurrence's :start and :end, and the :event itself."
   (let [all (events)
         replaced (set (keep (fn [event] (when event.recurrence-id [event.uid event.recurrence-id])) all))]
-    (vec (sort-by :start
-                  (mapcat (fn [event]
-                            (keep (fn [found]
-                                    (when (or event.recurrence-id (not (contains? replaced [event.uid found.start])))
-                                      (merge event found {event: event})))
-                                  (rrule/expand (if event.recurrence-id (dissoc event :rrule) event) from to)))
-                          all)))))
+    (sort-by :start
+             (mapcat (fn [event]
+                       (keep (fn [found]
+                               (when (or event.recurrence-id (not (contains? replaced [event.uid found.start])))
+                                 (merge event found {event: event})))
+                             (rrule/expand (if event.recurrence-id (dissoc event :rrule) event) from to)))
+                     all))))
 
 (def (new-uid)
   (str (crypto/random 12) "@oxmacs"))
@@ -87,7 +87,7 @@
   (when (get (calendar-of calendar) :url)
     (let [sync (read-sync calendar)
           name (path/name file)
-          pending (vec (remove (fn [change] (= change.file name)) sync.pending))]
+          pending (remove (fn [change] (= change.file name)) sync.pending)]
       (write-sync! calendar (assoc sync :pending (conj pending {file: name removed: removed}))))))
 
 (def (save-event! event)
@@ -103,7 +103,7 @@
 (def (delete-event! event)
   "Removes event and the changed occurrences of its series, moving its file to the trash when nothing is left in it."
   (let [file event.file
-        kept (vec (filter (fn [other] (and (= other.file file) (not= other.uid event.uid))) (events)))]
+        kept (filter (fn [other] (and (= other.file file) (not= other.uid event.uid))) (events))]
     (if (empty? kept)
       (file/trash file)
       (file/write file (ics/write-calendar kept)))

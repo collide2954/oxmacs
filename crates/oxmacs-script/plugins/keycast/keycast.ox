@@ -1,6 +1,6 @@
 (module
   (import (ox time)
-          (keycast stack :as stack)))
+          (keycast stack)))
 
 (def large 1.6)
 

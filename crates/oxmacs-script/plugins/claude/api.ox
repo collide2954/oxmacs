@@ -132,14 +132,14 @@
   "The blocks of a reply to send back in later turns: after a fallback, only the text from before it."
   (let [marks (filter (fn [i] (= (get (nth content i) :type) "fallback")) (range (count content)))
         cut (if (empty? marks) -1 (last marks))]
-    (vec (keep (fn [i]
-                 (let [block (nth content i)]
-                   (cond
-                     [(= block.type "fallback") nil]
-                     [(and (< i cut) (not= block.type "text")) nil]
-                     [(and (= block.type "text") (string/blank? (or block.text ""))) nil]
-                     [else (dissoc block :invalid)])))
-               (range (count content))))))
+    (keep (fn [i]
+            (let [block (nth content i)]
+              (cond
+                [(= block.type "fallback") nil]
+                [(and (< i cut) (not= block.type "text")) nil]
+                [(and (= block.type "text") (string/blank? (or block.text ""))) nil]
+                [else (dissoc block :invalid)])))
+          (range (count content)))))
 
 (def (failure status text)
   "What to tell someone when the API answered status with text."

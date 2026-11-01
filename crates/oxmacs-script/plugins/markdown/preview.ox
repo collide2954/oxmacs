@@ -1,6 +1,6 @@
 (module
   (import (ox file) (ox path) (ox string)
-          (markdown render :as render))
+          (markdown render))
   (export show))
 
 (def (preview-of buffer)

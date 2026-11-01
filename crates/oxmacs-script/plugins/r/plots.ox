@@ -1,6 +1,6 @@
 (module
   (import (ox string) (ox ui) (ox image)
-          (r session :as session))
+          (r session))
   (export view gallery pick arrived thumbnails zoomed columns plots-buffer unpinned-of))
 
 (def size [672 480])

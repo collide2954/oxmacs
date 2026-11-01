@@ -4,17 +4,17 @@
 
 (def (parse-list text running)
   "The distributions wsl --list --verbose names, as maps of :name, :state as WSL words it in the system's language, :version, :default and :running, from running, the names wsl --list --running --quiet gives."
-  (vec (keep (fn [line]
-               (let [default (string/starts-with? (string/trim-start line) "*")
-                     words (string/words (string/replace line "*" " "))
-                     version (when (>= (count words) 3) (string/to-number (last words)))]
-                 (when version
-                   {name: (first words)
-                    state: (string/join " " (take (- (count words) 2) (rest words)))
-                    version: version
-                    default: default
-                    running: (if (some (fn [name] (= name (first words))) running) true false)})))
-             (string/lines text))))
+  (keep (fn [line]
+          (let [default (string/starts-with? (string/trim-start line) "*")
+                words (string/words (string/replace line "*" " "))
+                version (when (>= (count words) 3) (string/to-number (last words)))]
+            (when version
+              {name: (first words)
+               state: (string/join " " (take (- (count words) 2) (rest words)))
+               version: version
+               default: default
+               running: (if (some (fn [name] (= name (first words))) running) true false)})))
+        (string/lines text)))
 
 (def (wsl-lines args)
   (let [ran (process/run "wsl.exe" args :env {WSL_UTF8: "1"})]
@@ -23,7 +23,7 @@
 (def (listed)
   "The installed distributions."
   (parse-list (wsl-lines ["--list" "--verbose"])
-              (vec (map string/trim (string/lines (wsl-lines ["--list" "--running" "--quiet"]))))))
+              (map string/trim (string/lines (wsl-lines ["--list" "--running" "--quiet"])))))
 
 (def (default-name)
   "The name of WSL's default distribution."

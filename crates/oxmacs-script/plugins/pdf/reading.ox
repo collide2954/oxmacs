@@ -8,12 +8,12 @@
 
 (def (marks matches at page)
   "The marks for the matches found near page, the one numbered at drawn as current."
-  (vec (mapcat (fn [index]
-                 (let [found (nth matches index)]
-                   (if (<= (abs (- found.page page)) 3)
-                     (map (fn [rect] {page: found.page rect: rect current: (= index at)}) found.rects)
-                     [])))
-               (range (count matches)))))
+  (mapcat (fn [index]
+            (let [found (nth matches index)]
+              (if (<= (abs (- found.page page)) 3)
+                (map (fn [rect] {page: found.page rect: rect current: (= index at)}) found.rects)
+                [])))
+          (range (count matches))))
 
 (def (first-match matches page step)
   "The match to show first when searching from page: the first on it or after when step is 1, the last on it or before when step is -1."
@@ -38,7 +38,7 @@
 
 (def (outline-labels outline)
   "The outline's headings, indented by depth, with their page numbers."
-  (vec (map (fn [heading] $"{(string/repeat "  " heading.depth)}{heading.title} · p. {(inc heading.page)}") outline)))
+  (map (fn [heading] $"{(string/repeat "  " heading.depth)}{heading.title} · p. {(inc heading.page)}") outline))
 
 (def (zoomed percent factor)
   "The scale after zooming the scale shown, percent, by factor, kept between a quarter and eight times."

@@ -34,25 +34,25 @@
 
 (def (dirs-in folder)
   (if (file/exists? folder)
-    (vec (filter :dir (file/list folder)))
+    (filter :dir (file/list folder))
     []))
 
 (def (matches-in file query network target)
   (let [lines (string/lines (file/read file.path))
         wanted (string/lower query)]
-    (vec (keep (fn [[number line]]
-                 (when (string/includes? (string/lower line) wanted)
-                   {network: network target: target day: (path/stem file.name) line: number text: line path: file.path}))
-               (zip (range (count lines)) lines)))))
+    (keep (fn [[number line]]
+            (when (string/includes? (string/lower line) wanted)
+              {network: network target: target day: (path/stem file.name) line: number text: line path: file.path}))
+          (zip (range (count lines)) lines))))
 
 (def (search query)
   "Every logged line containing query, ignoring case, as maps of :network, :target, :day, :line, :text and :path, oldest first."
   (if-let [root (folder)]
-    (vec (mapcat (fn [network]
-                   (mapcat (fn [target]
-                             (mapcat (fn [file] (matches-in file query network.name target.name))
-                                     (sort-by :name (filter (fn [file] (string/ends-with? file.name ".log"))
-                                                            (file/list target.path)))))
-                           (dirs-in network.path)))
-                 (dirs-in root)))
+    (mapcat (fn [network]
+              (mapcat (fn [target]
+                        (mapcat (fn [file] (matches-in file query network.name target.name))
+                                (sort-by :name (filter (fn [file] (string/ends-with? file.name ".log"))
+                                                       (file/list target.path)))))
+                      (dirs-in network.path)))
+            (dirs-in root))
     []))
