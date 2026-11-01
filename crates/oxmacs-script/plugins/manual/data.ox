@@ -86,7 +86,7 @@ Vectors, maps, sets, lists and strings all work with the same functions. Results
   [first-one others name age town])
 ```
 
-`{name age}` reads `:name` and `:age`, and `{city: town}` reads `:city` into `town`. A part that is missing is `nil`. Vector and record patterns work in function parameters too, but a map there declares named parameters instead. [Matching](flow) uses the same patterns to test values.
+`{name age}` reads `:name` and `:age`, and `{city: town}` reads `:city` into `town`. A part that is missing is `nil`, and so is every part of `nil` itself. A vector pattern also takes a string apart into characters, while anything else that isn't a collection raises an error, as does a field a record doesn't have. Vector and record patterns work in function parameters too, but a map there declares named parameters instead. [Matching](flow) uses the same patterns to test values.
 
 ## Records
 

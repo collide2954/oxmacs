@@ -83,10 +83,19 @@ pub fn given<'a>(
 
 pub fn expected(heap: &Heap, name: &str, wanted: &str, value: Value) -> Error {
     Error::new(format!(
-        "{name} expects {wanted}, got {}",
-        print::brief(heap, value)
+        "{name} expects {wanted}, got {}{}",
+        print::brief(heap, value),
+        awaiting(heap, value)
     ))
     .of(ErrorKind::Type)
+}
+
+pub fn awaiting(heap: &Heap, value: Value) -> &'static str {
+    if heap.promise_of(value).is_some() {
+        "; await it first"
+    } else {
+        ""
+    }
 }
 
 pub fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {

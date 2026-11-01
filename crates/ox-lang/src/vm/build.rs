@@ -1,7 +1,7 @@
 use crate::builtins::collections;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
-use crate::native::arguments;
+use crate::native::{arguments, awaiting};
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::map::Map;
@@ -20,7 +20,12 @@ pub fn field(heap: &Heap, value: Value, name: Sym) -> Result<Value, Error> {
     if let Some(map) = heap.map_of(value) {
         return Ok(map.get(heap, Value::Keyword(name)).unwrap_or(Value::Nil));
     }
-    Err(no_field(&print::brief(heap, value), name))
+    Err(Error::new(format!(
+        "{} has no field {}{}",
+        print::brief(heap, value),
+        name.name(),
+        awaiting(heap, value)
+    )))
 }
 
 pub fn call_data(heap: &Heap, callee: Value, given: &[Value]) -> Result<Value, Error> {

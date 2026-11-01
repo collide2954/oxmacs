@@ -14,6 +14,24 @@
 (defmacro m [] :macro) (let [[m] [5]] m) ;=> 5
 (let [[a 1] [1 1]] a) ;! let patterns bind names; use match to test values
 
+;; strings come apart into characters, nil gives nils, and anything else raises
+(let [[a b] "xy"] [b a]) ;=> [\y \x]
+(let [[a & more] "xyz"] more) ;=> [\y \z]
+(let [[a b] nil {c} nil] [a b c]) ;=> [nil nil nil]
+(let [[a b] 5] a) ;! A vector pattern expects a vector, list or string, got 5
+(let [[a] #{1}] a) ;! A vector pattern expects a vector, list or string, got #{1}
+(let [{a} 5] a) ;! 5 has no field a
+(defrecord Point [x y]) (let [{z} (Point 1 2)] z) ;! Point has no field z
+((fn [[a b]] a) 5) ;! A vector pattern expects a vector, list or string, got 5
+(match "ab" [[a b] [b a]] [_ nil]) ;=> [\b \a]
+
+;; a promise taken apart says to await it first
+(let [{status} (spawn 1)] status) ;! #<promise> has no field status; await it first
+(let [[a] (spawn 1)] a) ;! A vector pattern expects a vector, list or string, got #<promise>; await it first
+(let [p (spawn 1)] p.status) ;! #<promise> has no field status; await it first
+(match (spawn 1) [{status: s} s]) ;! No match for #<promise>; await it first
+(nth (spawn 1) 0) ;! nth expects a collection, got #<promise>; await it first
+
 ;; fn parameters destructure vectors and records
 ((fn [[a b]] (+ a b)) [1 2]) ;=> 3
 (defrecord Point [x y]) (def (dist #Point{x y}) (+ x y)) (dist (Point 3 4)) ;=> 7
