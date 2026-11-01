@@ -1,5 +1,8 @@
+use iced::advanced::layout::{self, Layout};
+use iced::advanced::widget::{Operation, Tree, tree};
+use iced::advanced::{Clipboard, Shell, Widget, renderer};
 use iced::widget::{Row, column, container, mouse_area, row, space, text};
-use iced::{Alignment, Element, Font, Length, mouse};
+use iced::{Alignment, Element, Event, Font, Length, Rectangle, Size, Theme, mouse};
 use oxmacs_core::theme::{Color, Theme as Faces};
 use oxmacs_core::view::tabbar::TabBar;
 
@@ -13,12 +16,11 @@ const NEW: &str = "+";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TabMessage {
     Pressed(usize),
-    Released(usize),
+    Moved { from: usize, to: usize },
     Entered(usize),
     Left(usize),
     Close(usize),
     New,
-    BarReleased,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -110,7 +112,6 @@ fn tab<'a, M: Clone + 'a>(
         });
     mouse_area(shaped)
         .on_press(on(TabMessage::Pressed(index)))
-        .on_release(on(TabMessage::Released(index)))
         .on_middle_press(on(TabMessage::Close(index)))
         .on_enter(on(TabMessage::Entered(index)))
         .on_exit(on(TabMessage::Left(index)))
@@ -135,6 +136,7 @@ pub fn view<'a, M: Clone + 'a>(
 ) -> Element<'a, M> {
     let colors = colors(&look.faces);
     let mut tabs: Vec<Element<'a, M>> = Vec::new();
+    let mut slots = Vec::new();
     for (index, name) in bar.tabs.iter().enumerate() {
         if index > 0 {
             let touching = [index - 1, index]
@@ -145,7 +147,9 @@ pub fn view<'a, M: Clone + 'a>(
             } else {
                 tabs.push(rule(colors.rule, look));
             }
+            slots.push(None);
         }
+        slots.push(Some(index));
         tabs.push(tab(
             index,
             name,
@@ -161,17 +165,171 @@ pub fn view<'a, M: Clone + 'a>(
     .on_press(on(TabMessage::New))
     .interaction(mouse::Interaction::Pointer);
     tabs.push(new.into());
-    let strip = style::color(colors.strip);
-    mouse_area(
-        container(Row::with_children(tabs).align_y(Alignment::Center))
-            .width(Length::Fill)
-            .style(move |_| container::Style {
-                background: Some(strip.into()),
-                ..container::Style::default()
-            }),
-    )
-    .on_release(on(TabMessage::BarReleased))
-    .into()
+    slots.push(None);
+    let background = style::color(colors.strip);
+    let strip = Strip {
+        content: Row::with_children(tabs).align_y(Alignment::Center).into(),
+        slots,
+        on_move: Box::new(move |from, to| on(TabMessage::Moved { from, to })),
+    };
+    container(strip)
+        .width(Length::Fill)
+        .style(move |_| container::Style {
+            background: Some(background.into()),
+            ..container::Style::default()
+        })
+        .into()
+}
+
+struct Strip<'a, M, Renderer> {
+    content: Element<'a, M, Theme, Renderer>,
+    slots: Vec<Option<usize>>,
+    on_move: Box<dyn Fn(usize, usize) -> M + 'a>,
+}
+
+#[derive(Debug, Default)]
+struct Dragged(Option<usize>);
+
+fn slot_under(layout: Layout<'_>, slots: &[Option<usize>], cursor: mouse::Cursor) -> Option<usize> {
+    layout
+        .children()
+        .zip(slots)
+        .find(|(child, _)| cursor.is_over(child.bounds()))
+        .and_then(|(_, slot)| *slot)
+}
+
+impl<M, Renderer> Widget<M, Theme, Renderer> for Strip<'_, M, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<Dragged>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(Dragged::default())
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        vec![Tree::new(&self.content)]
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(std::slice::from_ref(&self.content));
+    }
+
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.content
+            .as_widget_mut()
+            .layout(&mut tree.children[0], renderer, limits)
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(&mut tree.children[0], layout, renderer, operation);
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, M>,
+        viewport: &Rectangle,
+    ) {
+        let dragged = tree.state.downcast_mut::<Dragged>();
+        match event {
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                dragged.0 = slot_under(layout, &self.slots, cursor);
+            }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                if let Some(from) = dragged.0.take()
+                    && let Some(to) = slot_under(layout, &self.slots, cursor)
+                    && from != to
+                {
+                    shell.publish((self.on_move)(from, to));
+                }
+            }
+            _ => {}
+        }
+        self.content.as_widget_mut().update(
+            &mut tree.children[0],
+            event,
+            layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            viewport,
+        );
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget().draw(
+            &tree.children[0],
+            renderer,
+            theme,
+            style,
+            layout,
+            cursor,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            &tree.children[0],
+            layout,
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+}
+
+impl<'a, M, Renderer> From<Strip<'a, M, Renderer>> for Element<'a, M, Theme, Renderer>
+where
+    M: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    fn from(strip: Strip<'a, M, Renderer>) -> Self {
+        Element::new(strip)
+    }
 }
 
 #[cfg(test)]

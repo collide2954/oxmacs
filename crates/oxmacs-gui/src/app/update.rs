@@ -159,19 +159,8 @@ impl App {
 
     fn tab_message(&mut self, event: TabMessage) {
         let happened = match event {
-            TabMessage::Pressed(at) => {
-                self.tab_drag = Some(at);
-                Some(TabEvent::Select(at))
-            }
-            TabMessage::Released(to) => self
-                .tab_drag
-                .take()
-                .filter(|from| *from != to)
-                .map(|from| TabEvent::Move { from, to }),
-            TabMessage::BarReleased => {
-                self.tab_drag = None;
-                None
-            }
+            TabMessage::Pressed(at) => Some(TabEvent::Select(at)),
+            TabMessage::Moved { from, to } => Some(TabEvent::Move { from, to }),
             TabMessage::Entered(at) => {
                 self.tab_hover = Some(at);
                 None

@@ -52,7 +52,6 @@ pub struct App {
     takeover_size: Option<iced::Size>,
     focused_since: Option<Instant>,
     tab_hover: Option<usize>,
-    tab_drag: Option<usize>,
     before_fullscreen: Option<window::Mode>,
 }
 
@@ -137,7 +136,6 @@ impl App {
             takeover_size: None,
             focused_since: Some(Instant::now()),
             tab_hover: None,
-            tab_drag: None,
             before_fullscreen: None,
         };
         app.configure(config);
@@ -538,24 +536,37 @@ mod tests {
     }
 
     #[test]
-    fn dragging_a_tab_onto_another_moves_it() {
+    fn dragging_a_tab_onto_another_moves_it_and_a_drag_let_go_elsewhere_is_forgotten() {
         use crate::widgets::tab_bar::TabMessage;
+        use iced::mouse::{Button, Event as Mouse};
 
         let mut app = with_tab_bar();
+        let mut ui = iced_test::simulator(app.view());
+        let main = ui.find("main").unwrap().visible_bounds().unwrap().center();
+        let notes = ui.find("notes").unwrap().visible_bounds().unwrap().center();
+        let mut mouse = |at: iced::Point, event: Mouse| {
+            ui.point_at(at);
+            let _ = ui.simulate([Event::Mouse(event)]);
+        };
 
-        for message in [
-            TabMessage::Pressed(0),
-            TabMessage::Entered(1),
-            TabMessage::Released(1),
-            TabMessage::BarReleased,
-        ] {
-            let _ = app.update(Message::Tab(message));
-        }
-        assert_eq!(app.editor().message(), Some("moved 0 to 1"));
+        mouse(main, Mouse::ButtonPressed(Button::Left));
+        mouse(
+            iced::Point::new(main.x, main.y + 300.0),
+            Mouse::ButtonReleased(Button::Left),
+        );
+        mouse(notes, Mouse::ButtonReleased(Button::Left));
+        mouse(main, Mouse::ButtonPressed(Button::Left));
+        mouse(notes, Mouse::ButtonReleased(Button::Left));
 
-        for message in [TabMessage::Released(0), TabMessage::BarReleased] {
-            let _ = app.update(Message::Tab(message));
+        let messages: Vec<Message> = ui.into_messages().collect();
+        let moves = messages
+            .iter()
+            .filter(|message| matches!(message, Message::Tab(TabMessage::Moved { .. })))
+            .count();
+        for message in messages {
+            let _ = app.update(message);
         }
+        assert_eq!(moves, 1);
         assert_eq!(app.editor().message(), Some("moved 0 to 1"));
     }
 
