@@ -4,11 +4,7 @@ on:
   push:
     branches: [master]
     tags: ["v*"]
-    paths-ignore:
-      - "**.md"
   pull_request:
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
 
 concurrency:
@@ -234,7 +230,7 @@ jobs:
 
   publish:
     name: Publish
-    needs: [check, fedora]
+    needs: [check, fedora, deny]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     container: registry.fedoraproject.org/fedora:latest
