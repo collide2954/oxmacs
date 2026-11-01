@@ -119,7 +119,7 @@ fn plugin_files_and_init_ox_are_checked_with_the_editor_known() {
     .unwrap();
     fs::write(
         plugin.join("greeter.ox"),
-        "(module (import (ox ui :only [text]) (greeter words :as words)))\n(defcommand greet \"Say hello\" (message (words/hello (setting :name))))\n(def (view) (text \"hi\"))\n",
+        "(module (import (ox ui :only [text]) (greeter words)))\n(defcommand greet \"Say hello\" (message (words/hello (setting :name))))\n(def (view) (text \"hi\"))\n",
     )
     .unwrap();
     fs::write(
