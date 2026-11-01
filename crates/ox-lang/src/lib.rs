@@ -19,6 +19,7 @@ pub mod native;
 pub mod portable;
 pub mod profile;
 pub mod read;
+pub mod recovery;
 pub mod sink;
 pub mod span;
 pub mod symbol;

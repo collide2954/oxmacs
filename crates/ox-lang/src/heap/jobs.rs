@@ -47,10 +47,16 @@ impl Heap {
         let outcome: Outcome = Arc::default();
         let slot = Arc::clone(&outcome);
         let signal = Arc::clone(&self.signal);
+        let shown = name.to_owned();
         let thread = thread::Builder::new()
             .name(name.to_owned())
             .spawn(move || {
-                let result = work();
+                let result = crate::recovery::recover(work).unwrap_or_else(|reason| {
+                    Err(Failure {
+                        value: None,
+                        message: format!("{shown} crashed: {reason}"),
+                    })
+                });
                 *slot.lock().unwrap_or_else(PoisonError::into_inner) = Some(result);
                 signal.notify();
             })

@@ -25,6 +25,9 @@ pub fn install(folder: Option<PathBuf>) {
     };
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        if ox_lang::recovery::recovering() {
+            return;
+        }
         let backtrace = Backtrace::force_capture().to_string();
         let _ = write(
             &folder,

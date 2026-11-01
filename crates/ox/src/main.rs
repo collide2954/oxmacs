@@ -142,6 +142,12 @@ fn refused(problem: &str, usages: &[String]) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if !ox_lang::recovery::recovering() {
+            previous(info);
+        }
+    }));
     let code = run();
     ox_library::remove_private_folder();
     code

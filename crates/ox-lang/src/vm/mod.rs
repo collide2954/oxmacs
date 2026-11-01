@@ -16,7 +16,6 @@ use build::{
 use std::any::Any;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
-use std::panic::{self, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -186,16 +185,8 @@ fn guarded(
     host: &mut dyn Any,
     arguments: &[Value],
 ) -> Result<Value, Error> {
-    panic::catch_unwind(AssertUnwindSafe(|| function(heap, host, arguments))).unwrap_or_else(
-        |payload| {
-            let reason = payload
-                .downcast_ref::<&str>()
-                .map(|text| (*text).to_owned())
-                .or_else(|| payload.downcast_ref::<String>().cloned())
-                .unwrap_or_else(|| "a panic".to_owned());
-            Err(Error::new(format!("{} crashed: {reason}", name.name())))
-        },
-    )
+    crate::recovery::recover(|| function(heap, host, arguments))
+        .unwrap_or_else(|reason| Err(Error::new(format!("{} crashed: {reason}", name.name()))))
 }
 
 impl Runtime {

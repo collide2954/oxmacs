@@ -131,3 +131,30 @@ fn natives_that_panic_raise_an_error_and_leave_the_isolate_working() {
     let sum = isolate.eval("(+ 1 2)").unwrap();
     assert_eq!(isolate.write(sum), "3");
 }
+
+#[test]
+fn background_work_that_panics_says_why() {
+    let mut isolate = Isolate::new();
+    isolate
+        .native("ox", "explode")
+        .arity(0, Some(0))
+        .function(|heap, _| heap.background("explode", || panic!("the fuse was short")));
+
+    let error = isolate.eval("(await (explode))").unwrap_err();
+
+    assert_eq!(error.message, "explode crashed: the fuse was short");
+}
+
+#[test]
+fn recovering_from_a_panic_is_known_only_while_it_is_caught() {
+    assert!(!ox_lang::recovery::recovering());
+
+    let caught = ox_lang::recovery::recover(|| {
+        assert!(ox_lang::recovery::recovering());
+        panic!("caught here")
+    });
+
+    assert_eq!(caught, Err("caught here".to_owned()));
+    assert!(!ox_lang::recovery::recovering());
+    assert_eq!(ox_lang::recovery::recover(|| 7), Ok(7));
+}
