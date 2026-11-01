@@ -75,6 +75,8 @@
 (fn [& a b] a) ;! & takes one name for the rest of the arguments
 (fn [{k 1} a] a) ;! Keyword parameters come last
 (fn [(1 2)] 1) ;! Parameters must be names
+(def (pos {name}) [name]) ;! A map of parameters pairs each keyword parameter with its default, as {name nil}, while in let a map takes keys apart; to take a map argument apart, write (let [{name} arg] …) or use a record pattern
+(fn [{name age}] [name age]) ;! A map of parameters pairs each keyword parameter with its default, as {name nil age nil}, while in let a map takes keys apart; to take a map argument apart, write (let [{name age} arg] …) or use a record pattern
 
 ;; apply spreads its last argument
 (apply + [1 2 3]) ;=> 6

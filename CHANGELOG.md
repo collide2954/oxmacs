@@ -145,6 +145,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A map of keyword parameters with a name and no default, as in `(def (pos {name}) …)`, or with a bare name for a default, as in `{name age}`, is an error saying what such a map means and how to take a map argument apart, instead of dropping the name or reading `age` as a default. `ox check` reports it too.
 - `console-start` takes regexes in `:prompts`, `:errors` and `:watch` instead of turning them into the text `#<regex>`, which never matched.
 - `pr-str` writes braces once instead of doubling them, so FTP logins whose user name or password holds a brace reach the server as typed.
 - CalDAV calendars remember each event's ETag again, so changing or deleting an event no longer overwrites a newer copy on the server, and `M-x irc-preview` tells images from pages again; both looked the response headers up by text instead of keyword.

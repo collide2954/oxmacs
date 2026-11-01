@@ -70,7 +70,7 @@ Parameters can have defaults, collect the rest, or be passed by name:
 
 - `(greeting "Hello")` is optional with a default, and `(greeting)` defaults to `nil`.
 - `(def (log level & parts) …)` collects the arguments after `level` in the list `parts`.
-- A map of names and defaults comes last and takes `:name value` pairs, in any order.
+- A map of names and defaults comes last and takes `:name value` pairs, in any order. Every name needs its default, `nil` if nothing else: a map here doesn't take a map apart as it does in `let`.
 - A vector or record parameter takes its argument apart, as `let` does in [Data](data).
 
 Functions are values: pass them, return them, keep them in maps. Keywords, maps and sets can be called too: `(:name person)` reads a key, and `(:name person "nobody")` gives a default.

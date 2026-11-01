@@ -13,6 +13,31 @@ fn is_name(syntax: &Syntax) -> bool {
     matches!(&syntax.datum, Datum::Symbol(name) if name != "&")
 }
 
+fn taken_apart(pairs: &[Syntax]) -> Option<String> {
+    let odd = pairs.len() % 2 == 1;
+    let bare = pairs
+        .chunks(2)
+        .any(|pair| matches!(pair, [_, default] if is_name(default)));
+    if !odd && !bare {
+        return None;
+    }
+    let names: Vec<&str> = pairs
+        .iter()
+        .filter_map(|item| match &item.datum {
+            Datum::Symbol(name) if name != "&" => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let defaults: Vec<String> = names.iter().map(|name| format!("{name} nil")).collect();
+    Some(format!(
+        "A map of parameters pairs each keyword parameter with its default, as {{{}}}, \
+         while in let a map takes keys apart; to take a map argument apart, write \
+         (let [{{{}}} arg] …) or use a record pattern",
+        defaults.join(" "),
+        names.join(" ")
+    ))
+}
+
 pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
     let mut found = Parameters::default();
     let mut items = list.iter().peekable();
@@ -47,6 +72,9 @@ pub fn parse_parameters(list: &[Syntax]) -> Result<Parameters<'_>, Error> {
             Datum::Map(pairs) => {
                 if items.peek().is_some() {
                     return Err(at("Keyword parameters come last"));
+                }
+                if let Some(message) = taken_apart(pairs) {
+                    return Err(at(&message));
                 }
                 for pair in pairs.chunks(2) {
                     let [name, default] = pair else {

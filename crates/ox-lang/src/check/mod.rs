@@ -798,33 +798,30 @@ impl Walker<'_> {
     }
 
     fn parameters(&mut self, items: &[Syntax]) {
-        for item in items {
-            match &item.datum {
-                Datum::Symbol(name) if name == "&" => {}
-                Datum::Symbol(_) => self.bind(item),
-                Datum::List(parts) => {
-                    if let Some(default) = parts.get(1) {
-                        self.form(default);
-                    }
-                    if let Some(name) = parts.first() {
-                        self.bind(name);
-                    }
-                }
-                Datum::Vector(_) | Datum::Record(..) => {
-                    for binder in patterns::names(item) {
-                        self.bind(binder);
-                    }
-                }
-                Datum::Map(pairs) => {
-                    for pair in pairs.chunks(2) {
-                        if let [name, default] = pair {
-                            self.form(default);
-                            self.bind(name);
-                        }
-                    }
-                }
-                _ => {}
+        let Ok(parameters) = parse_parameters(items) else {
+            return;
+        };
+        for item in parameters.required {
+            if matches!(item.datum, Datum::Symbol(_)) {
+                self.bind(item);
+                continue;
             }
+            for binder in patterns::names(item) {
+                self.bind(binder);
+            }
+        }
+        for (name, default) in parameters.optional {
+            if let Some(default) = default {
+                self.form(default);
+            }
+            self.bind(name);
+        }
+        if let Some(rest) = parameters.rest {
+            self.bind(rest);
+        }
+        for (name, default) in parameters.keywords {
+            self.form(default);
+            self.bind(name);
         }
     }
 

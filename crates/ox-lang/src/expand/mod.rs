@@ -3,6 +3,7 @@ pub(crate) mod quote;
 
 use std::collections::HashMap;
 
+use crate::compile::parameters::parse_parameters;
 use crate::error::Error;
 use crate::heap::{Heap, HeapFull, Identifier};
 use crate::read::{Datum, Marks, Syntax};
@@ -336,6 +337,9 @@ impl Expander<'_> {
     }
 
     fn parameters(&mut self, items: &[Syntax]) -> Result<Vec<Syntax>, Error> {
+        if parse_parameters(items).is_err() {
+            return Ok(items.to_vec());
+        }
         let mut out = Vec::with_capacity(items.len());
         for item in items {
             match &item.datum {
