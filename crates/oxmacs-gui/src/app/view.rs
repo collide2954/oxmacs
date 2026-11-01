@@ -26,9 +26,12 @@ impl App {
     pub fn view(&self) -> Element<'_, Message> {
         let faces = self.faces();
         let offered = self.editor.completions();
-        let windows = match takeover::current(&self.editor) {
-            Some(shown) => self.takeover(shown, faces),
-            None => self.beside_side(self.tile(self.editor.tiling(), Vec::new(), faces), faces),
+        let windows = match (takeover::current(&self.editor), self.editor.lone_window()) {
+            (Some(shown), _) => self.takeover(shown, faces),
+            (None, Some(window)) => self.window(window, faces),
+            (None, None) => {
+                self.beside_side(self.tile(self.editor.tiling(), Vec::new(), faces), faces)
+            }
         };
         let floating = overlay::view(
             &overlays::shown(&self.editor),

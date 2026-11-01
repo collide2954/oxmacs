@@ -1,5 +1,5 @@
 (plugin zen
-  :version "0.1.3"
+  :version "0.1.4"
   :opt-in true
   :summary "Distraction-free writing in one centered column"
   :commands [zen]

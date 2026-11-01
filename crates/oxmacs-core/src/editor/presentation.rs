@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::display::Layout;
 use crate::editor::windows::pane::Pane;
-use crate::editor::{Editor, Effect, tab_width_in};
+use crate::editor::{Editor, Effect, WindowId, tab_width_in};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[expect(
@@ -20,6 +20,12 @@ pub struct Presentation {
 impl Editor {
     pub fn presentation(&self) -> Presentation {
         self.presentation
+    }
+
+    pub fn lone_window(&self) -> Option<WindowId> {
+        self.presentation
+            .hide_chrome
+            .then(|| self.selected_window())
     }
 
     pub fn set_presentation(&mut self, presentation: Presentation) {
@@ -131,6 +137,21 @@ mod tests {
 
         assert!(editor.pane().gutter().is_none());
         assert!(editor.presentation().hide_chrome);
+    }
+
+    #[test]
+    fn hidden_chrome_draws_the_selected_window_alone_and_keeps_the_others() {
+        let mut editor = Editor::new();
+        press(&mut editor, "C-x 3");
+        assert_eq!(editor.lone_window(), None);
+
+        editor.set_presentation(Presentation {
+            hide_chrome: true,
+            ..Presentation::default()
+        });
+
+        assert_eq!(editor.lone_window(), Some(editor.selected_window()));
+        assert_eq!(editor.tiling().windows().len(), 2);
     }
 
     #[test]

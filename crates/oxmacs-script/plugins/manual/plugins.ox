@@ -127,7 +127,7 @@ vault        0.3.3    opt-in   An encrypted password vault with one-time codes a
 weather      0.3.5    opt-in   Forecasts from Open-Meteo
 wsl          0.2.2    opt-in   WSL distributions as places to work: their files open as your own, their tools run inside them, and *WSL* starts, stops and opens them
 zap          0.2.2    opt-in   Flash the code you evaluate or send to a console, in the error color when it fails
-zen          0.1.3    opt-in   Distraction-free writing in one centered column
+zen          0.1.4    opt-in   Distraction-free writing in one centered column
 ```
 
 ## Learn from the bundled plugins

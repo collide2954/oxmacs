@@ -53,7 +53,8 @@ fn zen_shows_one_centered_window_and_brings_the_others_back() {
             fullscreen: true,
         }
     );
-    assert_eq!(editor.tiling().windows().len(), 1);
+    assert_eq!(editor.lone_window(), Some(editor.selected_window()));
+    assert_eq!(editor.tiling().windows().len(), 2);
     assert_eq!(editor.buffer().name(), "draft");
     assert!(editor.buffer().word_wrap());
     assert_eq!(fullscreen_asked(&mut editor), [true]);
@@ -61,6 +62,7 @@ fn zen_shows_one_centered_window_and_brings_the_others_back() {
     zen(&mut editor, &mut ox);
 
     assert_eq!(editor.presentation(), Presentation::default());
+    assert_eq!(editor.lone_window(), None);
     assert_eq!(editor.tiling().windows().len(), 2);
     assert_eq!(editor.buffer().name(), "draft");
     assert!(!editor.buffer().word_wrap());
@@ -84,6 +86,21 @@ fn each_part_of_zen_follows_its_setting() {
         }
     );
     assert_eq!(editor.tiling().windows().len(), 2);
+    assert_eq!(editor.lone_window(), None);
     assert!(!editor.buffer().word_wrap());
     assert_eq!(fullscreen_asked(&mut editor), Vec::<bool>::new());
+}
+
+#[test]
+fn zen_leaves_each_tab_its_own_windows() {
+    let (_home, mut editor, mut ox) = started(")\n(use-plugin tabs");
+    press(&mut editor, &mut ox, "C-x 3");
+    zen(&mut editor, &mut ox);
+
+    press(&mut editor, &mut ox, "C-x t 2");
+    zen(&mut editor, &mut ox);
+    assert_eq!(editor.tiling().windows().len(), 1);
+
+    press(&mut editor, &mut ox, "C-x t o");
+    assert_eq!(editor.tiling().windows().len(), 2);
 }

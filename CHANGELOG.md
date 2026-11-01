@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Zen no longer rearranges your windows: while it hides the chrome only the selected window is drawn, and the others come back as they were, so leaving zen in another tab no longer replaces that tab's windows.
 - A rodeo game whose first load failed starts once you save the fix or resume it, instead of saying it reloaded and showing nothing.
 - Game keys are let go when oxmacs loses focus, so a player no longer keeps running after Alt-Tab.
 - A paused, failed or hidden game no longer keeps oxmacs redrawing at frame rate, and drawing a large game screen reuses its canvas instead of allocating hundreds of megabytes a frame.

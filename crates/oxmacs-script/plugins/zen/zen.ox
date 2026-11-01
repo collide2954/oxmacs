@@ -14,9 +14,6 @@
 (def (enter)
   (reset! on true)
   (select-main-window)
-  (when (setting :hide-chrome)
-    (store-windows :zen)
-    (arrange-windows (buffer-name)))
   (when (setting :wrap-words)
     (reset! wrapped [(current-buffer) (word-wrap?)])
     (set-word-wrap (current-buffer) true))
@@ -30,7 +27,6 @@
     (let [[buffer before] kept]
       (when (buffer-live? buffer) (set-word-wrap buffer before))))
   (reset! wrapped nil)
-  (recall-windows :zen)
   (message "Zen mode off"))
 
 (defcommand zen "Write without distractions in one centered column, or come back"
