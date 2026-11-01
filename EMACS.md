@@ -33,7 +33,7 @@ If your fingers know Emacs, they know oxmacs. `C-x C-f`, `C-x b`, `C-x 2`, `M-x`
 
 ## Emacs Lisp and Ox
 
-Both are Lisps, and both let you change the editor while it runs. Emacs Lisp carries forty years of history; Ox started from what Lisps have learned since.
+Both are Lisps, and both let you change the editor while it runs. Emacs Lisp carries forty years of history; Ox started from what Lisps have learned since. [Emacs Lisp and Ox, side by side](EMACS-LISP-AND-OX.md) compares them task by task, with a quick-reference table and examples in both.
 
 **Modules instead of one namespace.** Emacs Lisp has a single global namespace, kept apart by prefixes like `magit-` and `org-`. Ox has modules with imports and exports, so `(import (ox string))` gives you `string/trim`, and two plugins can't step on each other's names. Ox scope is lexical everywhere; in Emacs Lisp, older code and files without a `lexical-binding` cookie still bind dynamically.
 
