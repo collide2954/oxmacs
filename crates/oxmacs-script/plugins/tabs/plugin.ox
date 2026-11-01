@@ -1,5 +1,5 @@
 (plugin tabs
-  :version "0.1.4"
+  :version "0.1.5"
   :opt-in true
   :summary "Workspace tabs across the top, each keeping its own windows"
   :commands [tab-new tab-close tab-close-other tab-next tab-previous tab-rename tab-switch

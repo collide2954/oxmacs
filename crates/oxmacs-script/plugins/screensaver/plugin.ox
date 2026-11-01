@@ -1,5 +1,5 @@
 (plugin screensaver
-  :version "0.4.0"
+  :version "0.4.1"
   :opt-in true
   :summary "Twenty-nine screensavers after a while without input, most painted on the graphics card: an ocean at sunset, an aurora over a lake, a campfire, a thunderstorm, a lava lamp, a Mandelbrot dive and more"
   :commands [screensaver-preview]

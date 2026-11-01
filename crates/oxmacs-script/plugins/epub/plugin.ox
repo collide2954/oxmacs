@@ -1,5 +1,5 @@
 (plugin epub
-  :version "0.2.6"
+  :version "0.2.7"
   :opt-in true
   :summary "Read EPUB books in pages, with contents, search, highlights, notes and a library"
   :commands [epub-library epub-recent]

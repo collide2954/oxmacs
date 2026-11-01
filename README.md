@@ -47,43 +47,43 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 
 | Plugin | Version | Default | What it does |
 | --- | --- | --- | --- |
-| `bellow` | 0.1.0 | opt-in | Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls |
-| `c` | 0.1.1 | opt-in | C with highlighting, indentation and the clangd language server |
-| `calendar` | 0.2.9 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
-| `claude` | 0.1.0 | opt-in | Claude beside your code: a chat that can read and drive the editor, questions about a region, edits reviewed as diffs, and suggestions as you type |
-| `cpp` | 0.1.1 | opt-in | C++ with highlighting, indentation and the clangd language server |
-| `customize` | 0.1.6 | on | Change the editor's and plugins' settings in a form |
-| `dired` | 0.3.4 | on | List directories and manage their files |
-| `epub` | 0.2.6 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
-| `explorer` | 0.2.4 | on | A file tree beside the windows that follows the file you're in |
-| `git` | 0.5.0 | opt-in | Git status and staging in the style of Magit |
-| `go` | 0.1.0 | opt-in | Go with highlighting, indentation with tabs and the gopls language server |
-| `irc` | 0.10.7 | opt-in | An IRCv3 client in the style of ERC |
-| `javascript` | 0.1.0 | opt-in | JavaScript with highlighting, indentation and typescript-language-server |
-| `json` | 0.1.0 | opt-in | JSON and JSON with comments, with highlighting and indentation |
-| `keycast` | 0.2.4 | opt-in | Shows the keys you press and the commands they run, for demos |
-| `life` | 0.2.5 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.100 | on | The oxmacs tutorial and the Ox manual |
-| `markdown` | 0.2.10 | on | Markdown with highlighting, a rendered preview and the marksman language server |
+| `bellow` | 0.1.1 | opt-in | Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls |
+| `c` | 0.1.2 | opt-in | C with highlighting, indentation and the clangd language server |
+| `calendar` | 0.2.10 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
+| `claude` | 0.1.1 | opt-in | Claude beside your code: a chat that can read and drive the editor, questions about a region, edits reviewed as diffs, and suggestions as you type |
+| `cpp` | 0.1.2 | opt-in | C++ with highlighting, indentation and the clangd language server |
+| `customize` | 0.1.7 | on | Change the editor's and plugins' settings in a form |
+| `dired` | 0.3.5 | on | List directories and manage their files |
+| `epub` | 0.2.7 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
+| `explorer` | 0.2.5 | on | A file tree beside the windows that follows the file you're in |
+| `git` | 0.5.1 | opt-in | Git status and staging in the style of Magit |
+| `go` | 0.1.1 | opt-in | Go with highlighting, indentation with tabs and the gopls language server |
+| `irc` | 0.10.8 | opt-in | An IRCv3 client in the style of ERC |
+| `javascript` | 0.1.1 | opt-in | JavaScript with highlighting, indentation and typescript-language-server |
+| `json` | 0.1.1 | opt-in | JSON and JSON with comments, with highlighting and indentation |
+| `keycast` | 0.2.5 | opt-in | Shows the keys you press and the commands they run, for demos |
+| `life` | 0.2.6 | opt-in | Conway's Game of Life on a canvas |
+| `manual` | 0.5.101 | on | The oxmacs tutorial and the Ox manual |
+| `markdown` | 0.2.11 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
-| `pdf` | 0.2.5 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
-| `pixi` | 0.1.0 | opt-in | pixi projects as environments: programs started in one run in its pixi environment, with its tasks, packages and environments on *pixi* |
-| `processes` | 0.1.6 | on | List the processes oxmacs runs, with their usage |
-| `profiler` | 0.1.4 | on | Find where the Ox code in oxmacs spends its time |
-| `python` | 0.1.0 | opt-in | Python with highlighting, indentation and the basedpyright, pyright or pylsp language server |
-| `r` | 0.21.0 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
-| `remote` | 0.4.0 | on | Browse and edit files on other machines over ssh, sftp and ftp |
-| `rodeo` | 0.1.2 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
+| `pdf` | 0.2.6 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
+| `pixi` | 0.1.1 | opt-in | pixi projects as environments: programs started in one run in its pixi environment, with its tasks, packages and environments on *pixi* |
+| `processes` | 0.1.7 | on | List the processes oxmacs runs, with their usage |
+| `profiler` | 0.1.5 | on | Find where the Ox code in oxmacs spends its time |
+| `python` | 0.1.1 | opt-in | Python with highlighting, indentation and the basedpyright, pyright or pylsp language server |
+| `r` | 0.21.1 | opt-in | R consoles, plots, data and help in the style of ESS and RStudio |
+| `remote` | 0.4.1 | on | Browse and edit files on other machines over ssh, sftp and ftp |
+| `rodeo` | 0.1.3 | opt-in | Play 2D games written in Ox beside their code, and change them while they run |
 | `rust` | 0.1.0 | opt-in | Rust with highlighting, cargo builds and lints, and the rust-analyzer language server |
-| `screensaver` | 0.4.0 | opt-in | Twenty-nine screensavers after a while without input, most painted on the graphics card: an ocean at sunset, an aurora over a lake, a campfire, a thunderstorm, a lava lamp, a Mandelbrot dive and more |
-| `tabs` | 0.1.4 | opt-in | Workspace tabs across the top, each keeping its own windows |
+| `screensaver` | 0.4.1 | opt-in | Twenty-nine screensavers after a while without input, most painted on the graphics card: an ocean at sunset, an aurora over a lake, a campfire, a thunderstorm, a lava lamp, a Mandelbrot dive and more |
+| `tabs` | 0.1.5 | opt-in | Workspace tabs across the top, each keeping its own windows |
 | `toml` | 0.1.0 | opt-in | TOML with highlighting, indentation and the taplo language server |
-| `typescript` | 0.1.0 | opt-in | TypeScript and TSX with highlighting, indentation and typescript-language-server |
-| `vault` | 0.3.1 | opt-in | An encrypted password vault with one-time codes and imports |
-| `weather` | 0.3.4 | opt-in | Forecasts from Open-Meteo |
-| `wsl` | 0.2.1 | opt-in | WSL distributions as places to work: their files open as your own, their tools run inside them, and *WSL* starts, stops and opens them |
+| `typescript` | 0.1.1 | opt-in | TypeScript and TSX with highlighting, indentation and typescript-language-server |
+| `vault` | 0.3.2 | opt-in | An encrypted password vault with one-time codes and imports |
+| `weather` | 0.3.5 | opt-in | Forecasts from Open-Meteo |
+| `wsl` | 0.2.2 | opt-in | WSL distributions as places to work: their files open as your own, their tools run inside them, and *WSL* starts, stops and opens them |
 | `zap` | 0.2.2 | opt-in | Flash the code you evaluate or send to a console, in the error color when it fails |
-| `zen` | 0.1.2 | opt-in | Distraction-free writing in one centered column |
+| `zen` | 0.1.3 | opt-in | Distraction-free writing in one centered column |
 
 Ox code uses these built-in modules, importing them as in `(import (ox file))`; the prelude needs no import:
 

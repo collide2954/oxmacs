@@ -1,5 +1,5 @@
 (plugin vault
-  :version "0.3.1"
+  :version "0.3.2"
   :opt-in true
   :summary "An encrypted password vault with one-time codes and imports"
   :commands [vault vault-copy-password vault-generate vault-add vault-import vault-lock]

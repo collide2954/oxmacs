@@ -1,5 +1,5 @@
 (plugin weather
-  :version "0.3.4"
+  :version "0.3.5"
   :opt-in true
   :summary "Forecasts from Open-Meteo"
   :commands [weather weather-refresh]

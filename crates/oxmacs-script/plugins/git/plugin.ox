@@ -1,5 +1,5 @@
 (plugin git
-  :version "0.5.0"
+  :version "0.5.1"
   :opt-in true
   :summary "Git status and staging in the style of Magit"
   :commands [git-status git-commit-finish git-commit-cancel git-commit-previous git-commit-next]

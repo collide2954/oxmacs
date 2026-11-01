@@ -1,5 +1,5 @@
 (plugin irc
-  :version "0.10.7"
+  :version "0.10.8"
   :requires {vault: "^0.3" customize: "^0.1"}
   :opt-in true
   :summary "An IRCv3 client in the style of ERC"
