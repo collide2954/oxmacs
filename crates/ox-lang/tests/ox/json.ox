@@ -1,6 +1,7 @@
 ;; ox json reads objects with keyword keys
 (module (import (ox json))) (json/read "{\"name\": \"Ana\", \"age\": 3, \"tags\": [\"a\", null, true, 1.5]}") ;=> {name: "Ana" age: 3 tags: ["a" nil true 1.5]}
 (module (import (ox json))) (json/read "[{\"b\": 1, \"a\": 2}]") ;=> [{b: 1 a: 2}]
+(module (import (ox json))) (json/read "{\"a\": 1, \"b\": 2, \"a\": 3}") ;=> {a: 3 b: 2}
 (module (import (ox json))) (json/read "12345678901234567890") ;=> 1.2345678901234567e19
 (module (import (ox json))) (json/read "\"caf\\u00e9\"") ;=> "café"
 (module (import (ox json))) (json/read "{") ;! json/read can't read this: EOF while parsing an object at line 1 column 1
