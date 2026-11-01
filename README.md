@@ -4,6 +4,8 @@ An Emacs-inspired editor, written in Rust.
 
 oxmacs feels like Emacs to use: the same keys, a minibuffer, `M-x`, buffers, windows and special buffers such as dired. Underneath it is its own design: a native Rust core, drawn with [Iced](https://iced.rs), that works the same on Windows, Linux and macOS, extended in Ox, its own modern Scheme.
 
+Coming from GNU Emacs? [EMACS.md](EMACS.md) covers how the two differ, Emacs Lisp and Ox included.
+
 ## Building
 
 You need Rust 1.99.1; `rust-toolchain.toml` picks it for you. On Linux you also need a C compiler, pkg-config and the ALSA headers (`libasound2-dev` on Debian and Ubuntu, `alsa-lib-devel` on Fedora) for game sound.
