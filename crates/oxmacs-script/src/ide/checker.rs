@@ -42,16 +42,9 @@ pub(crate) struct Checker {
 }
 
 fn serve(jobs: &Receiver<Job>, done: &Sender<Done>, waker: Option<&Waker>) {
-    let (mut plain, mut editor) = (None, None);
+    let mut isolates = oxmacs_api::Isolates::default();
     for job in jobs {
-        let isolate = if job.editor_code {
-            editor.get_or_insert_with(oxmacs_api::editor_isolate)
-        } else {
-            plain.get_or_insert_with(oxmacs_api::plain_isolate)
-        };
-        for root in check_roots(&job.path) {
-            isolate.add_root(root);
-        }
+        let isolate = isolates.get(job.editor_code, check_roots(&job.path));
         let name = job.path.display().to_string();
         let found = isolate.check(&name, &job.source);
         let forms = isolate.checked_forms(&name, &job.source);

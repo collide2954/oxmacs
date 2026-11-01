@@ -109,12 +109,90 @@ pub fn isolate_for(path: &Path) -> Isolate {
     }
     isolate
 }
+
+const KEPT: usize = 4;
+
+#[derive(Default)]
+pub struct Isolates {
+    kept: Vec<(bool, Vec<PathBuf>, Isolate)>,
+}
+
+impl std::fmt::Debug for Isolates {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_list()
+            .entries(self.kept.iter().map(|(editor, roots, _)| (editor, roots)))
+            .finish()
+    }
+}
+
+impl Isolates {
+    pub fn get(&mut self, editor: bool, roots: Vec<PathBuf>) -> &mut Isolate {
+        match self
+            .kept
+            .iter()
+            .position(|(known, found, _)| *known == editor && *found == roots)
+        {
+            Some(at) => {
+                let found = self.kept.remove(at);
+                self.kept.push(found);
+            }
+            None => {
+                let mut isolate = if editor {
+                    editor_isolate()
+                } else {
+                    plain_isolate()
+                };
+                for root in &roots {
+                    isolate.add_root(root.clone());
+                }
+                if self.kept.len() >= KEPT {
+                    self.kept.remove(0);
+                }
+                self.kept.push((editor, roots, isolate));
+            }
+        }
+        let last = self.kept.len() - 1;
+        &mut self.kept[last].2
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::path::Path;
 
-    use super::{check_roots, editor_code_in, editor_isolate, isolate_for};
+    use super::{Isolates, check_roots, editor_code_in, editor_isolate, isolate_for};
+
+    #[test]
+    fn files_in_two_folders_each_find_their_own_module_of_the_same_name() {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        fs::write(
+            first.path().join("util.ox"),
+            "(module (export one))\n(def one 1)",
+        )
+        .unwrap();
+        fs::write(
+            second.path().join("util.ox"),
+            "(module (export two))\n(def two 2)",
+        )
+        .unwrap();
+        let mut isolates = Isolates::default();
+
+        for (folder, used) in [
+            (&first, "util/one"),
+            (&second, "util/two"),
+            (&first, "util/one"),
+        ] {
+            let found: Vec<String> = isolates
+                .get(false, vec![folder.path().to_owned()])
+                .check("main.ox", &format!("(module (import (util)))\n{used}"))
+                .into_iter()
+                .map(|diagnostic| diagnostic.message)
+                .collect();
+            assert_eq!(found, Vec::<String>::new(), "{used}");
+        }
+    }
 
     fn problems(path: &Path, source: &str) -> Vec<String> {
         isolate_for(path)

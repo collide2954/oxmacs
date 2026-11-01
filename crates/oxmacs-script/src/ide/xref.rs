@@ -23,8 +23,7 @@ struct Source {
 
 #[derive(Default)]
 struct Checking {
-    plain: Option<Isolate>,
-    editor: Option<Isolate>,
+    isolates: oxmacs_api::Isolates,
 }
 
 impl Checking {
@@ -35,18 +34,12 @@ impl Checking {
         roots: &[PathBuf],
     ) -> Vec<Occurrence> {
         let path = source.path.as_deref();
-        let isolate = if path.is_none_or(|path| editor_code_in(path, home)) {
-            self.editor.get_or_insert_with(oxmacs_api::editor_isolate)
-        } else {
-            self.plain.get_or_insert_with(oxmacs_api::plain_isolate)
-        };
-        for root in path.map(check_roots).unwrap_or_default() {
-            isolate.add_root(root);
-        }
-        for root in roots {
-            isolate.add_root(root.clone());
-        }
-        isolate.bindings(&source.file, &source.text)
+        let editor = path.is_none_or(|path| editor_code_in(path, home));
+        let mut all = path.map(check_roots).unwrap_or_default();
+        all.extend(roots.iter().cloned());
+        self.isolates
+            .get(editor, all)
+            .bindings(&source.file, &source.text)
     }
 }
 
