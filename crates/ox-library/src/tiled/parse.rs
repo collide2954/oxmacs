@@ -12,6 +12,7 @@ use super::{
 use crate::animation::{Animation, Frame};
 use crate::color::Color;
 use crate::geometry::Vec2;
+use ox_lang::budget;
 use oxmacs_files::paths::normalize;
 
 pub(super) fn read(path: &Path) -> Result<String, Error> {
@@ -61,6 +62,18 @@ fn whole(count: u64) -> usize {
 
 fn area(width: u32, height: u32) -> usize {
     whole(u64::from(width) * u64::from(height))
+}
+
+fn tiles(width: u32, height: u32) -> Result<usize, String> {
+    let count = u64::from(width) * u64::from(height);
+    if budget::fits(count, 4) {
+        Ok(whole(count))
+    } else {
+        Err(format!(
+            "is {width}×{height} tiles, more than the {} MB a layer can take",
+            budget::MOST_BYTES >> 20
+        ))
+    }
 }
 
 pub(super) fn tiled_color(text: &str) -> Option<Color> {
@@ -444,7 +457,7 @@ impl Context {
                 y: 0,
                 width,
                 height,
-                data: vec![0; area(width, height)],
+                data: vec![0; tiles(width, height).map_err(failed)?],
             });
         };
         let encoding = data.attribute("encoding");
@@ -456,8 +469,13 @@ impl Context {
                 y: 0,
                 width,
                 height,
-                data: data::decode(data, encoding, compression, area(width, height))
-                    .map_err(failed)?,
+                data: data::decode(
+                    data,
+                    encoding,
+                    compression,
+                    tiles(width, height).map_err(failed)?,
+                )
+                .map_err(failed)?,
             });
         }
         let mut pieces = Vec::new();
@@ -466,8 +484,13 @@ impl Context {
             let y: i64 = self.required(chunk, "y")?;
             let columns: u32 = self.required(chunk, "width")?;
             let rows: u32 = self.required(chunk, "height")?;
-            let tiles =
-                data::decode(chunk, encoding, compression, area(columns, rows)).map_err(failed)?;
+            let tiles = data::decode(
+                chunk,
+                encoding,
+                compression,
+                tiles(columns, rows).map_err(failed)?,
+            )
+            .map_err(failed)?;
             pieces.push((x, y, columns, rows, tiles));
         }
         let left = pieces.iter().map(|piece| piece.0).min().unwrap_or(0);
@@ -485,7 +508,7 @@ impl Context {
         let too_big = || failed("spreads its chunks too far apart".to_owned());
         let width = u32::try_from(right - left).map_err(|_| too_big())?;
         let height = u32::try_from(bottom - top).map_err(|_| too_big())?;
-        let mut joined = vec![0; area(width, height)];
+        let mut joined = vec![0; tiles(width, height).map_err(failed)?];
         for (x, y, columns, rows, tiles) in pieces {
             let across = u64::try_from(x - left).unwrap_or(0);
             let down = u64::try_from(y - top).unwrap_or(0);

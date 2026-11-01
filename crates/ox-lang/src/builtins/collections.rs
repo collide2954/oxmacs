@@ -1,3 +1,4 @@
+use crate::budget;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -485,7 +486,21 @@ pub(crate) fn range(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error
     if step == 0 {
         return Err(Error::new("range needs a step that is not zero"));
     }
-    let mut items = Vec::new();
+    let span = i128::from(end) - i128::from(start);
+    let length = if span == 0 || (span > 0) != (step > 0) {
+        0
+    } else {
+        let step = i128::from(step).abs();
+        (span.abs() + step - 1) / step
+    };
+    let each = u64::try_from(size_of::<Value>()).unwrap_or(u64::MAX);
+    let length = budget::checked(
+        "range",
+        u64::try_from(length).unwrap_or(u64::MAX),
+        each,
+        "numbers",
+    )?;
+    let mut items = Vec::with_capacity(length);
     let mut at = start;
     while (step > 0 && at < end) || (step < 0 && at > end) {
         items.push(Value::Int(at));

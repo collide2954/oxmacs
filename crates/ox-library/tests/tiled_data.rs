@@ -79,6 +79,30 @@ fn every_encoding_reads_the_same_tiles() {
 }
 
 #[test]
+fn compressed_data_unpacks_no_further_than_the_layer_needs_and_huge_layers_are_refused() {
+    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(&vec![0; 10_000_000]).unwrap();
+    let bomb = format!(
+        "<data encoding=\"base64\" compression=\"zlib\">{}</data>",
+        BASE64_STANDARD.encode(encoder.finish().unwrap())
+    );
+    assert_eq!(
+        layer(&map(2, 2, false, &bomb)),
+        Err(
+            "data.tmx: layer \"ground\" has 17 bytes of tile data, which isn't a whole number of tiles"
+                .to_owned()
+        )
+    );
+    assert_eq!(
+        layer(&map(100_000, 100_000, false, "")),
+        Err(
+            "data.tmx: layer \"ground\" is 100000×100000 tiles, more than the 512 MB a layer can take"
+                .to_owned()
+        )
+    );
+}
+
+#[test]
 fn unreadable_data_explains_itself() {
     assert_eq!(
         layer(&map(

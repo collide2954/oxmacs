@@ -6,12 +6,20 @@ use roxmltree::Node;
 
 use super::parse::elements;
 
-fn inflated(packed: Vec<u8>, compression: Option<&str>) -> Result<Vec<u8>, String> {
+fn inflated(packed: Vec<u8>, compression: Option<&str>, count: usize) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
+    let most = u64::try_from(count)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(4)
+        .saturating_add(1);
     let unpacked = match compression {
         None | Some("") => return Ok(packed),
-        Some("zlib") => ZlibDecoder::new(packed.as_slice()).read_to_end(&mut bytes),
-        Some("gzip") => GzDecoder::new(packed.as_slice()).read_to_end(&mut bytes),
+        Some("zlib") => ZlibDecoder::new(packed.as_slice())
+            .take(most)
+            .read_to_end(&mut bytes),
+        Some("gzip") => GzDecoder::new(packed.as_slice())
+            .take(most)
+            .read_to_end(&mut bytes),
         Some(other) => {
             return Err(format!(
                 "is compressed with {other}, which rodeo can't read; save the map with zlib, gzip or no compression"
@@ -27,7 +35,7 @@ fn inflated(packed: Vec<u8>, compression: Option<&str>) -> Result<Vec<u8>, Strin
     Ok(bytes)
 }
 
-fn base64(node: Node<'_, '_>, compression: Option<&str>) -> Result<Vec<u32>, String> {
+fn base64(node: Node<'_, '_>, compression: Option<&str>, count: usize) -> Result<Vec<u32>, String> {
     let text: String = node
         .text()
         .unwrap_or_default()
@@ -37,7 +45,7 @@ fn base64(node: Node<'_, '_>, compression: Option<&str>) -> Result<Vec<u32>, Str
     let packed = BASE64_STANDARD
         .decode(text)
         .map_err(|error| format!("has base64 data that won't decode: {error}"))?;
-    let bytes = inflated(packed, compression)?;
+    let bytes = inflated(packed, compression, count)?;
     if bytes.len() % 4 != 0 {
         return Err(format!(
             "has {} bytes of tile data, which isn't a whole number of tiles",
@@ -79,7 +87,7 @@ pub(super) fn decode(
                     .map_err(|_| format!("has \"{field}\" in its CSV data, which isn't a tile"))
             })
             .collect::<Result<Vec<u32>, String>>()?,
-        Some("base64") => base64(node, compression)?,
+        Some("base64") => base64(node, compression, count)?,
         Some(other) => return Err(format!("uses {other} encoding, which rodeo can't read")),
     };
     if tiles.len() != count {

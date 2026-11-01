@@ -23,6 +23,7 @@ oxmacs-script.workspace = true
 native-theme.workspace = true
 notify.workspace = true
 open.workspace = true
+ox-lang.workspace = true
 ureq.workspace = true
 workspace-hack.workspace = true
 
@@ -33,7 +34,6 @@ native-theme = { workspace = true, features = ["windows"] }
 native-theme = { workspace = true, features = ["macos"] }
 
 [dev-dependencies]
-ox-lang.workspace = true
 ox-synth.workspace = true
 image.workspace = true
 iced_runtime.workspace = true

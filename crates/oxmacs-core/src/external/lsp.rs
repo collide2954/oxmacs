@@ -9,6 +9,7 @@ use oxmacs_process::{Process, Started};
 
 const SETTLE: Duration = Duration::from_secs(2);
 const POLL: Duration = Duration::from_millis(20);
+const LONGEST_MESSAGE: usize = 64 << 20;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Launch {
@@ -55,7 +56,17 @@ pub fn read_message(reader: &mut impl BufRead) -> io::Result<Option<String>> {
             length = value.trim().parse::<usize>().ok();
         }
     }
-    let mut body = vec![0; length.unwrap_or_default()];
+    let length = length.unwrap_or_default();
+    if length > LONGEST_MESSAGE {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "sent a message of {length} bytes, more than the {} MB oxmacs reads from a server",
+                LONGEST_MESSAGE >> 20
+            ),
+        ));
+    }
+    let mut body = vec![0; length];
     reader.read_exact(&mut body)?;
     Ok(Some(String::from_utf8_lossy(&body).into_owned()))
 }
@@ -117,7 +128,13 @@ pub fn start(launch: &Launch, report: impl FnMut(Event) + Send + 'static) -> io:
                 Err(error) => break Some(error.to_string()),
             }
         };
-        let ended = ending(&watched).or(failure);
+        let ended = match failure {
+            Some(failure) => {
+                watched.kill();
+                Some(failure)
+            }
+            None => ending(&watched),
+        };
         (lock(&report))(Event::Exited(ended));
     });
     Ok(process)
@@ -149,6 +166,18 @@ mod tests {
         );
         assert_eq!(read_message(&mut reader).unwrap().as_deref(), Some("{}"));
         assert_eq!(read_message(&mut reader).unwrap(), None);
+    }
+
+    #[test]
+    fn a_message_longer_than_oxmacs_reads_is_refused_before_reading_it() {
+        let mut reader = Cursor::new(b"Content-Length: 99999999999999\r\n\r\n{}".to_vec());
+
+        let refused = read_message(&mut reader).unwrap_err();
+
+        assert_eq!(
+            refused.to_string(),
+            "sent a message of 99999999999999 bytes, more than the 64 MB oxmacs reads from a server"
+        );
     }
 
     #[test]

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use regex::Regex;
 use unicode_width::UnicodeWidthChar;
 
+use crate::budget;
 use crate::builtins::regex::regex_of;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
@@ -81,6 +82,12 @@ fn width(text: &str) -> usize {
 fn pad(heap: &mut Heap, name: &str, arguments: &[Value], start: bool) -> Result<Value, Error> {
     let original = text(heap, name, arguments[0])?.to_owned();
     let wanted = count(heap, name, arguments[1])?;
+    budget::checked(
+        name,
+        u64::try_from(wanted).unwrap_or(u64::MAX),
+        4,
+        "columns",
+    )?;
     let fill = match arguments.get(2) {
         Some(fill) => text(heap, name, *fill)?.to_owned(),
         None => " ".to_owned(),
@@ -336,6 +343,13 @@ fn install_pieces(isolate: &mut Isolate) {
         .function(|heap, arguments| {
             let part = text(heap, "string/repeat", arguments[0])?;
             let times = count(heap, "string/repeat", arguments[1])?;
+            let bytes = u64::try_from(part.len()).unwrap_or(u64::MAX);
+            let times = budget::checked(
+                "string/repeat",
+                u64::try_from(times).unwrap_or(u64::MAX),
+                bytes,
+                "copies",
+            )?;
             let repeated = part.repeat(times);
             heap.string(&repeated).map_err(Error::from)
         });

@@ -710,11 +710,21 @@ impl<Message> PdfView<'_, Message> {
                 },
                 paper,
             );
+            let tall = f64::from(sheet.size.height) / f64::from(sheet.size.width.max(1.0));
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "the widest render fits in 32,768 pixels"
+            )]
+            let widest = ox_lang::budget::widest(tall) as f32;
             let key = Key {
                 path: self.view.path.clone(),
                 revision,
                 page: sheet.page,
-                width: units::floor_to_usize((sheet.size.width * RENDER_SCALE).min(WIDEST_RENDER)),
+                width: units::floor_to_usize(
+                    (sheet.size.width * RENDER_SCALE)
+                        .min(WIDEST_RENDER)
+                        .min(widest),
+                ),
                 ink,
             };
             if let Some(handle) = drawn(&key) {

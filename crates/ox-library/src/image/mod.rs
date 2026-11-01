@@ -13,6 +13,7 @@ use image::RgbaImage;
 pub use colors::set_faces;
 
 use ox_lang::Isolate;
+use ox_lang::budget;
 use ox_lang::build::{make_map, make_vector};
 use ox_lang::error::{Error, ErrorKind};
 use ox_lang::heap::Heap;
@@ -22,19 +23,15 @@ use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/image";
 const KIND: &str = "image";
-const MOST_SIDE: u32 = 32_768;
-const MOST_PIXELS: u64 = 134_217_728;
 
 fn room(name: &str, width: u32, height: u32) -> Result<(), String> {
-    if width <= MOST_SIDE
-        && height <= MOST_SIDE
-        && u64::from(width) * u64::from(height) <= MOST_PIXELS
-    {
+    if budget::fits_area(u64::from(width), u64::from(height)) {
         return Ok(());
     }
     Err(format!(
-        "image/{name} would make a {width}×{height} image; images can be at most {MOST_SIDE} pixels a side and {} megapixels",
-        MOST_PIXELS / 1_000_000
+        "image/{name} would make a {width}×{height} image; images can be at most {} pixels a side and {} megapixels",
+        budget::MOST_SIDE,
+        budget::MOST_PIXELS / 1_000_000
     ))
 }
 

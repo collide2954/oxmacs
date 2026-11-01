@@ -292,7 +292,8 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "random")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let count = usize::try_from(counted(heap, "crypto/random", arguments[0])?).unwrap_or(0);
+            let asked = counted(heap, "crypto/random", arguments[0])?;
+            let count = ox_lang::budget::checked("crypto/random", asked, 2, "random bytes")?;
             let bytes = random(count)?;
             string(heap, &hex(&bytes))
         });
