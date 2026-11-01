@@ -435,7 +435,7 @@ fn the_private_temp_folder_is_made_once_kept_to_its_owner_and_removed_on_quittin
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(&folder).unwrap().permissions().mode();
+        let mode = fs::metadata(&folder).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o700);
     }
 
