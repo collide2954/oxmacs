@@ -2,9 +2,10 @@ use std::path::{Path, PathBuf};
 
 use crate::command::Command;
 use crate::display::LineStyle;
-use crate::editor::Editor;
 use crate::editor::buffers::Mode;
 use crate::editor::page::Page;
+use crate::editor::prompts::question::AfterSave;
+use crate::editor::{Editor, Saving};
 use crate::files;
 use crate::special_buffer::SpecialBuffer;
 use crate::text::{Buffer, BufferId};
@@ -109,10 +110,11 @@ impl Editor {
         self.buffers.get(index).map(Buffer::id)
     }
 
-    pub fn save_buffer(&mut self, id: BufferId) -> bool {
-        self.buffers
-            .position(|buffer| buffer.id() == id)
-            .is_some_and(|index| self.save_buffer_at(index))
+    pub fn save_buffer(&mut self, id: BufferId) -> Saving {
+        match self.buffers.position(|buffer| buffer.id() == id) {
+            Some(index) => self.save_checked(index, AfterSave::Nothing),
+            None => Saving::Failed,
+        }
     }
 
     #[cfg(test)]

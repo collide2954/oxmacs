@@ -28,7 +28,7 @@ mod watching;
 mod windows;
 
 pub use crate::external::diagnostics::{Diagnostic, LintLine, Severity};
-pub use buffers::files::Visit;
+pub use buffers::files::{Saving, Visit};
 pub use build::errors::{ErrorAt, ErrorPattern};
 pub use build::lint::{
     CARGO, LINT_FORMATS, LintArg, LintFormat, LintRoot, LintRun, Linter, lint_format,

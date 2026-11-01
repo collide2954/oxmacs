@@ -153,6 +153,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Every way of saving asks before writing over a file that changed on disk, as `C-x C-s` did: `C-x s`, saving on quit and `C-c C-k` too. `C-x s` and `!` go on with the other files after the answer, and `C-c C-k` loads nothing from the changed file unless you choose to save over it.
 - Sizes too large to hold no longer crash oxmacs or ox where `try` can't catch it: `string/repeat`, `string/pad-start`, `string/pad-end`, `range` and `crypto/random` raise a range error past the 512 MB one value can take, as images already did; Tiled layers are checked the same way and their compressed data unpacks no further than the layer needs; very tall PDF pages render smaller instead of asking for gigabytes; and a language server that announces a message over 64 MB is stopped and says why.
 - `json/write`, `xml/write`, `xml/text`, `sort` and `compare` handle values nested any depth, and `xml/read` up to 1000 elements deep, instead of crashing oxmacs or ox when they ran out of stack.
 - CalDAV sync reads the server's replies as XML, so events whose text the server writes with numeric character references, such as `&#233;` for é or `&#13;` for line ends, arrive as written instead of with the references left in.

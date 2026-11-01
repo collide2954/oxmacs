@@ -597,7 +597,7 @@ fn plugins_reach_files_by_path_and_save_them() {
         buffer.insert_at(0, "zero\n");
     }
 
-    assert!(editor.save_buffer(id));
+    assert_eq!(editor.save_buffer(id), crate::editor::Saving::Saved);
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
         "zero\none\ntwo\nthree\n"

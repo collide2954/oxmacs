@@ -5,9 +5,17 @@ use oxmacs_files::wsl;
 
 use crate::editor::buffers::Mode;
 use crate::editor::prompts::minibuffer::{PathListing, Purpose};
+use crate::editor::prompts::question::AfterSave;
 use crate::editor::{Choice, Editor, Event};
 use crate::files::{self, paths};
 use crate::text::{Buffer, FileInfo};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Saving {
+    Saved,
+    Asking,
+    Failed,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Visit {
@@ -345,17 +353,32 @@ impl Editor {
             return;
         }
         let buffer = self.buffers.current();
-        let Some(file) = buffer.file() else {
+        if buffer.file().is_none() {
             self.write_file();
             return;
-        };
-        if !buffer.is_modified() {
-            self.show_message("(No changes need to be saved)");
-        } else if Self::differs_on_disk(file) {
-            let name = buffer.name().to_owned();
-            self.ask_to_save_over(&name);
+        }
+        if buffer.is_modified() {
+            self.save_checked(0, AfterSave::Nothing);
         } else {
-            self.save_buffer_at(0);
+            self.show_message("(No changes need to be saved)");
+        }
+    }
+
+    pub(in crate::editor) fn save_checked(&mut self, index: usize, after: AfterSave) -> Saving {
+        let Some(buffer) = self.buffers.get(index) else {
+            return Saving::Failed;
+        };
+        if let Some(file) = buffer.file()
+            && Self::differs_on_disk(file)
+        {
+            let (id, name) = (buffer.id(), buffer.name().to_owned());
+            self.ask_to_save_over(id, &name, after);
+            return Saving::Asking;
+        }
+        if self.save_buffer_at(index) {
+            Saving::Saved
+        } else {
+            Saving::Failed
         }
     }
 

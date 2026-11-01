@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use crate::editor::prompts::Prompts;
 use crate::editor::prompts::callbacks::Answer;
-use crate::editor::{Editor, is_keyboard_quit};
+use crate::editor::{Editor, Saving, is_keyboard_quit};
 use crate::external::managed::Managed;
 use crate::files::{DiskState, paths};
 use crate::input::{Key, KeyCode};
@@ -32,9 +32,20 @@ pub(in crate::editor) enum Pending {
     },
     SaveOver {
         buffer: BufferId,
+        after: AfterSave,
     },
     RemoveTool(Managed),
     Callback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(in crate::editor) enum AfterSave {
+    Nothing,
+    SaveSome {
+        remaining: Vec<PathBuf>,
+        then_quit: bool,
+        all: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +186,12 @@ impl Editor {
             } => match answer {
                 'y' => {
                     let path = remaining.remove(0);
-                    if self.save_file(&path) {
+                    let after = AfterSave::SaveSome {
+                        remaining: remaining.clone(),
+                        then_quit,
+                        all: false,
+                    };
+                    if self.save_file(&path, after) == Saving::Saved {
                         self.ask_next_save(remaining, then_quit);
                     }
                 }
@@ -183,11 +199,7 @@ impl Editor {
                     remaining.remove(0);
                     self.ask_next_save(remaining, then_quit);
                 }
-                '!' => {
-                    if remaining.iter().all(|path| self.save_file(path)) {
-                        self.ask_next_save(Vec::new(), then_quit);
-                    }
-                }
+                '!' => self.save_all(remaining, then_quit),
                 _ => {
                     if then_quit {
                         self.quit_after_saves();
@@ -219,9 +231,24 @@ impl Editor {
                 }
                 self.check_disk_changes();
             }
-            Pending::SaveOver { buffer } => {
-                if let (true, Some(index)) = (answer == 'y', self.index_of(buffer)) {
-                    self.save_buffer_at(index);
+            Pending::SaveOver { buffer, after } => {
+                if let (true, Some(index)) = (answer == 'y', self.index_of(buffer))
+                    && !self.save_buffer_at(index)
+                {
+                    return;
+                }
+                match after {
+                    AfterSave::Nothing => {}
+                    AfterSave::SaveSome {
+                        remaining,
+                        then_quit,
+                        all: true,
+                    } => self.save_all(remaining, then_quit),
+                    AfterSave::SaveSome {
+                        remaining,
+                        then_quit,
+                        all: false,
+                    } => self.ask_next_save(remaining, then_quit),
                 }
             }
             Pending::RemoveTool(tool) => {
@@ -245,15 +272,17 @@ impl Editor {
         self.buffers.position(|known| known.id() == buffer)
     }
 
-    pub(in crate::editor) fn ask_to_save_over(&mut self, name: &str) {
-        let Some(buffer) = self.id_at(0) else {
-            return;
-        };
+    pub(in crate::editor) fn ask_to_save_over(
+        &mut self,
+        buffer: BufferId,
+        name: &str,
+        after: AfterSave,
+    ) {
         self.prompts.ask(Question {
             prompt: format!("{name} changed on disk; save anyway? (y or n) "),
             choices: YES_NO,
             typed: None,
-            pending: Pending::SaveOver { buffer },
+            pending: Pending::SaveOver { buffer, after },
         });
     }
 
@@ -335,11 +364,26 @@ impl Editor {
         });
     }
 
-    fn save_file(&mut self, path: &Path) -> bool {
+    fn save_file(&mut self, path: &Path, after: AfterSave) -> Saving {
         match self.index_visiting(path) {
-            Some(index) => self.save_buffer_at(index),
-            None => true,
+            Some(index) => self.save_checked(index, after),
+            None => Saving::Saved,
         }
+    }
+
+    fn save_all(&mut self, mut remaining: Vec<PathBuf>, then_quit: bool) {
+        while !remaining.is_empty() {
+            let path = remaining.remove(0);
+            let after = AfterSave::SaveSome {
+                remaining: remaining.clone(),
+                then_quit,
+                all: true,
+            };
+            if self.save_file(&path, after) != Saving::Saved {
+                return;
+            }
+        }
+        self.ask_next_save(Vec::new(), then_quit);
     }
 }
 
@@ -491,6 +535,43 @@ mod tests {
         assert_eq!(on_disk(&dir, "b.txt"), "xb");
         assert!(!editor.should_quit());
         assert_eq!(question(&editor), None);
+    }
+
+    #[test]
+    fn save_some_buffers_asks_before_saving_over_a_changed_file_then_goes_on() {
+        let (dir, mut editor) = two_modified_files();
+        fs::write(dir.path().join("b.txt"), "changed elsewhere").unwrap();
+
+        press(&mut editor, "C-x s y");
+        assert_eq!(
+            question(&editor),
+            Some("b.txt changed on disk; save anyway? (y or n) ".to_owned())
+        );
+        press(&mut editor, "n");
+        assert_eq!(on_disk(&dir, "b.txt"), "changed elsewhere");
+        assert_eq!(question(&editor), Some(save_prompt(&dir, "a.txt")));
+
+        press(&mut editor, "y");
+        assert_eq!(on_disk(&dir, "a.txt"), "xa");
+        assert_eq!(question(&editor), None);
+    }
+
+    #[test]
+    fn saving_every_file_on_quit_asks_about_a_changed_one_and_still_saves_the_rest() {
+        let (dir, mut editor) = two_modified_files();
+        fs::write(dir.path().join("b.txt"), "changed elsewhere").unwrap();
+
+        press(&mut editor, "C-x C-c !");
+        assert_eq!(
+            question(&editor),
+            Some("b.txt changed on disk; save anyway? (y or n) ".to_owned())
+        );
+        assert!(!editor.should_quit());
+
+        press(&mut editor, "y");
+        assert_eq!(on_disk(&dir, "b.txt"), "xb");
+        assert_eq!(on_disk(&dir, "a.txt"), "xa");
+        assert!(editor.should_quit());
     }
 
     #[test]

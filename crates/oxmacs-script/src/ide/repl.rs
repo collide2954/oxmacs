@@ -11,7 +11,7 @@ use ox_lang::testing;
 use ox_lang::value::Value;
 use ox_lang::{Error, read};
 use oxmacs_core::command::{Command, CommandId, DynamicSpec, Scope, ScopeId};
-use oxmacs_core::editor::{Editor, EventKind, InputLine, Service, Source};
+use oxmacs_core::editor::{Editor, EventKind, InputLine, Saving, Service, Source};
 use oxmacs_core::files;
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
@@ -775,12 +775,12 @@ impl Ox {
             self.evaluate_all(editor, Finish::Loaded(name));
             return;
         };
-        let saved = modified && editor.save_buffer(id);
+        let saving = modified.then(|| editor.save_buffer(id));
         if self.reloads(&path) {
-            if saved {
-                self.evaluation.loading = Some((id, path));
-            } else {
-                self.reload_whole(editor, id, &path);
+            match saving {
+                None => self.reload_whole(editor, id, &path),
+                Some(Saving::Saved | Saving::Asking) => self.evaluation.loading = Some((id, path)),
+                Some(Saving::Failed) => {}
             }
             return;
         }
@@ -1383,6 +1383,56 @@ mod tests {
 
         assert_eq!(editor.message(), Some("Howdy 2"));
         assert_eq!(logged(&editor), "");
+    }
+
+    #[test]
+    fn loading_a_file_that_changed_on_disk_asks_and_loads_nothing_when_told_no() {
+        let home = home_with(&[
+            (
+                "plugins/greeter/plugin.ox",
+                "(plugin greeter :commands [greet] :entry \"greeter.ox\")",
+            ),
+            (
+                "plugins/greeter/greeter.ox",
+                "(module (import (greeter words)))\n(defcommand greet \"Say hello\" (message words/hello))",
+            ),
+            ("plugins/greeter/words.ox", "(def hello \"Hello\")"),
+            ("init.ox", "(use-plugin greeter)"),
+        ]);
+        let (mut editor, mut ox) = started(home.path());
+        let greet = editor.command_named("greet").unwrap();
+        editor.execute(greet);
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), Some("Hello"));
+        let words = home.path().join("plugins/greeter/words.ox");
+        editor.open_file(&words);
+        let end = editor.buffer().len_chars();
+        editor.buffer_mut().delete_range(0..end);
+        editor.buffer_mut().insert_at(0, "(def hello \"Mine\")");
+        std::fs::write(&words, "(def hello \"Disk\")").unwrap();
+
+        press(&mut editor, &mut ox, "C-c C-k");
+        let asked = editor
+            .question()
+            .map(|q| q.prompt().to_owned())
+            .unwrap_or_default();
+        assert!(
+            asked.ends_with("changed on disk; save anyway? (y or n) "),
+            "{asked}"
+        );
+        press(&mut editor, &mut ox, "n");
+        editor.execute(greet);
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), Some("Hello"));
+        assert_eq!(
+            std::fs::read_to_string(&words).unwrap(),
+            "(def hello \"Disk\")"
+        );
+
+        press(&mut editor, &mut ox, "C-c C-k y");
+        editor.execute(greet);
+        settle(&mut editor, &mut ox);
+        assert_eq!(editor.message(), Some("Mine"));
     }
 
     #[test]
