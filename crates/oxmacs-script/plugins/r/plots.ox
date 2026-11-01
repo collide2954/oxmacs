@@ -1,5 +1,5 @@
 (module
-  (import (ox string) (ox ui) (ox image)
+  (import (ox string) (ox ui) (ox image) (ox path)
           (r session))
   (export view gallery pick arrived thumbnails zoomed columns plots-buffer unpinned-of))
 
@@ -185,7 +185,11 @@
                     columns: (columns (count paths)) tile: (or plots.tile [100 100])})
           (map (fn [path] (load name path :thumbs)) paths))))))
 
-(def (zoomed _ path) (open-externally path))
+(def (zoomed session path)
+  (let [folder (session/plots-folder session)]
+    (if (and folder (path/inside? path folder))
+      (open-externally path)
+      (message $"R asked to open {path}, which isn't one of its plots; left it closed"))))
 
 (def (here) (when (buffer-value :r-plots) (buffer-name)))
 

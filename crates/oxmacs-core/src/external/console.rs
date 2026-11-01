@@ -3,6 +3,7 @@ use regex::Regex;
 const START: char = '\u{1}';
 const SEPARATOR: char = '\u{2}';
 const END: char = '\u{3}';
+const LONGEST_MARKER: usize = 16 << 20;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Piece {
@@ -18,6 +19,7 @@ pub struct Stream {
     prompt: String,
     prompts: Vec<Regex>,
     watches: Vec<(String, Regex)>,
+    token: String,
 }
 
 impl Stream {
@@ -26,6 +28,14 @@ impl Stream {
             prompts,
             watches,
             ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn marked_by(self, token: &str) -> Self {
+        Self {
+            token: token.to_owned(),
+            ..self
         }
     }
 
@@ -94,9 +104,22 @@ impl Stream {
         let mut rest = text.as_str();
         while let Some(at) = rest.find(START) {
             push_text(&mut pieces, &rest[..at]);
-            let body = &rest[at + START.len_utf8()..];
+            let after = &rest[at + START.len_utf8()..];
+            let Some(body) = after.strip_prefix(self.token.as_str()) else {
+                if self.token.starts_with(after) {
+                    rest[at..].clone_into(&mut self.pending);
+                    return pieces;
+                }
+                push_text(&mut pieces, &rest[at..at + START.len_utf8()]);
+                rest = after;
+                continue;
+            };
             let Some(end) = body.find(END) else {
-                rest[at..].clone_into(&mut self.pending);
+                if rest.len() - at > LONGEST_MARKER {
+                    push_text(&mut pieces, &rest[at..]);
+                } else {
+                    rest[at..].clone_into(&mut self.pending);
+                }
                 return pieces;
             };
             let (kind, payload) = body[..end]
@@ -214,6 +237,31 @@ mod tests {
                 }
             ]
         );
+    }
+
+    #[test]
+    fn only_markers_that_carry_the_console_s_token_count() {
+        let mut stream = Stream::default().marked_by("k3y");
+
+        assert_eq!(
+            stream.feed("a\u{1}viewer\u{2}/etc/passwd\u{3}b\u{1}k3yplot\u{2}p.png\u{3}"),
+            [
+                text("a\u{1}viewer\u{2}/etc/passwd\u{3}b"),
+                Piece::Marker {
+                    kind: "plot".to_owned(),
+                    payload: "p.png".to_owned()
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn a_stray_start_shows_as_text_and_prompts_still_arrive_after_it() {
+        let mut stream = Stream::default().marked_by("k3y");
+
+        assert_eq!(stream.feed("x\u{1}y\n"), [text("x\u{1}y\n")]);
+        assert_eq!(stream.feed("\u{1}k3"), []);
+        assert_eq!(stream.feed("y>\u{2}\u{3}"), [prompt("> ")]);
     }
 
     #[test]

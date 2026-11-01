@@ -4001,6 +4001,7 @@ dependencies = [
  "bitflags 2.13.2",
  "dirs",
  "flate2",
+ "getrandom 0.4.3",
  "indexmap 2.14.2",
  "jiff",
  "oxmacs-files",

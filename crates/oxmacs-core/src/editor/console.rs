@@ -1,4 +1,6 @@
 use std::collections::VecDeque;
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hasher};
 
 use regex::Regex;
 
@@ -14,6 +16,12 @@ pub type ConsoleHook = fn(&mut Editor, BufferId);
 pub type MarkerHook = fn(&mut Editor, BufferId, &str, &str);
 
 const PROMPTS: [&str; 4] = [">>> ", "... ", "> ", "+ "];
+pub const MARKER: &str = "OXMACS_MARKER";
+
+fn marker_token() -> String {
+    let half = || getrandom::u64().unwrap_or_else(|_| RandomState::new().build_hasher().finish());
+    format!("{:016x}{:016x}", half(), half())
+}
 
 #[derive(Debug, Clone)]
 pub struct ConsoleSpec {
@@ -41,6 +49,7 @@ pub(in crate::editor) struct Console {
     on_idle: ConsoleHook,
     pub(in crate::editor) scope: Option<ScopeId>,
     prompter: Option<String>,
+    marker: String,
 }
 
 fn without_prompt(line: &str) -> &str {
@@ -58,16 +67,21 @@ impl Editor {
             let buffer = Buffer::new(spec.name.clone());
             (buffer.id(), Some(buffer))
         };
-        let job = JobSpec {
+        let marker = marker_token();
+        let mut job = JobSpec {
             buffer: Some(id),
             interactive: true,
             ..spec.job
         };
+        job.env.push((MARKER.to_owned(), marker.clone()));
+        let prompter = spec
+            .prompter
+            .map(|prompter| prompter.replace(&format!("${MARKER}"), &marker));
         let job = self.start_job(job, Self::console_event);
-        if let Some(prompter) = &spec.prompter {
+        if let Some(prompter) = &prompter {
             self.send_job(job, format!("{prompter}\n"));
         }
-        let stream = Stream::with_patterns(spec.prompts, spec.watches);
+        let stream = Stream::with_patterns(spec.prompts, spec.watches).marked_by(&marker);
         match buffer {
             Some(mut buffer) => {
                 let input = InputLine::new(&mut buffer);
@@ -82,7 +96,8 @@ impl Editor {
                     on_marker: spec.on_marker,
                     on_idle: spec.on_idle,
                     scope: spec.scope,
-                    prompter: spec.prompter,
+                    prompter,
+                    marker,
                 };
                 self.beside(|editor| editor.add_buffer_with(buffer, Mode::special(console)));
             }
@@ -92,11 +107,28 @@ impl Editor {
                     console.stream = stream;
                     console.expected.clear();
                     console.waiting = false;
-                    console.prompter = spec.prompter;
+                    console.prompter = prompter;
+                    console.marker = marker;
                 }
             }
         }
         id
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn console_said(&mut self, job: JobId, text: &str) {
+        let marked = match self.console_marker(job) {
+            Some(token) => text.replace('\u{1}', &format!("\u{1}{token}")),
+            None => text.to_owned(),
+        };
+        self.session_output(job, &marked);
+    }
+
+    pub fn console_marker(&self, job: JobId) -> Option<&str> {
+        (0..self.buffers.len())
+            .filter_map(|index| self.buffers.special::<Console>(index))
+            .find(|console| console.job == Some(job))
+            .map(|console| console.marker.as_str())
     }
 
     pub fn consoles(&self, label: &str) -> Vec<BufferId> {
@@ -489,7 +521,7 @@ mod tests {
     fn consoles_open_beside_and_show_output_and_prompts() {
         let (mut editor, id, job) = started();
 
-        editor.session_output(job, &format!("hello\n{PROMPT}"));
+        editor.console_said(job, &format!("hello\n{PROMPT}"));
 
         assert_eq!(editor.buffer().id(), id);
         assert_eq!(editor.tiling().windows().len(), 2);
@@ -502,7 +534,7 @@ mod tests {
     #[test]
     fn typed_input_is_sent_and_remembered() {
         let (mut editor, id, job) = started();
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
 
         type_text(&mut editor, "ls");
         press(&mut editor, "RET");
@@ -516,7 +548,7 @@ mod tests {
     #[test]
     fn the_start_of_the_input_line_is_after_the_prompt() {
         let (mut editor, id, job) = started();
-        editor.session_output(job, &format!("old output\n{PROMPT}"));
+        editor.console_said(job, &format!("old output\n{PROMPT}"));
 
         type_text(&mut editor, "ls");
         press(&mut editor, "C-a x");
@@ -529,10 +561,10 @@ mod tests {
     #[test]
     fn evaluated_code_is_echoed_after_each_prompt() {
         let (mut editor, id, job) = started();
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
 
         editor.console_evaluate(id, "a\nb\n");
-        editor.session_output(job, &format!("{PROMPT}{PROMPT}"));
+        editor.console_said(job, &format!("{PROMPT}{PROMPT}"));
 
         assert_eq!(sent(&mut editor), ["a\nb\n"]);
         assert_eq!(contents(&editor, id), "$ a\n$ b\n$ ");
@@ -541,10 +573,10 @@ mod tests {
     #[test]
     fn requests_and_markers_stay_out_of_the_transcript() {
         let (mut editor, id, job) = started();
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
 
         assert!(editor.console_request(id, "complete()"));
-        editor.session_output(job, &format!("\u{1}complete\u{2}ls\tlsof\u{3}{PROMPT}"));
+        editor.console_said(job, &format!("\u{1}complete\u{2}ls\tlsof\u{3}{PROMPT}"));
 
         assert_eq!(sent(&mut editor), ["complete()\n"]);
         assert_eq!(contents(&editor, id), "$ ");
@@ -577,7 +609,7 @@ mod tests {
                 ..spec()
             },
         );
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
 
         type_text(&mut editor, "ls");
         press(&mut editor, "RET C-c C-v");
@@ -589,13 +621,13 @@ mod tests {
     #[test]
     fn history_can_be_read_and_given_back() {
         let (mut editor, id, job) = started();
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         type_text(&mut editor, "ls");
         press(&mut editor, "RET");
         assert_eq!(editor.console_history(id), ["ls"]);
 
         editor.set_console_history(id, vec!["pwd".to_owned(), "cd".to_owned()]);
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
 
         press(&mut editor, "M-p");
         assert!(contents(&editor, id).ends_with("$ cd"));
@@ -612,10 +644,10 @@ mod tests {
                 ..spec()
             },
         );
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         editor.console_evaluate(id, "f()");
 
-        editor.session_output(job, "debug at a.R#2: x\nBrowse[1]> ");
+        editor.console_said(job, "debug at a.R#2: x\nBrowse[1]> ");
 
         assert!(editor.console_waiting(id));
         assert_eq!(editor.console_prompt(id).as_deref(), Some("Browse[1]> "));
@@ -649,14 +681,14 @@ mod tests {
             effects[1..],
             [Effect::Send(job, "show-prompt\n".to_owned())]
         );
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         let window = editor.tiling().windows()[1];
         editor.select_window(window);
 
         type_text(&mut editor, "echo a; echo b");
         press(&mut editor, "RET");
         assert_eq!(sent(&mut editor), ["echo a; echo b\nshow-prompt\n"]);
-        editor.session_output(job, &format!("a\nb\n{PROMPT}"));
+        editor.console_said(job, &format!("a\nb\n{PROMPT}"));
 
         assert_eq!(contents(&editor, id), "$ echo a; echo b\na\nb\n$ ");
         assert!(editor.console_waiting(id));

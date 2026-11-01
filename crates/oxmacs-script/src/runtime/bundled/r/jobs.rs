@@ -122,16 +122,33 @@ fn widgets_r_shows_open_in_the_system_viewer() {
     r.output(job, PROMPT);
     r.editor.take_effects();
 
-    r.output(
-        job,
-        &format!("\u{1}viewer\u{2}C:/tmp/widget/index.html\u{3}{PROMPT}"),
-    );
+    let widget = tempfile::tempdir().unwrap();
+    let page = widget.path().join("index.html");
+    std::fs::write(&page, "<html></html>").unwrap();
+    let shown = page.display().to_string().replace('\\', "/");
 
+    r.output(job, &format!("\u{1}viewer\u{2}{shown}\u{3}{PROMPT}"));
     assert!(
         r.editor
             .take_effects()
-            .contains(&Effect::OpenExternally(PathBuf::from(
-                "C:/tmp/widget/index.html"
-            )))
+            .contains(&Effect::OpenExternally(PathBuf::from(&shown)))
+    );
+
+    r.output(
+        job,
+        &format!("\u{1}viewer\u{2}C:/Windows/System32/calc.exe\u{3}{PROMPT}"),
+    );
+    assert!(
+        !r.editor
+            .take_effects()
+            .iter()
+            .any(|effect| matches!(effect, Effect::OpenExternally(_)))
+    );
+    assert!(
+        r.editor
+            .message()
+            .is_some_and(|shown| shown.contains("isn't a web page")),
+        "{:?}",
+        r.editor.message()
     );
 }

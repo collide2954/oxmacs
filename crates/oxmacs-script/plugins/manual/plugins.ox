@@ -107,7 +107,7 @@ javascript   0.1.1    opt-in   JavaScript with highlighting, indentation and typ
 json         0.1.1    opt-in   JSON and JSON with comments, with highlighting and indentation
 keycast      0.2.5    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.6    opt-in   Conway's Game of Life on a canvas
-manual       0.5.106  on       The oxmacs tutorial and the Ox manual
+manual       0.5.107  on       The oxmacs tutorial and the Ox manual
 markdown     0.2.12   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.7    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
@@ -115,8 +115,8 @@ pixi         0.1.1    opt-in   pixi projects as environments: programs started i
 processes    0.1.7    on       List the processes oxmacs runs, with their usage
 profiler     0.1.5    on       Find where the Ox code in oxmacs spends its time
 python       0.1.1    opt-in   Python with highlighting, indentation and the basedpyright, pyright or pylsp language server
-r            0.21.2   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
-remote       0.4.2    on       Browse and edit files on other machines over ssh, sftp and ftp
+r            0.21.3   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+remote       0.4.3    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.3    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 rust         0.1.0    opt-in   Rust with highlighting, cargo builds and lints, and the rust-analyzer language server
 screensaver  0.4.1    opt-in   Twenty-nine screensavers after a while without input, most painted on the graphics card: an ocean at sunset, an aurora over a lake, a campfire, a thunderstorm, a lava lamp, a Mandelbrot dive and more

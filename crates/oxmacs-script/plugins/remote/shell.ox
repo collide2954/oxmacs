@@ -30,7 +30,7 @@
 
 (def prompter
   "What a console sends a shell without a terminal so it prints the prompt the console knows."
-  "printf '\\001>\\002%s\\003' '$ '")
+  "printf '\\001$OXMACS_MARKER>\\002%s\\003' '$ '")
 
 (def (live host)
   (when-let [session (get @sessions host.name)]

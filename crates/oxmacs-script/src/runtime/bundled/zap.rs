@@ -200,7 +200,7 @@ fn r_errors_flash_the_statement_again_in_the_error_color() {
         .unwrap();
     let before = Instant::now();
 
-    editor.session_output(job, "Error: object 'z' not found\n");
+    editor.console_said(job, "Error: object 'z' not found\n");
     settle(&mut editor, &mut ox);
 
     assert_eq!(lit(&editor, 0, before), [(0..6, Highlight::Flagged)]);

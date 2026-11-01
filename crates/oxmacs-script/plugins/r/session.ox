@@ -3,7 +3,7 @@
           (r helper))
   (export label sessions known? current-session running? link! linked own! project-of project-here
           windows? arguments locate find-r launch ensure show-console evaluate request send script?
-          r-string helper-of on-marker on-ready use-keys! use-patterns! use-hooks! directory-of))
+          r-string helper-of on-marker on-ready use-keys! use-patterns! use-hooks! directory-of plots-folder))
 
 (def label "R")
 (def missing "R not found; install it from https://cran.r-project.org or set the r plugin's program")
@@ -22,6 +22,8 @@
 (def (use-patterns! prompts watch) (reset! patterns {prompts: prompts watch: watch}))
 
 (def (directory-of session) (get-in @state [:directories session]))
+
+(def (plots-folder session) (get-in @state [:plots session]))
 
 (def (on-marker kind f) (swap! handlers assoc kind f))
 
@@ -208,6 +210,7 @@
                      :definition (get @hooks :definition))
       (swap! state (fn [old] (-> old
                                  (assoc-in [:helpers name] profile)
+                                 (assoc-in [:plots name] plots)
                                  (assoc-in [:roots name] root)
                                  (assoc-in [:directories name] directory)
                                  (update :widths dissoc name))))

@@ -530,7 +530,14 @@ mod tests {
             .unwrap();
         assert_eq!(job.program, "shell");
         assert_eq!(job.args, ["-i"]);
-        assert_eq!(job.env, [("TERM".to_owned(), "dumb".to_owned())]);
+        let marker = editor.console_marker(job.id).unwrap_or_default().to_owned();
+        assert_eq!(
+            job.env,
+            [
+                ("TERM".to_owned(), "dumb".to_owned()),
+                ("OXMACS_MARKER".to_owned(), marker)
+            ]
+        );
         (editor, ox, job.id)
     }
 
@@ -558,7 +565,7 @@ mod tests {
     fn plugins_start_consoles_and_hear_their_markers_and_prompts() {
         let (mut editor, mut ox, job) = started(SHELL);
 
-        editor.session_output(job, &format!("hi\n\u{1}note\u{2}one\u{3}{PROMPT}"));
+        editor.console_said(job, &format!("hi\n\u{1}note\u{2}one\u{3}{PROMPT}"));
         settle(&mut editor, &mut ox);
 
         assert_eq!(
@@ -592,7 +599,7 @@ mod tests {
                :on-idle (fn [] (swap! heard conj :idle)))"#,
         );
 
-        editor.session_output(job, "debug at a.R#2: x\nBrowse[1]> ");
+        editor.console_said(job, "debug at a.R#2: x\nBrowse[1]> ");
         settle(&mut editor, &mut ox);
 
         assert_eq!(
@@ -640,7 +647,7 @@ mod tests {
     #[test]
     fn plugins_read_and_give_back_console_history() {
         let (mut editor, mut ox, job) = started(SHELL);
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         settle(&mut editor, &mut ox);
         press(&mut editor, &mut ox, "C-x o");
         typed(&mut editor, &mut ox, "ls");
@@ -666,7 +673,7 @@ mod tests {
     #[test]
     fn code_is_sent_echoed_or_asked_quietly() {
         let (mut editor, mut ox, job) = started(SHELL);
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         settle(&mut editor, &mut ox);
 
         ox.eval(&mut editor, r#"(console-send "*shell*" "ls\npwd")"#)
@@ -678,7 +685,7 @@ mod tests {
             "true"
         );
         assert_eq!(sent(&mut editor), ["quiet()\n"]);
-        editor.session_output(job, &format!("{PROMPT}{PROMPT}"));
+        editor.console_said(job, &format!("{PROMPT}{PROMPT}"));
         let id = editor.buffer_named("*shell*").unwrap();
         assert_eq!(editor.buffer_by_id(id).unwrap().contents(), "$ ls\n$ pwd\n");
     }
@@ -689,7 +696,7 @@ mod tests {
             r#"(console-start "*shell*" :program "shell" :args ["-i"] :env {TERM: "dumb"}
                :prompts ["^> $"] :errors ["^Error"])"#,
         );
-        editor.session_output(job, "> ");
+        editor.console_said(job, "> ");
         settle(&mut editor, &mut ox);
         editor.buffer_mut().insert_at(0, "ok\nboom\nlate\n");
         ox.eval(
@@ -700,14 +707,14 @@ mod tests {
         let send = |editor: &mut Editor, ox: &mut Ox, code: &str, output: &str| {
             ox.eval(editor, &format!("(console-send \"*shell*\" \"{code}\")"))
                 .unwrap();
-            editor.session_output(job, output);
+            editor.console_said(job, output);
             settle(editor, ox);
         };
 
         send(&mut editor, &mut ox, "ok", "fine\n> ");
         send(&mut editor, &mut ox, "boom", "Error: boom\n> ");
         send(&mut editor, &mut ox, "late", "> ");
-        editor.session_output(job, "Error: from earlier\n> ");
+        editor.console_said(job, "Error: from earlier\n> ");
         settle(&mut editor, &mut ox);
 
         assert_eq!(
@@ -719,7 +726,7 @@ mod tests {
     #[test]
     fn code_sent_from_a_buffer_that_holds_it_is_reported_where_it_sits() {
         let (mut editor, mut ox, job) = started(SHELL);
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         settle(&mut editor, &mut ox);
         editor.buffer_mut().insert_at(0, "ls\npwd\nls\n");
         editor.buffer_mut().set_point(3);
@@ -746,7 +753,7 @@ mod tests {
     #[test]
     fn console_keys_belong_to_the_console_and_restarting_keeps_the_buffer() {
         let (mut editor, mut ox, job) = started(SHELL);
-        editor.session_output(job, PROMPT);
+        editor.console_said(job, PROMPT);
         settle(&mut editor, &mut ox);
         let id = editor.buffer_named("*shell*").unwrap();
         press(&mut editor, &mut ox, "C-x o");

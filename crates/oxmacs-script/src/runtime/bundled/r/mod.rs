@@ -41,7 +41,7 @@ impl R {
     }
 
     pub fn output(&mut self, job: JobId, text: &str) {
-        self.editor.session_output(job, text);
+        self.editor.console_said(job, text);
         settle(&mut self.editor, &mut self.ox);
     }
 

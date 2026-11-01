@@ -1,5 +1,5 @@
 (module
-  (import (ox string)
+  (import (ox string) (ox path) (ox file)
           (r session)
           (r help)
           (r pane)
@@ -42,7 +42,17 @@
 (session/on-marker "packages" package/available)
 (session/on-marker "tests" package/tested)
 (session/on-marker "installed" package/installed)
-(session/on-marker "viewer" (fn [_ url] (open-externally url) (message $"Opened {url}")))
+(def (viewable? url)
+  (or (string/starts-with? url "http://")
+      (string/starts-with? url "https://")
+      (and (contains? #{"html" "htm"} (string/lower (or (path/extension url) "")))
+           (file/exists? url))))
+
+(session/on-marker "viewer"
+                   (fn [_ url]
+                     (if (viewable? url)
+                       (do (open-externally url) (message $"Opened {url}"))
+                       (message $"R asked to show {url}, which isn't a web page; left it closed"))))
 (on-saved :r-markdown markdown/saved)
 (session/on-ready :environment data/environment-due)
 (session/on-marker "complete" complete/answered)

@@ -213,15 +213,22 @@ fn z_opens_a_large_copy_in_the_system_viewer() {
         r.sent(),
         ["getOption(\"oxmacs\")$plot_zoom(1L, 1344L, 960L)\n"]
     );
-    r.output(
-        job,
-        &format!("\u{1}zoom\u{2}C:/plots/zoom-1.png\u{3}{PROMPT}"),
-    );
-
+    let folder = r
+        .eval("(module (import (r session))) (session/plots-folder (session/current-session))")
+        .trim_matches('"')
+        .replace("\\\\", "/");
+    let zoomed = format!("{folder}/zoom-1.png");
+    r.output(job, &format!("\u{1}zoom\u{2}{zoomed}\u{3}{PROMPT}"));
     assert_eq!(
         r.editor.take_effects(),
-        [Effect::OpenExternally("C:/plots/zoom-1.png".into())]
+        [Effect::OpenExternally(zoomed.into())]
     );
+
+    r.output(
+        job,
+        &format!("\u{1}zoom\u{2}C:/Users/someone/elsewhere.exe\u{3}{PROMPT}"),
+    );
+    assert_eq!(r.editor.take_effects(), []);
 }
 
 fn thumbnails(r: &mut R, job: JobId, count: usize) {

@@ -16,6 +16,7 @@ testing = []
 bitflags.workspace = true
 dirs.workspace = true
 flate2.workspace = true
+getrandom.workspace = true
 indexmap.workspace = true
 jiff.workspace = true
 oxmacs-files.workspace = true

@@ -153,6 +153,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- Consoles hear the control markers and prompts only of the program they started: each console gives its program a secret token in `OXMACS_MARKER`, and output that only looks like a marker, such as a file R prints, shows as text instead of opening paths or URLs. A stray control character no longer hides the output after it. R's viewer opens only web pages and HTML files, and its zoom only R's own plots. A `:prompter` can name `$OXMACS_MARKER`, which the console fills in.
 - Checking Ox as you type, `M-.` and `M-?` find each file's modules in its own folders, instead of an import in one project resolving to another project's module of the same name checked earlier.
 - Every way of saving asks before writing over a file that changed on disk, as `C-x C-s` did: `C-x s`, saving on quit and `C-c C-k` too. `C-x s` and `!` go on with the other files after the answer, and `C-c C-k` loads nothing from the changed file unless you choose to save over it.
 - Sizes too large to hold no longer crash oxmacs or ox where `try` can't catch it: `string/repeat`, `string/pad-start`, `string/pad-end`, `range` and `crypto/random` raise a range error past the 512 MB one value can take, as images already did; Tiled layers are checked the same way and their compressed data unpacks no further than the layer needs; very tall PDF pages render smaller instead of asking for gigabytes; and a language server that announces a message over 64 MB is stopped and says why.

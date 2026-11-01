@@ -22,8 +22,11 @@ local({
   }
 })
 local({
+  token <- Sys.getenv("OXMACS_MARKER")
+  Sys.unsetenv("OXMACS_MARKER")
   marker <- function(kind, payload) {
-    cat("\001", kind, "\002", payload, "\003", sep = "")
+    shown <- gsub("[\001-\003]", "�", paste(payload, collapse = ""), perl = TRUE)
+    cat("\001", token, kind, "\002", shown, "\003", sep = "")
   }
   last <- function() invisible(get(".Last.value", envir = baseenv()))
   oxmacs <- new.env()
@@ -394,8 +397,8 @@ local({
       marker("help", paste(text, collapse = "\n"))
     }
   )
+  options(prompt = paste0("\001", token, ">\002\003"), continue = paste0("\001", token, "+\002\003"))
 })
-options(prompt = "\001>\002\003", continue = "\001+\002\003")
 
 """)
 
