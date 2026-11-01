@@ -162,42 +162,77 @@ fn html_entities(text: &str) -> String {
     out
 }
 
-fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Result<Value, Error> {
-    if depth > DEEPEST {
-        return Err(Error::new(format!(
-            "xml/read can't read elements nested more than {DEEPEST} deep"
-        )));
-    }
+struct Open<'a, 'input> {
+    tag: Value,
+    attrs: Value,
+    children: Vec<Value>,
+    next: Option<Node<'a, 'input>>,
+}
+
+fn opened<'a, 'input>(heap: &mut Heap, node: Node<'a, 'input>) -> Result<Open<'a, 'input>, Error> {
     let tag = heap.string(node.tag_name().name())?;
     let mut attrs = Vec::new();
     for attribute in node.attributes() {
         attrs.push(Value::keyword(attribute.name()));
         attrs.push(heap.string(attribute.value())?);
     }
-    let attrs = make_map(heap, &attrs)?;
-    let mut children = Vec::new();
-    for child in node.children() {
-        if child.is_element() {
-            children.push(element(heap, child, depth + 1, html)?);
-        } else if child.is_text()
-            && let Some(text) = child.text()
-            && (html || !text.trim().is_empty())
-        {
-            children.push(heap.string(text)?);
-        }
-    }
-    let children = make_vector(heap, &children)?;
+    Ok(Open {
+        tag,
+        attrs: make_map(heap, &attrs)?,
+        children: Vec::new(),
+        next: node.first_child(),
+    })
+}
+
+fn closed(heap: &mut Heap, open: &Open<'_, '_>) -> Result<Value, Error> {
+    let children = make_vector(heap, &open.children)?;
     make_map(
         heap,
         &[
             Value::keyword("tag"),
-            tag,
+            open.tag,
             Value::keyword("attrs"),
-            attrs,
+            open.attrs,
             Value::keyword("children"),
             children,
         ],
     )
+}
+
+fn element(heap: &mut Heap, root: Node<'_, '_>, html: bool) -> Result<Value, Error> {
+    let mut open = vec![opened(heap, root)?];
+    loop {
+        let Some(top) = open.last_mut() else {
+            return Ok(Value::Nil);
+        };
+        let Some(child) = top.next.take() else {
+            let done = open.pop().map(|top| closed(heap, &top)).transpose()?;
+            match (open.last_mut(), done) {
+                (Some(parent), Some(value)) => parent.children.push(value),
+                (None, Some(value)) => return Ok(value),
+                (_, None) => return Ok(Value::Nil),
+            }
+            continue;
+        };
+        top.next = child.next_sibling();
+        if child.is_element() {
+            if open.len() > DEEPEST {
+                return Err(Error::new(format!(
+                    "xml/read can't read elements nested more than {DEEPEST} deep"
+                )));
+            }
+            let inner = opened(heap, child)?;
+            open.push(inner);
+        } else if child.is_text()
+            && let Some(text) = child.text()
+            && (html || !text.trim().is_empty())
+        {
+            let value = heap.string(text)?;
+            if let Some(top) = open.last_mut() {
+                top.children.push(value);
+            }
+        }
+    }
 }
 
 fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
@@ -216,7 +251,7 @@ fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     };
     let document = Document::parse_with_options(&text, options)
         .map_err(|error| Error::new(format!("xml/read can't read this: {error}")))?;
-    element(heap, document.root_element(), 0, html)
+    element(heap, document.root_element(), html)
 }
 
 fn named(heap: &Heap, key: Value, name: &str) -> bool {
@@ -291,12 +326,13 @@ fn along(heap: &Heap, native: &str, arguments: &[Value]) -> Result<Vec<Value>, E
 }
 
 fn gathered(heap: &Heap, value: Value, out: &mut String) {
-    if let Some(text) = heap.text(value) {
-        out.push_str(text);
-        return;
-    }
-    for child in children(heap, value) {
-        gathered(heap, child, out);
+    let mut pending = vec![value];
+    while let Some(value) = pending.pop() {
+        if let Some(text) = heap.text(value) {
+            out.push_str(text);
+        } else {
+            pending.extend(children(heap, value).into_iter().rev());
+        }
     }
 }
 
@@ -357,7 +393,27 @@ fn valid_name(name: &str) -> bool {
             .any(|character| character.is_whitespace() || "<>&\"'/=".contains(character))
 }
 
+enum Piece {
+    Value(Value),
+    Close(String),
+}
+
 fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
+    let mut pending = vec![Piece::Value(value)];
+    while let Some(piece) = pending.pop() {
+        match piece {
+            Piece::Close(tag) => {
+                out.push_str("</");
+                out.push_str(&tag);
+                out.push('>');
+            }
+            Piece::Value(value) => one(heap, value, out, &mut pending)?,
+        }
+    }
+    Ok(())
+}
+
+fn one(heap: &Heap, value: Value, out: &mut String, pending: &mut Vec<Piece>) -> Result<(), Error> {
     if let Some(text) = plain(heap, value) {
         escaped(&text, false, out);
         return Ok(());
@@ -406,12 +462,8 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
         return Ok(());
     }
     out.push('>');
-    for child in children {
-        write(heap, child, out)?;
-    }
-    out.push_str("</");
-    out.push_str(&tag);
-    out.push('>');
+    pending.push(Piece::Close(tag));
+    pending.extend(children.into_iter().rev().map(Piece::Value));
     Ok(())
 }
 

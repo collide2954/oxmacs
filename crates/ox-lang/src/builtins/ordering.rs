@@ -19,32 +19,58 @@ fn numeric(heap: &Heap, value: Value) -> Option<Number> {
     }
 }
 
-pub(crate) fn order(heap: &Heap, a: Value, b: Value) -> Option<Ordering> {
+enum Compared {
+    Settled(Ordering),
+    Items(Vec<Value>, Vec<Value>),
+}
+
+fn compared(heap: &Heap, a: Value, b: Value) -> Option<Compared> {
+    let settled = |ordering| Some(Compared::Settled(ordering));
     match (a, b) {
-        (Value::Nil, Value::Nil) => return Some(Ordering::Equal),
-        (Value::Nil, _) => return Some(Ordering::Less),
-        (_, Value::Nil) => return Some(Ordering::Greater),
-        (Value::Bool(x), Value::Bool(y)) => return Some(x.cmp(&y)),
-        (Value::Char(x), Value::Char(y)) => return Some(x.cmp(&y)),
+        (Value::Nil, Value::Nil) => return settled(Ordering::Equal),
+        (Value::Nil, _) => return settled(Ordering::Less),
+        (_, Value::Nil) => return settled(Ordering::Greater),
+        (Value::Bool(x), Value::Bool(y)) => return settled(x.cmp(&y)),
+        (Value::Char(x), Value::Char(y)) => return settled(x.cmp(&y)),
         (Value::Keyword(x), Value::Keyword(y)) | (Value::Symbol(x), Value::Symbol(y)) => {
-            return Some(x.name().cmp(y.name()));
+            return settled(x.name().cmp(y.name()));
         }
         _ => {}
     }
     if let (Some(x), Some(y)) = (numeric(heap, a), numeric(heap, b)) {
-        return x.compare(&y);
+        return x.compare(&y).map(Compared::Settled);
     }
     if let (Some(x), Some(y)) = (heap.text(a), heap.text(b)) {
-        return Some(x.cmp(y));
+        return settled(x.cmp(y));
     }
-    let (x, y) = (heap.elements(a)?, heap.elements(b)?);
-    for (left, right) in x.iter().zip(&y) {
-        match order(heap, *left, *right)? {
-            Ordering::Equal => {}
-            unequal => return Some(unequal),
+    Some(Compared::Items(heap.elements(a)?, heap.elements(b)?))
+}
+
+pub(crate) fn order(heap: &Heap, a: Value, b: Value) -> Option<Ordering> {
+    let mut open: Vec<(Vec<Value>, Vec<Value>, usize)> = Vec::new();
+    let mut next = Some((a, b));
+    loop {
+        if let Some((a, b)) = next.take() {
+            match compared(heap, a, b)? {
+                Compared::Settled(Ordering::Equal) => {}
+                Compared::Settled(unequal) => return Some(unequal),
+                Compared::Items(x, y) => open.push((x, y, 0)),
+            }
+        }
+        let Some((x, y, at)) = open.last_mut() else {
+            return Some(Ordering::Equal);
+        };
+        if *at < x.len().min(y.len()) {
+            next = Some((x[*at], y[*at]));
+            *at += 1;
+        } else {
+            let lengths = x.len().cmp(&y.len());
+            open.pop();
+            if lengths != Ordering::Equal {
+                return Some(lengths);
+            }
         }
     }
-    Some(x.len().cmp(&y.len()))
 }
 
 fn incomparable(heap: &Heap, name: &str, a: Value, b: Value) -> Error {

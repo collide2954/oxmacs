@@ -140,25 +140,41 @@ fn key(heap: &Heap, key: Value) -> Result<String, Error> {
     }
 }
 
-fn object(
-    heap: &Heap,
-    entries: impl IntoIterator<Item = (String, Value)>,
-    out: &mut String,
-) -> Result<(), Error> {
-    out.push('{');
-    for (index, (name, value)) in entries.into_iter().enumerate() {
-        if index > 0 {
-            out.push(',');
+enum Step {
+    Value(Value),
+    Text(&'static str),
+    Key(String),
+}
+
+fn opened(steps: &mut Vec<Step>, close: &'static str, items: Vec<(Option<String>, Value)>) {
+    steps.push(Step::Text(close));
+    for (index, (name, item)) in items.into_iter().enumerate().rev() {
+        steps.push(Step::Value(item));
+        if let Some(name) = name {
+            steps.push(Step::Key(name));
         }
-        quoted(&name, out);
-        out.push(':');
-        write(heap, value, out)?;
+        if index > 0 {
+            steps.push(Step::Text(","));
+        }
     }
-    out.push('}');
-    Ok(())
 }
 
 fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
+    let mut steps = vec![Step::Value(value)];
+    while let Some(step) = steps.pop() {
+        match step {
+            Step::Text(text) => out.push_str(text),
+            Step::Key(name) => {
+                quoted(&name, out);
+                out.push(':');
+            }
+            Step::Value(value) => one(heap, value, out, &mut steps)?,
+        }
+    }
+    Ok(())
+}
+
+fn one(heap: &Heap, value: Value, out: &mut String, steps: &mut Vec<Step>) -> Result<(), Error> {
     let refused = || {
         Error::new(format!(
             "json/write can't write {}",
@@ -184,26 +200,27 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
             } else if let Some(entries) = heap.entries(value) {
                 let named = entries
                     .into_iter()
-                    .map(|(name, item)| Ok((key(heap, name)?, item)))
+                    .map(|(name, item)| Ok((Some(key(heap, name)?), item)))
                     .collect::<Result<Vec<_>, Error>>()?;
-                object(heap, named, out)?;
+                out.push('{');
+                opened(steps, "}", named);
             } else if let Some(record) = heap.record_of(value) {
                 let kind = heap.record_type_of(record.kind).ok_or_else(refused)?;
                 let named = kind
                     .fields
                     .iter()
-                    .map(|field| field.name().to_owned())
-                    .zip(record.fields.iter().copied());
-                object(heap, named, out)?;
+                    .map(|field| Some(field.name().to_owned()))
+                    .zip(record.fields.iter().copied())
+                    .collect();
+                out.push('{');
+                opened(steps, "}", named);
             } else if let Some(items) = heap.elements(value) {
                 out.push('[');
-                for (index, item) in items.into_iter().enumerate() {
-                    if index > 0 {
-                        out.push(',');
-                    }
-                    write(heap, item, out)?;
-                }
-                out.push(']');
+                opened(
+                    steps,
+                    "]",
+                    items.into_iter().map(|item| (None, item)).collect(),
+                );
             } else {
                 return Err(refused());
             }
