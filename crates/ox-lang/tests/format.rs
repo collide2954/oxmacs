@@ -57,6 +57,14 @@ fn a_files_forms_come_from_its_imports_and_its_own_macros() {
 }
 
 #[test]
+fn runs_of_spaces_inside_a_line_become_one_but_comments_keep_their_column() {
+    assert_eq!(
+        formatted("(def   (f    x)\n  (+   x    1))     ; one more\n(str \"a   b\")\n"),
+        "(def (f x)\n  (+ x 1))     ; one more\n(str \"a   b\")\n"
+    );
+}
+
+#[test]
 fn metadata_keeps_its_place_when_lines_above_change() {
     assert_eq!(
         formatted("(f\nx)\n(def ^:shadow (g)\n1)\n(defmacro ^{indent: 1} m [x]\nx)\n"),
@@ -134,7 +142,7 @@ b)
 fn spacing_closers_and_blank_lines_are_tidied() {
     assert_eq!(
         formatted("\n\n(f  ( g x ) )(h)\n\n\n\n(i\n  )\n(j ; note\n)"),
-        "(f  (g x)) (h)\n\n(i)\n(j ; note\n )\n"
+        "(f (g x)) (h)\n\n(i)\n(j ; note\n )\n"
     );
 }
 
@@ -152,7 +160,7 @@ fn block_comments_keep_their_text_and_what_follows_is_formatted() {
 
     assert_eq!(
         formatted(source),
-        "(def x 1)\n#| outer (unbalanced\n   #| inner |# still \"quote\n|#\n(def   y\n  2)\n"
+        "(def x 1)\n#| outer (unbalanced\n   #| inner |# still \"quote\n|#\n(def y\n  2)\n"
     );
 }
 

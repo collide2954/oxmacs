@@ -12,7 +12,7 @@
 ox                     open a REPL
 ox FILE                run a file
 ox check PATH…         find mistakes without running anything
-ox fmt PATH…           format files in the one Ox style
+ox fmt PATH…           fix the indentation and spacing of files
 ox fmt --check PATH…   list files that are not formatted
 ox migrate PATH…       update files written for an older Ox
 ox migrate --strings PATH…  also rewrite strings, once, coming from Ox 0.14
@@ -37,7 +37,7 @@ A name that starts with `_`, such as `_line`, is unused on purpose and draws no 
 
 ## Formatting
 
-There are no style settings: `ox fmt` keeps your line breaks and fixes indentation and spacing. oxmacs formats `.ox` files the same way when you save them.
+There are no style settings: `ox fmt` keeps your line breaks and fixes indentation and spacing, leaving one space between the parts of a line. Only the space before a comment at the end of a line is kept, so comments can line up. oxmacs formats `.ox` files the same way when you save them.
 
 ## Migrating
 

@@ -154,7 +154,13 @@ fn render(pieces: &[Piece], tidy: bool) -> (String, Vec<usize>) {
             piece.gap.clone()
         } else if matches!(last, None | Some(Kind::Open(_))) || piece.kind == Kind::Close {
             String::new()
-        } else if piece.gap.is_empty() {
+        } else if piece.gap.is_empty()
+            || (piece.kind != Kind::Comment
+                && piece
+                    .gap
+                    .chars()
+                    .all(|character| matches!(character, ' ' | '\t')))
+        {
             " ".to_owned()
         } else {
             piece.gap.clone()

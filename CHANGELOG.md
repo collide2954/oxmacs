@@ -84,6 +84,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `ox fmt`, and saving an `.ox` file, leave one space between the parts of a line, keeping only the space before a comment at its end, so comments can still line up.
 - Taking a value apart in `let` or in function parameters works like reading it with `.field` or `nth`: a vector pattern takes a string apart into characters, a value that isn't a collection raises an error instead of giving `nil` for every part, and so does a field a record doesn't have. `nil` and a map's missing keys still give `nil`. Taking apart, reading a field of or matching a promise says to await it first, as does a function given a promise where it expects something else.
 - `ox check` warns about an `:as` that names a module by the name it has anyway, as in `(git diff :as diff)`, and about `vec` around a value that is already a vector, such as the result of `map`, `filter` or `concat`. The bundled plugins no longer do either.
 - Ox's `cond` takes its clauses in brackets only, as `[test body…]`, so every `cond` reads the same; a clause in parentheses raises an error that says so, and `ox migrate` rewrites them.
