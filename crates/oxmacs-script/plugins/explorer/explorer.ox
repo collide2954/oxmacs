@@ -322,10 +322,12 @@
   (load-git)
   (reset! files nil))
 
+(def (below-root folder)
+  (if (same? folder (get @state :root)) "" (str (relative folder) "/")))
+
 (defcommand explorer-new-file "Make a file in the folder on this line and open it"
   (let [folder (folder-for (here))
-        name (prompt $"New file in {(relative folder)}/: ")
-        target (apply path/join folder (string/split name "/"))]
+        target (prompt-path "New file: " :initial (below-root folder))]
     (if (file/exists? target)
       (message $"{(relative target)} already exists")
       (do (file/make-dir (path/parent target))
@@ -337,8 +339,7 @@
 
 (defcommand explorer-new-folder "Make a folder in the folder on this line"
   (let [folder (folder-for (here))
-        name (prompt $"New folder in {(relative folder)}/: ")
-        target (apply path/join folder (string/split name "/"))]
+        target (prompt-path "New folder: " :directories true :initial (below-root folder))]
     (if (file/exists? target)
       (message $"{(relative target)} already exists")
       (do (file/make-dir target)
@@ -348,19 +349,17 @@
 
 (def (transfer moving)
   (when-let [row (here)]
-    (let [root (get @state :root)
-          answer (prompt (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path))
-          target (absolute root answer)]
+    (let [target (prompt-path (if moving "Rename or move to: " "Copy to: ") :initial (relative row.path))]
       (file/make-dir (path/parent target))
       (when (if moving
               (move-path row.path target)
               (when (or (not (file/exists? target))
-                        (yes-or-no $"{answer} exists; replace it? "))
+                        (yes-or-no $"{(relative target)} exists; replace it? "))
                 (file/copy row.path target)
                 true))
         (reload-around row.path target)
         (reveal target)
-        (message $"{(if moving "Moved" "Copied")} {(relative row.path)} to {answer}")))))
+        (message $"{(if moving "Moved" "Copied")} {(relative row.path)} to {(relative target)}")))))
 
 (defcommand explorer-rename "Rename or move the file or folder on this line" (transfer true))
 (defcommand explorer-copy "Copy the file or folder on this line" (transfer false))

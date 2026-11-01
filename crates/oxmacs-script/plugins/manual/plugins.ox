@@ -99,7 +99,7 @@ cpp          0.1.2    opt-in   C++ with highlighting, indentation and the clangd
 customize    0.1.7    on       Change the editor's and plugins' settings in a form
 dired        0.3.6    on       List directories and manage their files
 epub         0.2.8    opt-in   Read EPUB books in pages, with contents, search, highlights, notes and a library
-explorer     0.2.6    on       A file tree beside the windows that follows the file you're in
+explorer     0.2.7    on       A file tree beside the windows that follows the file you're in
 git          0.5.2    opt-in   Git status and staging in the style of Magit
 go           0.1.1    opt-in   Go with highlighting, indentation with tabs and the gopls language server
 irc          0.10.8   opt-in   An IRCv3 client in the style of ERC

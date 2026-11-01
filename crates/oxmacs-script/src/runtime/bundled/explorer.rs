@@ -198,7 +198,9 @@ fn new_files_open_and_renames_and_deletes_happen_on_disk() {
     let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
 
     press(&mut editor, &mut ox, "C-c C-n");
-    assert_eq!(editor.minibuffer().unwrap().prompt(), "New file in src/: ");
+    let asked = editor.minibuffer().unwrap();
+    assert_eq!(asked.prompt(), "New file: ");
+    assert!(asked.input().contents().ends_with("src/"));
     typed(&mut editor, &mut ox, "notes.txt");
     press(&mut editor, &mut ox, "RET");
     assert!(project.path().join("src").join("notes.txt").is_file());
@@ -220,6 +222,26 @@ fn new_files_open_and_renames_and_deletes_happen_on_disk() {
     );
     press(&mut editor, &mut ox, "y");
     assert!(!project.path().join("docs").join("notes.md").exists());
+}
+
+#[test]
+fn copies_and_new_files_go_to_absolute_and_home_paths_as_typed() {
+    let project = project();
+    let away = tempfile::tempdir().unwrap();
+    let (_home, mut editor, mut ox) = opened(project.path(), "README.md");
+    editor.set_home_directory(Some(away.path().to_owned()));
+
+    press(&mut editor, &mut ox, "C-c C-c C-a C-k");
+    typed(&mut editor, &mut ox, "~/copied.md");
+    press(&mut editor, &mut ox, "RET");
+    assert!(away.path().join("copied.md").is_file());
+    assert!(!project.path().join("~").exists());
+
+    let made = away.path().join("made.txt");
+    press(&mut editor, &mut ox, "C-c C-n C-a C-k");
+    typed(&mut editor, &mut ox, &made.display().to_string());
+    press(&mut editor, &mut ox, "RET");
+    assert!(made.is_file());
 }
 
 #[test]

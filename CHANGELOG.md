@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- The explorer's rename, copy, new file and new folder ask for a path as `C-x C-f` does, so an absolute path or one starting with `~` goes where it says instead of into a folder of that name under the project.
 - Zen no longer rearranges your windows: while it hides the chrome only the selected window is drawn, and the others come back as they were, so leaving zen in another tab no longer replaces that tab's windows.
 - A rodeo game whose first load failed starts once you save the fix or resume it, instead of saying it reloaded and showing nothing.
 - Game keys are let go when oxmacs loses focus, so a player no longer keeps running after Alt-Tab.
