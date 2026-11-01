@@ -109,7 +109,7 @@ Fields can have defaults, written like parameters:
 
 ## Atoms
 
-An atom holds a value that can be replaced. `@` reads it, `reset!` replaces it and `swap!` applies a function to it. `swap!` is safe when several tasks change the same atom.
+An atom holds a value that can be replaced. `@` reads it, `reset!` replaces it and `swap!` applies a function to it. `swap!` is safe when several tasks change the same atom. `@state.current` reads the field `current` of the atom's value; for an atom kept in a field, write `@(. m :cell)` or `(deref m.cell)`.
 
 ```
 (def counter (atom 0))

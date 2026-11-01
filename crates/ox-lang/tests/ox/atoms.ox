@@ -10,6 +10,11 @@
 (= (atom 1) (atom 1)) ;=> false
 (def a (atom 1)) (= a a) ;=> true
 (deref 5) ;! deref expects an atom, got 5
+
+;; @a.b reads a field of the atom's value; @(. m :cell) derefs an atom kept in a field
+(def state (atom {current: 2 window: {width: 80}})) [@state.current @state.window.width @state.missing] ;=> [2 80 nil]
+(def m {cell: (atom 7)}) [@(. m :cell) (deref m.cell)] ;=> [7 7]
+(let [s (atom {n: 1})] (swap! s update :n inc) @s.n) ;=> 2
 (reset! 5 1) ;! reset! expects an atom, got 5
 
 ;; compare-and-set! changes an atom only while it still holds the expected value

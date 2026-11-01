@@ -367,6 +367,17 @@ impl<'a> Reader<'a> {
         Some(Datum::List(parts))
     }
 
+    fn dotted<'s>(&self, syntax: &'s Syntax) -> Option<&'s [Syntax]> {
+        let Datum::List(parts) = &syntax.datum else {
+            return None;
+        };
+        let written = self.source.get(syntax.span.start as usize..)?;
+        let is_dot = parts
+            .first()
+            .is_some_and(|head| matches!(&head.datum, Datum::Symbol(name) if name == "."));
+        (is_dot && parts.len() >= 3 && !written.starts_with('(')).then_some(parts.as_slice())
+    }
+
     fn push(&mut self, datum: Datum, start: usize) {
         self.place(Syntax {
             datum,
@@ -412,6 +423,23 @@ impl<'a> Reader<'a> {
                     } else {
                         Syntax::new(Datum::Symbol(name.to_owned()), head)
                     };
+                    if prefix == Prefix::Deref
+                        && let Some(fields) = self.dotted(&syntax)
+                    {
+                        let mut parts = fields.to_vec();
+                        let target = parts[1].clone();
+                        parts[1] = Syntax {
+                            span: head.through(target.span),
+                            datum: Datum::List(vec![called, target]),
+                            marks: Marks::default(),
+                        };
+                        syntax = Syntax {
+                            span: head.through(syntax.span),
+                            datum: Datum::List(parts),
+                            marks: Marks::default(),
+                        };
+                        continue;
+                    }
                     syntax = Syntax {
                         span: head.through(syntax.span),
                         datum: Datum::List(vec![called, syntax]),
