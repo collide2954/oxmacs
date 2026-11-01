@@ -74,6 +74,7 @@ impl Editor {
             .into_iter()
             .filter(|chore| !self.done_in(since, *chore) && chore.wanted(self))
             .map(|chore| chore.delay(self))
+            .chain(self.secret_wait(since))
             .min()
     }
 
@@ -92,6 +93,7 @@ impl Editor {
                 chore.run(self);
             }
         }
+        self.expire_secret(now);
     }
 }
 

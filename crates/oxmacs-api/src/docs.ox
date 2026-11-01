@@ -3,7 +3,7 @@
 (set-overlay key rows {place :bottom-right scale 1}) "Floats rows over the windows under key, replacing what key showed before; nil or [] takes them away. A row is a line as open-buffer takes it, whose map may give an :opacity from 0 to 1, and a piece [text face :keycap] draws its text as a key. :place is :bottom-right, above the echo area, or :bottom-center, and :scale sizes the text against the editor's."
 (set-tab-bar tabs {selected nil on-click nil on-close nil on-new nil on-drop nil}) "Shows a bar of tabs labeled tabs across the top of the frame, with the one at index :selected drawn as current; nil takes the bar away. Clicking a tab calls :on-click with its index, its × or a middle click calls :on-close with it, the + calls :on-new, and dragging a tab onto another calls :on-drop with both indexes."
 (copy-text text) "Copies text to the kill ring and the system clipboard, as M-w does."
-(clipboard-set text) "Puts text on the system clipboard without adding it to the kill ring, for secrets."
+(clipboard-set text {clear-after nil}) "Puts text on the system clipboard without adding it to the kill ring, for secrets. :clear-after seconds wipes it from the clipboard then, unless something else has been copied since."
 (notify title body) "Shows a desktop notification with title and body."
 (window-focused?) "True while the oxmacs window has the keyboard focus."
 (keepass/read path password) "The entries of the KeePass database at path, each a map of :title, :username, :password, :url, :notes, :totp and :group, leaving out its recycle bin."

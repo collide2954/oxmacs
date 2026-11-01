@@ -6,7 +6,7 @@
 (def list-buffer "*Vault*")
 (def entry-buffer "*Vault entry*")
 
-(defonce view (atom {shown: nil reveal: false copies: 0 ticks: 0}))
+(defonce view (atom {shown: nil reveal: false ticks: 0}))
 
 (def list-keys
   {"RET" 'vault-show "c" 'vault-copy-password "u" 'vault-copy-username "t" 'vault-copy-code
@@ -141,17 +141,11 @@
 (def (copy! value what secret?)
   (when (blank? value)
     (raise (error $"This entry has no {what}")))
-  (clipboard-set value)
+  (clipboard-set value :clear-after (when secret? (clear-after)))
   (store/touch!)
-  (if secret?
-    (let [mine (inc (get @view :copies))]
-      (swap! view assoc :copies mine)
-      (message $"Copied the {what}; the clipboard clears in {(clear-after)} seconds")
-      (spawn (sleep (time/seconds (clear-after)))
-        (when (= (get @view :copies) mine)
-          (clipboard-set "")
-          (message "Cleared the clipboard"))))
-    (message $"Copied the {what}")))
+  (message (if secret?
+             $"Copied the {what}; the clipboard clears in {(clear-after)} seconds"
+             $"Copied the {what}")))
 
 (def (ask question {initial ""})
   (prompt question :initial initial))

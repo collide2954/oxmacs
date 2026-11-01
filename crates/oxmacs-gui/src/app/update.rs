@@ -230,6 +230,9 @@ impl App {
             Message::Tick(now) => self.tick(now),
             Message::Pasted(text) => self.editor.paste(text),
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
+            Message::SecretHeld(held, secret) => {
+                self.editor.clear_secret_if_held(held.as_deref(), &secret);
+            }
             Message::DiskChanged(folders) => self.editor.disk_changed_in(folders),
             Message::Opened(Err(error)) => self.editor.show_message(error),
             Message::ProcessTick => self.sample_processes(),
@@ -344,6 +347,9 @@ impl App {
         };
         match effect {
             Effect::WriteClipboard(text) => clipboard::write(text),
+            Effect::ClearClipboard(secret) => {
+                clipboard::read().map(move |held| Message::SecretHeld(held, secret.clone()))
+            }
             Effect::ReadClipboard => clipboard::read().map(Message::Pasted),
             Effect::WritePrimary(text) if HAS_PRIMARY_SELECTION => clipboard::write_primary(text),
             Effect::ReadPrimary if HAS_PRIMARY_SELECTION => {

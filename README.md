@@ -63,7 +63,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.1 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.5 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.6 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.109 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.110 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.13 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.8 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
@@ -79,7 +79,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `tabs` | 0.1.5 | opt-in | Workspace tabs across the top, each keeping its own windows |
 | `toml` | 0.1.0 | opt-in | TOML with highlighting, indentation and the taplo language server |
 | `typescript` | 0.1.1 | opt-in | TypeScript and TSX with highlighting, indentation and typescript-language-server |
-| `vault` | 0.3.2 | opt-in | An encrypted password vault with one-time codes and imports |
+| `vault` | 0.3.3 | opt-in | An encrypted password vault with one-time codes and imports |
 | `weather` | 0.3.5 | opt-in | Forecasts from Open-Meteo |
 | `wsl` | 0.2.2 | opt-in | WSL distributions as places to work: their files open as your own, their tools run inside them, and *WSL* starts, stops and opens them |
 | `zap` | 0.2.2 | opt-in | Flash the code you evaluate or send to a console, in the error color when it fails |

@@ -25,6 +25,7 @@ impl fmt::Debug for Fetches {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     WriteClipboard(String),
+    ClearClipboard(String),
     ReadClipboard,
     WritePrimary(String),
     ReadPrimary,

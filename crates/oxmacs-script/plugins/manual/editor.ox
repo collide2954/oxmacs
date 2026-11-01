@@ -89,7 +89,7 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
 (set-overlay :hint nil)
 ```
 
-`notify` shows a desktop notification, and `clipboard-set` copies text without touching the kill ring, for secrets.
+`notify` shows a desktop notification, and `clipboard-set` copies text without touching the kill ring, for secrets; with `:clear-after 30` it wipes the clipboard 30 seconds later, unless something else has been copied since.
 
 ## Settings
 

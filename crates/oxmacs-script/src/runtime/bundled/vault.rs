@@ -5,7 +5,7 @@ use ox_lang::value::print;
 use oxmacs_core::editor::{Editor, Effect};
 
 use crate::Ox;
-use crate::testing::{press, run_command, settle, typed};
+use crate::testing::{press, run_command, typed};
 
 const PASSWORD: &str = "correct horse";
 
@@ -162,10 +162,24 @@ fn copying_a_password_skips_the_kill_ring_and_clears_later() {
     );
     assert_eq!(editor.clipboard_history(), Vec::<String>::new());
 
-    std::thread::sleep(std::time::Duration::from_millis(1100));
-    settle(&mut editor, &mut ox);
-    assert_eq!(clipboard(&mut editor), [""]);
-    assert_eq!(editor.message(), Some("Cleared the clipboard"));
+    let later = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    editor.idle(later, later);
+    assert!(
+        editor
+            .take_effects()
+            .contains(&Effect::ClearClipboard("hunter2".to_owned()))
+    );
+
+    press(&mut editor, &mut ox, "c");
+    press(&mut editor, &mut ox, "u");
+    editor.take_effects();
+    editor.idle(later, later);
+    assert!(
+        !editor
+            .take_effects()
+            .iter()
+            .any(|effect| matches!(effect, Effect::ClearClipboard(_)))
+    );
 }
 
 #[test]

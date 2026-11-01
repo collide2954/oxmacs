@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- The vault no longer wipes the clipboard when you copied something else after a password: `clipboard-set` takes `:clear-after`, a number of seconds after which the editor clears the clipboard only if it still holds what was copied, and any later copy cancels it.
 - A buffer whose file was deleted follows it again when it comes back: an unmodified buffer rereads it, and one with edits keeps them and says the file changed. A buffer for a new file that another program creates follows it the same way.
 - `ox fmt` and formatting through `ox lsp` keep a file's CRLF line ends instead of turning them into LF, and `ox fmt --check` no longer lists a CRLF file that is already formatted.
 

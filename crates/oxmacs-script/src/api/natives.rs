@@ -1,6 +1,8 @@
-use ox_lang::Isolate;
+use std::time::Duration;
+
 use ox_lang::heap::Heap;
 use ox_lang::value::{Value, print};
+use ox_lang::{Error, Isolate};
 use oxmacs_core::editor::Editor;
 
 #[derive(Debug, Default)]
@@ -51,8 +53,24 @@ pub fn install(isolate: &mut Isolate) {
     isolate
         .native("ox", "clipboard-set")
         .arity(1, Some(1))
+        .keywords(&["clear-after"])
         .host::<Editor>(|heap, editor, arguments| {
-            editor.copy_secret(print::display(heap, arguments[0]));
+            let clear_after = match arguments[1] {
+                Value::Nil => None,
+                Value::Int(seconds) => {
+                    Some(Duration::from_secs(u64::try_from(seconds).unwrap_or(0)))
+                }
+                Value::Float(seconds) => {
+                    Some(Duration::try_from_secs_f64(seconds).unwrap_or_default())
+                }
+                other => {
+                    return Err(Error::new(format!(
+                        "clipboard-set's :clear-after is a number of seconds, got {}",
+                        print::brief(heap, other)
+                    )));
+                }
+            };
+            editor.copy_secret(print::display(heap, arguments[0]), clear_after);
             Ok(Value::Nil)
         });
     isolate
@@ -145,5 +163,32 @@ mod tests {
             ]
         );
         assert_eq!(editor.clipboard_history(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn secrets_copied_with_clear_after_are_cleared_at_the_deadline() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        ox.eval(&mut editor, r#"(clipboard-set "hunter2" :clear-after 0)"#)
+            .unwrap();
+        editor.take_effects();
+        let now = std::time::Instant::now();
+        editor.idle(now, now);
+
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::ClearClipboard("hunter2".to_owned())]
+        );
+        let refused = ox
+            .eval(&mut editor, r#"(clipboard-set "x" :clear-after "soon")"#)
+            .unwrap_err();
+        assert!(
+            refused
+                .message
+                .contains(":clear-after is a number of seconds"),
+            "{}",
+            refused.message
+        );
     }
 }

@@ -70,6 +70,7 @@ pub enum Message {
     Tick(Instant),
     Pasted(Option<String>),
     PastedPrimary(Option<String>),
+    SecretHeld(Option<String>, String),
     DiskChanged(Vec<PathBuf>),
     Opened(Result<(), String>),
     Clock,
@@ -1499,6 +1500,23 @@ mod tests {
         let _ = app.update(Message::Pasted(Some("from the os".to_owned())));
 
         assert_eq!(app.editor().buffer().contents(), "from the os");
+    }
+
+    #[test]
+    fn an_expired_secret_is_cleared_only_while_the_clipboard_holds_it() {
+        let mut app = App::default();
+
+        let _ = app.update(Message::SecretHeld(
+            Some("copied since".to_owned()),
+            "hunter2".to_owned(),
+        ));
+        assert_eq!(app.editor().message(), None);
+
+        let _ = app.update(Message::SecretHeld(
+            Some("hunter2".to_owned()),
+            "hunter2".to_owned(),
+        ));
+        assert_eq!(app.editor().message(), Some("Cleared the clipboard"));
     }
 
     #[test]

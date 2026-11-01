@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crate::editor::{Editor, Effect};
 
 const HISTORY_LIMIT: usize = 50;
@@ -13,12 +15,36 @@ impl Editor {
             return;
         }
         self.line_copy = None;
+        self.secret = None;
         self.remember(text.clone());
         self.effects.push(Effect::WriteClipboard(text));
     }
 
-    pub fn copy_secret(&mut self, text: impl Into<String>) {
-        self.effects.push(Effect::WriteClipboard(text.into()));
+    pub fn copy_secret(&mut self, text: impl Into<String>, clear_after: Option<Duration>) {
+        let text = text.into();
+        self.secret = clear_after.map(|after| (text.clone(), Instant::now() + after));
+        self.effects.push(Effect::WriteClipboard(text));
+    }
+
+    pub(in crate::editor) fn secret_wait(&self, since: Instant) -> Option<Duration> {
+        self.secret
+            .as_ref()
+            .map(|(_, at)| at.saturating_duration_since(since))
+    }
+
+    pub(in crate::editor) fn expire_secret(&mut self, now: Instant) {
+        if self.secret.as_ref().is_some_and(|(_, at)| now >= *at)
+            && let Some((secret, _)) = self.secret.take()
+        {
+            self.effects.push(Effect::ClearClipboard(secret));
+        }
+    }
+
+    pub fn clear_secret_if_held(&mut self, held: Option<&str>, secret: &str) {
+        if held == Some(secret) {
+            self.effects.push(Effect::WriteClipboard(String::new()));
+            self.show_message("Cleared the clipboard");
+        }
     }
 
     pub fn notify(&mut self, title: impl Into<String>, body: impl Into<String>) {
@@ -54,6 +80,7 @@ impl Editor {
             buffer.delete_range(range);
         }
         self.line_copy = whole_line.then(|| text.clone());
+        self.secret = None;
         self.remember(text.clone());
         self.effects.push(Effect::WriteClipboard(text));
     }
@@ -139,6 +166,8 @@ impl Editor {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
     use crate::editor::{Editor, Effect};
     use crate::testing::{editor_with, labels, press};
 
@@ -427,7 +456,7 @@ mod tests {
     fn secrets_reach_the_clipboard_but_not_the_kill_ring() {
         let mut editor = Editor::new();
 
-        editor.copy_secret("hunter2");
+        editor.copy_secret("hunter2", None);
         editor.notify("Vault", "Copied for 30 seconds");
 
         assert_eq!(
@@ -444,5 +473,48 @@ mod tests {
         assert!(editor.focused());
         editor.set_focused(false);
         assert!(!editor.focused());
+    }
+
+    #[test]
+    fn a_secret_is_cleared_at_its_deadline_unless_something_else_was_copied() {
+        let mut editor = Editor::new();
+        let since = Instant::now();
+        assert_eq!(editor.idle_wait(since), None);
+
+        editor.copy_secret("hunter2", Some(Duration::from_secs(30)));
+        editor.take_effects();
+        let wait = editor.idle_wait(since).unwrap();
+        assert!(wait > Duration::from_secs(29), "{wait:?}");
+        editor.idle(since, since + Duration::from_secs(10));
+        assert_eq!(editor.take_effects(), Vec::new());
+        editor.idle(since, since + Duration::from_secs(31));
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::ClearClipboard("hunter2".to_owned())]
+        );
+        assert_eq!(editor.idle_wait(since), None);
+
+        editor.copy_secret("hunter2", Some(Duration::from_secs(30)));
+        editor.copy_text("a note");
+        editor.take_effects();
+        assert_eq!(editor.idle_wait(since), None);
+        editor.idle(since, since + Duration::from_secs(31));
+        assert_eq!(editor.take_effects(), Vec::new());
+    }
+
+    #[test]
+    fn the_clipboard_is_cleared_only_while_it_still_holds_the_secret() {
+        let mut editor = Editor::new();
+
+        editor.clear_secret_if_held(Some("something else"), "hunter2");
+        assert_eq!(editor.take_effects(), Vec::new());
+        assert_eq!(editor.message(), None);
+
+        editor.clear_secret_if_held(Some("hunter2"), "hunter2");
+        assert_eq!(
+            editor.take_effects(),
+            [Effect::WriteClipboard(String::new())]
+        );
+        assert_eq!(editor.message(), Some("Cleared the clipboard"));
     }
 }
