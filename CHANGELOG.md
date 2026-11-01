@@ -4,6 +4,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Fixed
+
+- `ox fmt` and formatting through `ox lsp` keep a file's CRLF line ends instead of turning them into LF, and `ox fmt --check` no longer lists a CRLF file that is already formatted.
+
 ## [0.15.0] - 2026-11-01
 
 ### Added

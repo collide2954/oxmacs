@@ -40,6 +40,28 @@ fn ox_fmt_formats_in_place_and_check_only_reports() {
 }
 
 #[test]
+fn ox_fmt_keeps_crlf_files_as_they_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let tidy = dir.path().join("tidy.ox");
+    let messy = dir.path().join("messy.ox");
+    fs::write(&tidy, "(def (f x)\r\n  x)\r\n").unwrap();
+    fs::write(&messy, "(def (g x)\r\nx)\r\n").unwrap();
+    let folder = dir.path().to_str().unwrap();
+
+    let (code, printed, _) = ox(&["fmt", "--check", folder]);
+    assert_eq!(code, 1);
+    assert!(!printed.contains("tidy.ox"), "{printed}");
+
+    let (code, _, _) = ox(&["fmt", folder]);
+    assert_eq!(code, 0);
+    assert_eq!(fs::read_to_string(&tidy).unwrap(), "(def (f x)\r\n  x)\r\n");
+    assert_eq!(
+        fs::read_to_string(&messy).unwrap(),
+        "(def (g x)\r\n  x)\r\n"
+    );
+}
+
+#[test]
 fn ox_fmt_indents_with_the_forms_of_imported_macros_and_editor_macros() {
     let dir = tempfile::tempdir().unwrap();
     fs::write(

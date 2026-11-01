@@ -292,3 +292,12 @@ fn the_editor_asks_for_the_indentation_of_the_next_line() {
     assert_eq!(indentation("(f \"open\n"), None);
     assert_eq!(indentation("  (when x\n"), Some(4));
 }
+
+#[test]
+fn files_with_crlf_line_ends_keep_them() {
+    let messy = "(def (f x)\r\n      (+ x 1))\r\n\r\n(def s \"\"\"\r\n  a\r\n  \"\"\")\r\n";
+    let tidy = "(def (f x)\r\n  (+ x 1))\r\n\r\n(def s \"\"\"\r\n  a\r\n  \"\"\")\r\n";
+
+    assert_eq!(formatted(messy), tidy);
+    assert_eq!(formatted(tidy), tidy);
+}

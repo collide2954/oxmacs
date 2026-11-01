@@ -301,6 +301,17 @@ pub fn format(source: &str) -> Result<String, String> {
 }
 
 pub fn format_with(source: &str, known: &Forms) -> Result<String, String> {
+    let crlf = source
+        .find('\n')
+        .is_some_and(|end| source[..end].ends_with('\r'));
+    if crlf {
+        let formatted = format_lines(&source.replace("\r\n", "\n"), known)?;
+        return Ok(formatted.replace('\n', "\r\n"));
+    }
+    format_lines(source, known)
+}
+
+fn format_lines(source: &str, known: &Forms) -> Result<String, String> {
     let (forms, errors) = read::read(source);
     if let Some(error) = errors.first() {
         let (line, column) = line_column(source, error.span.start);
