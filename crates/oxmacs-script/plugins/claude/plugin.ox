@@ -1,11 +1,12 @@
 (plugin claude
   :version "0.1.0"
   :opt-in true
-  :summary "Claude beside your code: a chat that can read and drive the editor, questions about a region, and edits reviewed as diffs"
+  :startup-when :suggestions
+  :summary "Claude beside your code: a chat that can read and drive the editor, questions about a region, edits reviewed as diffs, and suggestions as you type"
   :requires {vault: "^0.3" git: "^0.5"}
   :commands [claude claude-send claude-stop claude-new claude-ask claude-chats claude-open-chat claude-delete-chat
              claude-set-key claude-accept-hunk claude-reject-hunk claude-accept-all claude-reject-all
-             claude-finish-review]
+             claude-finish-review claude-suggest]
   :settings {model: {type: :text default: "claude-opus-5-5" doc: "The Claude model the chat talks to"}
              width: {type: :integer default: 72 doc: "How many columns wide the chat's side window is"}
              effort: {type: [:low :medium :high :xhigh :max] default: :high doc: "How hard Claude thinks before it answers in the chat; higher is slower and costs more"}

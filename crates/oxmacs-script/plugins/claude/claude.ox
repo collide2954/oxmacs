@@ -5,6 +5,7 @@
           (claude tools :as tools)
           (claude review :as review)
           (claude chats :as chats)
+          (claude suggest :as suggest)
           (claude where :as where)))
 
 (def chat-buffer "*claude*")
@@ -36,6 +37,9 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
     (open-buffer chat-buffer (render/lines-of (get @state :log))
                  :input "> " :keys chat-keys :label "Claude chat" :show false)
     (set-word-wrap chat-buffer true))
+  (set-header chat-buffer [[["Claude" :function] "  " [(setting :model) :comment]]
+                           [["RET" :keyword] " send  " ["C-c C-k" :keyword] " stop  "
+                            ["C-c C-n" :keyword] " new  " ["C-c C-l" :keyword] " past chats"]])
   (show-side-window chat-buffer :edge :right :width (setting :width) :select true))
 
 (on-buffer-close :claude-review review/closed!)
@@ -236,6 +240,42 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
     (close-buffer chats-buffer)
     (open-chat!)
     (show!)))
+
+(defonce told (atom #{}))
+
+(def (tell-once! text)
+  (unless (contains? @told text)
+    (swap! told conj text)
+    (message text)))
+
+(def (suggest-quietly!)
+  (try (suggest/suggest!)
+    (catch error e (tell-once! (str "Claude couldn't suggest: " e.message)))))
+
+(def (wants-suggestion?)
+  (and (setting :suggestions)
+       (just-typed?)
+       (some? (buffer-file))
+       (some? (buffer-language))
+       (not (contains? (set (setting :quiet-modes)) (buffer-language)))
+       (nil? (region))
+       (not (completion-shown?))
+       (not (prompting?))))
+
+(def (watch-typing!)
+  (on-idle :claude-suggest (/ (setting :suggestion-delay) 1000.0)
+           (fn []
+             (when (wants-suggestion?)
+               (if (api/ready-key)
+                 (suggest-quietly!)
+                 (tell-once! "Claude's suggestions wait for your API key; M-x claude-suggest asks for it"))))))
+
+(watch-typing!)
+(on-settings-change :claude watch-typing!)
+
+(defcommand claude-suggest "Ask Claude for a suggestion at point"
+  (api/key!)
+  (suggest-quietly!))
 
 (defcommand claude-delete-chat "Delete the chat at point"
   (when-let [item (line-item)]

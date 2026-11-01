@@ -114,7 +114,9 @@
       (in-main (fn []
                  (let [made (open-buffer review-buffer lines :keys review-keys :label "Claude review" :line 2)]
                    (swap! current assoc :handle made))
-                 (set-header review-buffer [[["y accepts the hunk at point, n rejects it, a and r do all of them, C-c C-c makes the accepted edits" :comment]]]))))))
+                 (set-header review-buffer [[["y" :keyword] " accept  " ["n" :keyword] " reject  "
+                                             ["a" :keyword] " or " ["r" :keyword] " all  "
+                                             ["C-c C-c" :keyword] " make the accepted edits"]]))))))
 
 (def (decide! decision)
   "Accepts or rejects the hunk at point in the review."

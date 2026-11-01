@@ -1,7 +1,7 @@
 (module
   (import (ox string) (ox json) (ox http) (ox process) (ox path) (ox file)
           (vault store :as vault))
-  (export version key! set-key! body headers fresh apply-event echoed failure stream!))
+  (export version key! ready-key set-key! body headers fresh apply-event echoed failure stream!))
 
 (def version "2026-10-21")
 
@@ -43,6 +43,13 @@
       (when-let [found (or (from-vault) (process/env "ANTHROPIC_API_KEY"))]
         (reset! known-key found))
       (set-key!)))
+
+(def (ready-key)
+  "The API key when it can be had without asking anything: known already, in the unlocked vault or in ANTHROPIC_API_KEY."
+  (or @known-key
+      (when-let [found (or (when (not (vault/locked?)) (get (vault/find-entry (setting :key-entry)) :password))
+                           (process/env "ANTHROPIC_API_KEY"))]
+        (reset! known-key found))))
 
 (def (haiku? model)
   (string/includes? model "haiku"))
@@ -157,7 +164,8 @@
   reply so far after each event, and on-open with the response first so that closing its :lines
   stops it. Returns the reply as fresh and apply-event build it."
   (let [url (str (string/trim-end (setting :api-url)) "/v1/messages")
-        response (http/open :post url :headers (headers (key!) asked.model) :body (json/write (body asked)))]
+        response (http/open :post url :headers (headers (or asked.key (key!)) asked.model)
+                            :body (json/write (body (dissoc asked :key))))]
     (on-open response)
     (if (not= response.status 200)
       (raise (error (failure response.status (string/join "\n" (rest-of response.lines)))))

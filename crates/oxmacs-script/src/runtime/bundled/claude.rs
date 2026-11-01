@@ -89,10 +89,11 @@ fn streamed(events: &[Value]) -> String {
         "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
     );
     for event in events {
-        reply.push_str(&format!(
-            "event: {}\ndata: {event}\n\n",
-            event["type"].as_str().unwrap()
-        ));
+        reply.push_str("event: ");
+        reply.push_str(event["type"].as_str().unwrap());
+        reply.push_str("\ndata: ");
+        reply.push_str(&event.to_string());
+        reply.push_str("\n\n");
     }
     reply
 }
@@ -352,6 +353,50 @@ fn edits_are_reviewed_and_only_the_accepted_ones_made() {
     assert_eq!(
         second["messages"][2]["content"][0]["content"],
         "Made edits 1. The person rejected edits 2. They are in the buffer, not yet saved."
+    );
+}
+
+#[test]
+fn pausing_in_code_shows_a_suggestion_that_tab_takes() {
+    let fake = Fake::start(vec![said("2)")]);
+    let (home, mut editor, mut ox) = started(&fake, "");
+    let file = home.path().join("numbers.ox");
+    fs::write(&file, "(def x ").unwrap();
+    editor.open_file(&file);
+    ox.eval(
+        &mut editor,
+        "(module (import (vault store :as v))) (spawn (v/unlock))",
+    )
+    .unwrap();
+    until(
+        &mut editor,
+        &mut ox,
+        "the vault's password prompt",
+        |editor| editor.minibuffer().is_some(),
+    );
+    type_in(&mut editor, &mut ox, "master");
+    keys(&mut editor, &mut ox, "RET M-> 4");
+
+    let since = Instant::now();
+    ox.idle(&mut editor, since, since + Duration::from_secs(2));
+    until(&mut editor, &mut ox, "the suggestion", |editor| {
+        editor.suggestion().is_some()
+    });
+
+    assert_eq!(editor.suggestion(), Some("2)"));
+    keys(&mut editor, &mut ox, "TAB");
+    assert_eq!(editor.buffer().contents(), "(def x 42)");
+    let (head, asked) = fake.request(0);
+    assert!(!head.contains("anthropic-beta"), "{head}");
+    assert_eq!(asked["model"], "claude-haiku-5-5");
+    assert_eq!(asked["thinking"], json!({"type": "disabled"}));
+    assert_eq!(asked["output_config"], json!({"effort": "low"}));
+    assert!(asked.get("fallbacks").is_none());
+    assert!(asked.get("tools").is_none());
+    let code = asked["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        code.ends_with("(Ox)\n\n<code>\n(def x 4<cursor/>\n</code>"),
+        "{code}"
     );
 }
 

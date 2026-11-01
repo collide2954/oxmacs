@@ -36,7 +36,7 @@
 
 (def (summary input)
   "A short note of what a tool was asked to do."
-  (let [named (some (fn [key] (get input key)) [:path :buffer :name :pattern :folder :code])]
+  (let [named (some (fn [key] (get input key)) [:path :buffer :target :name :pattern :filter :code])]
     (if named
       (first-line (str named))
       (string/truncate (json/write input) 80))))

@@ -48,7 +48,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `bellow` | 0.1.0 | opt-in | Make music in Ox: songs that loop while you change them, and a workbench of sliders for their controls |
 | `c` | 0.1.1 | opt-in | C with highlighting, indentation and the clangd language server |
 | `calendar` | 0.2.9 | opt-in | Calendars in .ics files, with CalDAV sync, reminders and invitations |
-| `claude` | 0.1.0 | opt-in | Claude beside your code: a chat that can read and drive the editor, questions about a region, and edits reviewed as diffs |
+| `claude` | 0.1.0 | opt-in | Claude beside your code: a chat that can read and drive the editor, questions about a region, edits reviewed as diffs, and suggestions as you type |
 | `cpp` | 0.1.1 | opt-in | C++ with highlighting, indentation and the clangd language server |
 | `customize` | 0.1.6 | on | Change the editor's and plugins' settings in a form |
 | `dired` | 0.3.4 | on | List directories and manage their files |

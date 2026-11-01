@@ -63,6 +63,10 @@ const CLAUDE: Bundle = Bundle {
         ),
         ("chats.ox", include_str!("../../../plugins/claude/chats.ox")),
         ("where.ox", include_str!("../../../plugins/claude/where.ox")),
+        (
+            "suggest.ox",
+            include_str!("../../../plugins/claude/suggest.ox"),
+        ),
     ],
 };
 
