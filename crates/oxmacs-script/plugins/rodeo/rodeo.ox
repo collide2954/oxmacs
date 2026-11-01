@@ -71,5 +71,5 @@
       (do (file/write path starter)
         (open-file path)))))
 
-(test "the starter game reads as Ox"
+(test "the starter game defines tick"
   (expect (string/includes? starter "(def (tick)")))
