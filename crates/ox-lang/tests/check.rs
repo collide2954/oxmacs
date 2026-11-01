@@ -232,7 +232,7 @@ fn undefined_names_are_errors_that_suggest_a_close_name() {
 }
 
 #[test]
-fn escaped_regex_patterns_and_old_holes_are_pointed_out() {
+fn escaped_regex_patterns_are_pointed_out_and_braces_in_plain_strings_are_text() {
     let source = r#"(module (import (ox regex) (ox regex :as re :only [find-all])))
 (regex/find "2026" "^(\\d{4})$")
 (re/find-all "aa" "a+")
@@ -258,11 +258,6 @@ fn escaped_regex_patterns_and_old_holes_are_pointed_out() {
                 Severity::Warning,
                 r#""\\s+""#.to_owned(),
                 pattern.to_owned()
-            ),
-            (
-                Severity::Warning,
-                r#""Hi {x}, {(inc x)}""#.to_owned(),
-                r#"{x} was a hole before Ox 0.15; write $"…" to keep it one"#.to_owned()
             ),
         ]
     );
