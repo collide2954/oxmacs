@@ -164,14 +164,13 @@
                             (apply max (count (or (get table.names column) ""))
                                    (count (or (get table.types column) ""))
                                    (map (fn [row] (count (or (get row (+ column 1)) ""))) table.cells))))
-        shown ((fn fit [column used found]
-                 (if (>= column (count table.names))
-                   found
-                   (let [columns (column-width column)]
-                     (if (and (not (empty? found)) (> (+ used gap columns) width))
-                       found
-                       (fit (+ column 1) (+ used gap columns) (conj found [column columns (+ used gap)]))))))
-               first-column label-width [])
+        shown (loop [column first-column used label-width found []]
+                (if (>= column (count table.names))
+                  found
+                  (let [columns (column-width column)]
+                    (if (and (not (empty? found)) (> (+ used gap columns) width))
+                      found
+                      (again (+ column 1) (+ used gap columns) (conj found [column columns (+ used gap)]))))))
         numeric (fn [column] (contains? #{"<dbl>" "<int>"} (get table.types column)))
         render (fn [label cell]
                  (string/trim-end

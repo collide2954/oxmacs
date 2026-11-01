@@ -90,8 +90,8 @@
         blank? (fn [line] (string/blank? (nth lines line)))
         start (find (fn [line] (not (blank? line))) (range here total))]
     (when start
-      (let [first-line ((fn up [line] (if (and (> line 0) (not (blank? (- line 1)))) (up (- line 1)) line)) start)
-            last-line ((fn down [line] (if (and (< (+ line 1) total) (not (blank? (+ line 1)))) (down (+ line 1)) line)) start)]
+      (let [first-line (loop [line start] (if (and (> line 0) (not (blank? (- line 1)))) (again (- line 1)) line))
+            last-line (loop [line start] (if (and (< (+ line 1) total) (not (blank? (+ line 1)))) (again (+ line 1)) line))]
         [(nth starts first-line) (+ (nth starts last-line) (count (nth lines last-line)))]))))
 
 (defcommand run-r "Start an R console beside the script"

@@ -216,13 +216,12 @@
   (string/trim-end (first (string/split text "#" 2))))
 
 (def (statement-end lines from end)
-  ((fn grow [to]
-     (let [text (string/join "\n" (map (fn [at] (nth lines at)) (range from (+ to 1))))]
-       (if (and (< (+ to 1) end)
-                (or (> (depth text) 0) (regex/matches? continued (uncommented (nth lines to)))))
-         (grow (+ to 1))
-         to)))
-   from))
+  (loop [to from]
+    (let [text (string/join "\n" (map (fn [at] (nth lines at)) (range from (+ to 1))))]
+      (if (and (< (+ to 1) end)
+               (or (> (depth text) 0) (regex/matches? continued (uncommented (nth lines to)))))
+        (again (+ to 1))
+        to))))
 
 (defcommand r-markdown-send-statement "Send the R statement or selection to R and step"
   (if-let [[start end] (region)]

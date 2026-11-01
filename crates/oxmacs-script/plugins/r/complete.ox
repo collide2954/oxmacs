@@ -57,21 +57,20 @@
 (def (call-name text)
   (let [characters (string/chars text)
         total (count characters)
-        opened ((fn scan [at open quote escaped comment]
-                  (if (>= at total)
-                    (when (and (not quote) (not comment)) open)
-                    (let [character (nth characters at)]
-                      (cond [comment (scan (+ at 1) open quote false (not= character \newline))]
-                        [quote (cond [escaped (scan (+ at 1) open quote false false)]
-                                 [(= character \\) (scan (+ at 1) open quote true false)]
-                                 [(= character quote) (scan (+ at 1) open nil false false)]
-                                 [else (scan (+ at 1) open quote false false)])]
-                        [(contains? #{\" \' \`} character) (scan (+ at 1) open character false false)]
-                        [(= character \#) (scan (+ at 1) open nil false true)]
-                        [(contains? #{\( \[ \{} character) (scan (+ at 1) (conj open [character at]) nil false false)]
-                        [(contains? #{\) \] \}} character) (scan (+ at 1) (if (empty? open) open (pop open)) nil false false)]
-                        [else (scan (+ at 1) open nil false false)]))))
-                0 [] nil false false)]
+        opened (loop [at 0 open [] quote nil escaped false comment false]
+                 (if (>= at total)
+                   (when (and (not quote) (not comment)) open)
+                   (let [character (nth characters at)]
+                     (cond [comment (again (+ at 1) open quote false (not= character \newline))]
+                       [quote (cond [escaped (again (+ at 1) open quote false false)]
+                                [(= character \\) (again (+ at 1) open quote true false)]
+                                [(= character quote) (again (+ at 1) open nil false false)]
+                                [else (again (+ at 1) open quote false false)])]
+                       [(contains? #{\" \' \`} character) (again (+ at 1) open character false false)]
+                       [(= character \#) (again (+ at 1) open nil false true)]
+                       [(contains? #{\( \[ \{} character) (again (+ at 1) (conj open [character at]) nil false false)]
+                       [(contains? #{\) \] \}} character) (again (+ at 1) (if (empty? open) open (pop open)) nil false false)]
+                       [else (again (+ at 1) open nil false false)]))))]
     (when-let [[bracket at] (when (not (empty? opened)) (last opened))]
       (when (= bracket \()
         (let [before (string/trim-end (string/slice text 0 at))

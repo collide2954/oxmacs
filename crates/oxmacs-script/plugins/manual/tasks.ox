@@ -67,7 +67,7 @@ These calls pause their task until the answer comes, so their results are ready 
 
 ```text
 (let [git (process/start "git" ["log" "--oneline"])]
-  (spawn ((fn show [] (when-let [line (receive git.lines)] (message line) (show)))))
+  (spawn (loop [] (when-let [line (receive git.lines)] (message line) (again))))
   (await git.exit))
 ```
 
@@ -79,7 +79,7 @@ A generator yields values one at a time, running only as far as it is read.
 
 ```
 (def (count-up n)
-  (gen ((fn step [i] (when (< i n) (yield i) (step (+ i 1)))) 0)))
+  (gen (loop [i 0] (when (< i n) (yield i) (again (+ i 1))))))
 (vec (count-up 4))
 (take 3 (iterate inc 10))
 ```

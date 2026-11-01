@@ -8,17 +8,16 @@
   "The text of a line of R's help as [text struck] runs, where struck text was overstruck to show it as a heading."
   (let [chars (string/chars line)
         total (count chars)]
-    ((fn step [at found]
-       (if (>= at total)
-         found
-         (let [struck (and (< (+ at 2) total) (= (nth chars (+ at 1)) backspace))
-               shown (if struck (nth chars (+ at 2)) (nth chars at))
-               next (if struck (+ at 3) (+ at 1))]
-           (cond [(= shown backspace) (step next found)]
-             [(and (not (empty? found)) (= (second (last found)) struck))
-              (step next (conj (pop found) [(str (first (last found)) shown) struck]))]
-             [else (step next (conj found [(str shown) struck]))]))))
-     0 [])))
+    (loop [at 0 found []]
+      (if (>= at total)
+        found
+        (let [struck (and (< (+ at 2) total) (= (nth chars (+ at 1)) backspace))
+              shown (if struck (nth chars (+ at 2)) (nth chars at))
+              next (if struck (+ at 3) (+ at 1))]
+          (cond [(= shown backspace) (again next found)]
+            [(and (not (empty? found)) (= (second (last found)) struck))
+             (again next (conj (pop found) [(str (first (last found)) shown) struck]))]
+            [else (again next (conj found [(str shown) struck]))]))))))
 
 (def (plain parts) (apply str (map first parts)))
 
@@ -76,8 +75,8 @@
   (when (and (contains? (set page.examples) line) (not (string/blank? (nth page.texts line))))
     (let [inside (set page.examples)
           blank? (fn [at] (or (not (contains? inside at)) (string/blank? (nth page.texts at))))
-          first-line ((fn up [at] (if (blank? (- at 1)) at (up (- at 1)))) line)
-          last-line ((fn down [at] (if (blank? (+ at 1)) at (down (+ at 1)))) line)]
+          first-line (loop [at line] (if (blank? (- at 1)) at (again (- at 1))))
+          last-line (loop [at line] (if (blank? (+ at 1)) at (again (+ at 1))))]
       (dedented (map (fn [at] (nth page.texts at)) (range first-line (+ last-line 1)))))))
 
 (def (examples page)

@@ -67,18 +67,17 @@
      (* gap (max 0 (- (count shown) 1)))))
 
 (def (fit widths room)
-  ((fn step [shown details left]
-     (if (or (<= (span shown widths details) room) (empty? left))
-       [shown details]
-       (let [cut (first left)
-             kept (vec (remove (fn [column] (= column cut)) shown))]
-         (if (= cut :details)
-           (let [spare (- room (span kept widths 0) gap)]
-             (if (>= spare least-details)
-               [(conj kept :details) spare]
-               (step kept details (rest left))))
-           (step kept details (rest left))))))
-   columns (get widths :details) dropped))
+  (loop [shown columns details (get widths :details) left dropped]
+    (if (or (<= (span shown widths details) room) (empty? left))
+      [shown details]
+      (let [cut (first left)
+            kept (vec (remove (fn [column] (= column cut)) shown))]
+        (if (= cut :details)
+          (let [spare (- room (span kept widths 0) gap)]
+            (if (>= spare least-details)
+              [(conj kept :details) spare]
+              (again kept details (rest left))))
+          (again kept details (rest left)))))))
 
 (def (sort-key p now sorting)
   (cond [(= sorting :time) (- (or p.ended now) p.started)]

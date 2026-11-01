@@ -30,16 +30,15 @@
 (def (parse text)
   (let [lines (string/split text "\n")
         n (count lines)]
-    ((fn walk [i done current]
-       (if (>= i n)
-         (if current (conj done current) done)
-         (let [line (nth lines i)]
-           (cond
-             [(string/starts-with? line "@@ ")
-              (walk (+ i 1) (if current (conj done current) done) (hunk-start line))]
-             [(nil? current) (walk (+ i 1) done current)]
-             [else (walk (+ i 1) done (add-line current line))]))))
-     0 [] nil)))
+    (loop [i 0 done [] current nil]
+      (if (>= i n)
+        (if current (conj done current) done)
+        (let [line (nth lines i)]
+          (cond
+            [(string/starts-with? line "@@ ")
+             (again (+ i 1) (if current (conj done current) done) (hunk-start line))]
+            [(nil? current) (again (+ i 1) done current)]
+            [else (again (+ i 1) done (add-line current line))]))))))
 
 (def (whole-file text)
   (let [parts (string/split text "\n")
@@ -61,25 +60,24 @@
   (let [lines hunk.lines
         n (count lines)
         chosen (fn [i] (or (nil? selected) (some (fn [picked] (= picked i)) selected)))
-        body ((fn walk [i body old new emitted]
-                (if (>= i n)
-                  [body old new]
-                  (let [line (nth lines i)
-                        kind line.kind
-                        picked (chosen i)]
-                    (cond
-                      [(= kind :note)
-                       (walk (+ i 1) (if emitted (conj body line.text) body) old new emitted)]
-                      [(= kind :context)
-                       (walk (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
-                      [(and (= kind :added) picked)
-                       (walk (+ i 1) (conj body $"+{line.text}") old (+ new 1) true)]
-                      [(and (= kind :removed) picked)
-                       (walk (+ i 1) (conj body $"-{line.text}") (+ old 1) new true)]
-                      [(or (and (= kind :added) reverse) (and (= kind :removed) (not reverse)))
-                       (walk (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
-                      [else (walk (+ i 1) body old new false)]))))
-              0 [] 0 0 false)]
+        body (loop [i 0 body [] old 0 new 0 emitted false]
+               (if (>= i n)
+                 [body old new]
+                 (let [line (nth lines i)
+                       kind line.kind
+                       picked (chosen i)]
+                   (cond
+                     [(= kind :note)
+                      (again (+ i 1) (if emitted (conj body line.text) body) old new emitted)]
+                     [(= kind :context)
+                      (again (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
+                     [(and (= kind :added) picked)
+                      (again (+ i 1) (conj body $"+{line.text}") old (+ new 1) true)]
+                     [(and (= kind :removed) picked)
+                      (again (+ i 1) (conj body $"-{line.text}") (+ old 1) new true)]
+                     [(or (and (= kind :added) reverse) (and (= kind :removed) (not reverse)))
+                      (again (+ i 1) (conj body $" {line.text}") (+ old 1) (+ new 1) true)]
+                     [else (again (+ i 1) body old new false)]))))]
     (str $"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n"
          $"@@ -{hunk.old-start},{(nth body 1)} +{hunk.new-start},{(nth body 2)} @@\n"
          (string/join "\n" (nth body 0)) "\n")))
@@ -96,56 +94,51 @@
 (def (tokens text)
   (let [chars (string/chars text)
         n (count chars)]
-    ((fn walk [i start class out]
-       (if (>= i n)
-         (if (< start n) (conj out [start n]) out)
-         (let [found (class-of (nth chars i))]
-           (if (and (> i start) (or (not (= found class)) (= found :other)))
-             (walk (+ i 1) i found (conj out [start i]))
-             (walk (+ i 1) start (if (= i start) found class) out)))))
-     0 0 nil [])))
+    (loop [i 0 start 0 class nil out []]
+      (if (>= i n)
+        (if (< start n) (conj out [start n]) out)
+        (let [found (class-of (nth chars i))]
+          (if (and (> i start) (or (not (= found class)) (= found :other)))
+            (again (+ i 1) i found (conj out [start i]))
+            (again (+ i 1) start (if (= i start) found class) out)))))))
 
 (def (lcs-row item others below)
-  ((fn cols [j right acc]
-     (if (< j 0)
-       (vec acc)
-       (let [value (if (= item (nth others j))
-                     (+ 1 (nth below (+ j 1)))
-                     (max (nth below j) right))]
-         (cols (- j 1) value (cons value acc)))))
-   (- (count others) 1) 0 (list 0)))
+  (loop [j (- (count others) 1) right 0 acc (list 0)]
+    (if (< j 0)
+      (vec acc)
+      (let [value (if (= item (nth others j))
+                    (+ 1 (nth below (+ j 1)))
+                    (max (nth below j) right))]
+        (again (- j 1) value (cons value acc))))))
 
 (def (lcs-table items others)
   (let [zeros (vec (map (fn [_] 0) (range (+ (count others) 1))))]
-    ((fn rows [i acc]
-       (if (< i 0)
-         (vec acc)
-         (rows (- i 1) (cons (lcs-row (nth items i) others (first acc)) acc))))
-     (- (count items) 1) (list zeros))))
+    (loop [i (- (count items) 1) acc (list zeros)]
+      (if (< i 0)
+        (vec acc)
+        (again (- i 1) (cons (lcs-row (nth items i) others (first acc)) acc))))))
 
 (def (matches items others)
   (let [table (lcs-table items others)
         n (count items)
         m (count others)]
-    ((fn walk [i j left right]
-       (cond
-         [(or (>= i n) (>= j m)) [left right]]
-         [(= (nth items i) (nth others j)) (walk (+ i 1) (+ j 1) (assoc left i true) (assoc right j true))]
-         [(>= (nth (nth table (+ i 1)) j) (nth (nth table i) (+ j 1))) (walk (+ i 1) j left right)]
-         [else (walk i (+ j 1) left right)]))
-     0 0 {} {})))
+    (loop [i 0 j 0 left {} right {}]
+      (cond
+        [(or (>= i n) (>= j m)) [left right]]
+        [(= (nth items i) (nth others j)) (again (+ i 1) (+ j 1) (assoc left i true) (assoc right j true))]
+        [(>= (nth (nth table (+ i 1)) j) (nth (nth table i) (+ j 1))) (again (+ i 1) j left right)]
+        [else (again i (+ j 1) left right)]))))
 
 (def (changed spans texts matched)
-  ((fn walk [i current out]
-     (if (>= i (count spans))
-       (if current (conj out current) out)
-       (let [span (nth spans i)]
-         (cond
-           [(get matched i) (walk (+ i 1) nil (if current (conj out current) out))]
-           [(string/blank? (nth texts i)) (walk (+ i 1) current out)]
-           [current (walk (+ i 1) [(nth current 0) (nth span 1)] out)]
-           [else (walk (+ i 1) span out)]))))
-   0 nil []))
+  (loop [i 0 current nil out []]
+    (if (>= i (count spans))
+      (if current (conj out current) out)
+      (let [span (nth spans i)]
+        (cond
+          [(get matched i) (again (+ i 1) nil (if current (conj out current) out))]
+          [(string/blank? (nth texts i)) (again (+ i 1) current out)]
+          [current (again (+ i 1) [(nth current 0) (nth span 1)] out)]
+          [else (again (+ i 1) span out)])))))
 
 (def word-limit 10000)
 

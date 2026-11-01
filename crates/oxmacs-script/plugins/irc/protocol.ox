@@ -147,23 +147,23 @@
   "text with its mIRC formatting codes turned into [text face] segments."
   (let [chars (letters text)
         total (count chars)
-        step (fn step [at state current out]
-               (if (>= at total)
-                 (conj out [current (face-of state)])
-                 (let [c (get chars at)
-                       code (get codes c)]
-                   (cond [(= c "\u{3}")
-                          (let [[color after] (color-at chars (inc at))]
-                            (step after (assoc state :color color) "" (conj out [current (face-of state)])))]
-                     [(= code :reset) (step (inc at) {} "" (conj out [current (face-of state)]))]
-                     [code (step (inc at) (update state code not) "" (conj out [current (face-of state)]))]
-                     [(= c "\u{4}") (step (+ at 7) state current out)]
-                     [else (step (inc at) state (str current c) out)]))))]
+        parts (loop [at 0 state {} current "" out []]
+                (if (>= at total)
+                  (conj out [current (face-of state)])
+                  (let [c (get chars at)
+                        code (get codes c)]
+                    (cond [(= c "\u{3}")
+                           (let [[color after] (color-at chars (inc at))]
+                             (again after (assoc state :color color) "" (conj out [current (face-of state)])))]
+                      [(= code :reset) (again (inc at) {} "" (conj out [current (face-of state)]))]
+                      [code (again (inc at) (update state code not) "" (conj out [current (face-of state)]))]
+                      [(= c "\u{4}") (again (+ at 7) state current out)]
+                      [else (again (inc at) state (str current c) out)]))))]
     (vec (keep (fn [[shown face]]
                  (cond [(= shown "") nil]
                    [(nil? face) shown]
                    [else [shown face]]))
-               (step 0 {} "" [])))))
+               parts))))
 
 (def (plain-text text)
   "text without its mIRC formatting codes."

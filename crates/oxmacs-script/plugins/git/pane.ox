@@ -30,17 +30,16 @@
 (def (pairs hunk)
   (let [lines hunk.lines
         n (count lines)]
-    ((fn walk [i found removed added]
-       (if (>= i n)
-         (flush found removed added)
-         (let [kind (get (nth lines i) :kind)]
-           (cond
-             [(and (= kind :removed) (empty? added)) (walk (+ i 1) found (conj removed i) added)]
-             [(= kind :removed) (walk (+ i 1) (flush found removed added) [i] [])]
-             [(= kind :added) (walk (+ i 1) found removed (conj added i))]
-             [(= kind :context) (walk (+ i 1) (conj (flush found removed added) [i i]) [] [])]
-             [else (walk (+ i 1) found removed added)]))))
-     0 [] [] [])))
+    (loop [i 0 found [] removed [] added []]
+      (if (>= i n)
+        (flush found removed added)
+        (let [kind (get (nth lines i) :kind)]
+          (cond
+            [(and (= kind :removed) (empty? added)) (again (+ i 1) found (conj removed i) added)]
+            [(= kind :removed) (again (+ i 1) (flush found removed added) [i] [])]
+            [(= kind :added) (again (+ i 1) found removed (conj added i))]
+            [(= kind :context) (again (+ i 1) (conj (flush found removed added) [i i]) [] [])]
+            [else (again (+ i 1) found removed added)]))))))
 
 (def (word-marks hunk)
   (reduce (fn [marks pair]
@@ -56,45 +55,43 @@
 
 (def (marked text ranges face)
   (let [n (string/length text)]
-    ((fn walk [at i out]
-       (if (>= i (count ranges))
-         (if (< at n) (conj out (string/slice text at n)) out)
-         (let [range (nth ranges i)
-               start (min n (nth range 0))
-               end (min n (nth range 1))
-               out (if (< at start) (conj out (string/slice text at start)) out)]
-           (walk (max at end) (+ i 1)
-                 (if (< start end) (conj out [(string/slice text start end) face :pill]) out)))))
-     0 0 [])))
+    (loop [at 0 i 0 out []]
+      (if (>= i (count ranges))
+        (if (< at n) (conj out (string/slice text at n)) out)
+        (let [range (nth ranges i)
+              start (min n (nth range 0))
+              end (min n (nth range 1))
+              out (if (< at start) (conj out (string/slice text at start)) out)]
+          (again (max at end) (+ i 1)
+                 (if (< start end) (conj out [(string/slice text start end) face :pill]) out)))))))
 
 (def (unified out file index hunk width)
   (let [marks (word-marks hunk)
         lines hunk.lines
         n (count lines)]
-    ((fn walk [j old new out]
-       (if (>= j n)
-         out
-         (let [line (nth lines j)
-               kind line.kind
-               text (diff/shown line.text)
-               left (when (or (= kind :context) (= kind :removed)) old)
-               right (when (or (= kind :context) (= kind :added)) new)
-               gutter [[(numbered left width) :comment] " " [(numbered right width) :comment] " "]
-               body (cond
-                      [(= kind :note) [[text :comment]]]
-                      [(= kind :removed) (vec (concat [["-" :error]] (marked text (get marks j []) :error)))]
-                      [(= kind :added) (vec (concat [["+" :success]] (marked text (get marks j []) :success)))]
-                      [else [" " text]])
-               shown (vec (concat gutter body))]
-           (walk (+ j 1)
+    (loop [j 0 old hunk.old-start new hunk.new-start out out]
+      (if (>= j n)
+        out
+        (let [line (nth lines j)
+              kind line.kind
+              text (diff/shown line.text)
+              left (when (or (= kind :context) (= kind :removed)) old)
+              right (when (or (= kind :context) (= kind :added)) new)
+              gutter [[(numbered left width) :comment] " " [(numbered right width) :comment] " "]
+              body (cond
+                     [(= kind :note) [[text :comment]]]
+                     [(= kind :removed) (vec (concat [["-" :error]] (marked text (get marks j []) :error)))]
+                     [(= kind :added) (vec (concat [["+" :success]] (marked text (get marks j []) :success)))]
+                     [else [" " text]])
+              shown (vec (concat gutter body))]
+          (again (+ j 1)
                  (if (nil? left) old (+ old 1))
                  (if (nil? right) new (+ new 1))
                  (add out {kind: :line section: file.section path: file.path hunk: index at: j}
                       (cond
                         [(= kind :removed) {line: shown background: :removed}]
                         [(= kind :added) {line: shown background: :added}]
-                        [else shown]))))))
-     0 hunk.old-start hunk.new-start out)))
+                        [else shown]))))))))
 
 (def (clip text width)
   (if (<= (string/length text) width)

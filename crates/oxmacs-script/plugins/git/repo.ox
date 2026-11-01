@@ -83,40 +83,38 @@
 (def (parse-status text)
   (let [items (records text)
         n (count items)]
-    ((fn walk [i found]
-       (if (>= i n)
-         found
-         (let [record (nth items i)
-               tag (string/slice record 0 1)]
-           (cond
-             [(= tag "#") (walk (+ i 1) (header found record))]
-             [(= tag "1") (walk (+ i 1) (changed found (string/split record " " 9) nil))]
-             [(= tag "2") (walk (+ i 2) (changed found (string/split record " " 10) (nth items (+ i 1))))]
-             [(= tag "u")
-              (walk (+ i 1) (update found :unstaged conj
+    (loop [i 0 found {branch: nil born: true upstream: nil untracked: [] unstaged: [] staged: []}]
+      (if (>= i n)
+        found
+        (let [record (nth items i)
+              tag (string/slice record 0 1)]
+          (cond
+            [(= tag "#") (again (+ i 1) (header found record))]
+            [(= tag "1") (again (+ i 1) (changed found (string/split record " " 9) nil))]
+            [(= tag "2") (again (+ i 2) (changed found (string/split record " " 10) (nth items (+ i 1))))]
+            [(= tag "u")
+             (again (+ i 1) (update found :unstaged conj
                                     {path: (last (string/split record " " 11)) kind: :conflict from: nil}))]
-             [(= tag "?") (walk (+ i 1) (update found :untracked conj (string/slice record 2)))]
-             [else (walk (+ i 1) found)]))))
-     0 {branch: nil born: true upstream: nil untracked: [] unstaged: [] staged: []})))
+            [(= tag "?") (again (+ i 1) (update found :untracked conj (string/slice record 2)))]
+            [else (again (+ i 1) found)]))))))
 
 (def (parse-numstat section text)
   (let [items (string/split text "\0")
         n (count items)]
-    ((fn walk [i counts]
-       (if (>= i n)
-         counts
-         (let [parts (string/split (nth items i) "\t" 3)]
-           (if (< (count parts) 3)
-             (walk (+ i 1) counts)
-             (let [added (nth parts 0)
-                   counted (if (= added "-")
-                             :binary
-                             [(string/to-number added) (string/to-number (nth parts 1))])
-                   path (nth parts 2)]
-               (if (= path "")
-                 (walk (+ i 3) (assoc counts [section (nth items (+ i 2))] counted))
-                 (walk (+ i 1) (assoc counts [section path] counted))))))))
-     0 {})))
+    (loop [i 0 counts {}]
+      (if (>= i n)
+        counts
+        (let [parts (string/split (nth items i) "\t" 3)]
+          (if (< (count parts) 3)
+            (again (+ i 1) counts)
+            (let [added (nth parts 0)
+                  counted (if (= added "-")
+                            :binary
+                            [(string/to-number added) (string/to-number (nth parts 1))])
+                  path (nth parts 2)]
+              (if (= path "")
+                (again (+ i 3) (assoc counts [section (nth items (+ i 2))] counted))
+                (again (+ i 1) (assoc counts [section path] counted))))))))))
 
 (def (parse-stashes text)
   (map (fn [record]

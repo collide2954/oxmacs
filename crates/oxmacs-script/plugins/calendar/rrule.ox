@@ -97,23 +97,22 @@
             wanted (civil from event.zone)
             gap (- (time/day-number wanted) base)
             span (* spec.interval (get {"DAILY" 1 "WEEKLY" 7 "MONTHLY" 31 "YEARLY" 366} spec.freq 1))
-            first-k (if (or spec.count (<= gap 0)) 0 (max 0 (dec (// gap span))))
-            walk (fn walk [k made found]
-                   (if (or (>= k (+ first-k most)) (and spec.count (>= made spec.count)))
-                     found
-                     (let [days (filter (fn [days] (and (>= days base) (allowed? spec days))) (period spec base k))
-                           starts (map (fn [days] (at-civil (merge (time/date-of days) clock) event.zone)) days)
-                           step (fn [[made found stopped] start]
-                                  (cond [stopped [made found stopped]]
-                                    [(or (>= start limit) (and spec.count (>= made spec.count))) [made found true]]
-                                    [else [(inc made)
-                                           (if (and (overlaps start) (not (contains? excluded start)))
-                                             (conj found {start: start end: (+ start length)})
-                                             found)
-                                           false]]))
-                           [made found stopped] (reduce step [made found false] starts)]
-                       (if stopped found (walk (inc k) made found)))))]
-        (walk first-k 0 [])))))
+            first-k (if (or spec.count (<= gap 0)) 0 (max 0 (dec (// gap span))))]
+        (loop [k first-k made 0 found []]
+          (if (or (>= k (+ first-k most)) (and spec.count (>= made spec.count)))
+            found
+            (let [days (filter (fn [days] (and (>= days base) (allowed? spec days))) (period spec base k))
+                  starts (map (fn [days] (at-civil (merge (time/date-of days) clock) event.zone)) days)
+                  step (fn [[made found stopped] start]
+                         (cond [stopped [made found stopped]]
+                           [(or (>= start limit) (and spec.count (>= made spec.count))) [made found true]]
+                           [else [(inc made)
+                                  (if (and (overlaps start) (not (contains? excluded start)))
+                                    (conj found {start: start end: (+ start length)})
+                                    found)
+                                  false]]))
+                  [made found stopped] (reduce step [made found false] starts)]
+              (if stopped found (again (inc k) made found)))))))))
 
 (def sample-standup
   "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:standup@example.com\r\nDTSTART;TZID=Europe/Paris:20261019T090000\r\nDTEND;TZID=Europe/Paris:20261019T091500\r\nRRULE:FREQ=WEEKLY;BYDAY=MO,WE\r\nEXDATE;TZID=Europe/Paris:20261021T090000\r\nSUMMARY:Standup\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
