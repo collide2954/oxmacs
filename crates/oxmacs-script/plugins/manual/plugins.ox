@@ -115,7 +115,7 @@ pixi         0.1.2    opt-in   pixi projects as environments: programs started i
 processes    0.1.7    on       List the processes oxmacs runs, with their usage
 profiler     0.1.5    on       Find where the Ox code in oxmacs spends its time
 python       0.1.1    opt-in   Python with highlighting, indentation and the basedpyright, pyright or pylsp language server
-r            0.21.3   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
+r            0.21.4   opt-in   R consoles, plots, data and help in the style of ESS and RStudio
 remote       0.4.3    on       Browse and edit files on other machines over ssh, sftp and ftp
 rodeo        0.1.3    opt-in   Play 2D games written in Ox beside their code, and change them while they run
 rust         0.1.0    opt-in   Rust with highlighting, cargo builds and lints, and the rust-analyzer language server

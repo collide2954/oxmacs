@@ -434,6 +434,32 @@ fn r_layout_arranges_four_panes_and_r_layout_restore_brings_back_the_old_ones() 
 }
 
 #[test]
+fn r_layout_restore_keeps_points_keeps_the_first_layout_and_survives_a_closed_buffer() {
+    let mut r = script("x <- 1\ny <- 2\n", 9);
+    r.running();
+    r.press("C-x 3");
+    r.visit("notes");
+    r.press("C-x o");
+    assert_eq!(
+        r.eval("(window-layout)"),
+        r#"[:columns [0.25 "notes"] [0.25 "t"] [0.5 "*R:analysis*"]]"#
+    );
+
+    r.run("r-layout");
+    r.run("r-layout");
+    r.eval(r#"(close-buffer "notes")"#);
+    r.press("M->");
+    r.run("r-layout-restore");
+
+    assert_eq!(
+        r.eval("(window-layout)"),
+        r#"[:columns [0.25 "t"] [0.25 "t"] [0.5 "*R:analysis*"]]"#
+    );
+    assert_eq!(r.editor.buffer().name(), "t");
+    assert_eq!(r.editor.buffer().point(), 9);
+}
+
+#[test]
 fn r_layout_puts_help_in_the_corner_when_there_are_no_plots() {
     let mut r = script("x <- 1\n", 0);
     let job = r.running();

@@ -3,7 +3,7 @@
           (r plots)
           (r data)))
 
-(defonce saved (atom nil))
+(defonce stored (atom false))
 
 (def (script-for running)
   (let [scripts (filter session/script? (buffer-list))]
@@ -21,14 +21,15 @@
                        (when (buffer-live? "*R help*") "*R help*")
                        (plots/plots-buffer running))
             left (if script [:rows [0.6 script] [0.4 running]] running)]
-        (unless @saved (reset! saved (window-layout)))
+        (unless @stored
+          (store-windows :r-layout)
+          (reset! stored true))
         (arrange-windows [:columns [0.5 left] [0.5 [:rows [0.4 environment] [0.6 corner]]]]
                          :select (or script running))
         (data/ask-environment running)))))
 
 (defcommand r-layout-restore "Put the windows back as they were before r-layout"
-  (if-let [layout @saved]
-    (do (reset! saved nil)
-      (try (arrange-windows layout)
-        (catch error e (message $"Cannot restore the layout: {e.message}"))))
+  (if @stored
+    (do (reset! stored false)
+      (recall-windows :r-layout))
     (message "No layout to restore")))

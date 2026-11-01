@@ -4,8 +4,18 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Removed
+
+- `ox check` no longer warns about plain strings holding what looks like a hole from Ox 0.14, such as `"Hi {name}"`; `ox migrate --strings` still rewrites files written for 0.14.
+
 ### Fixed
 
+- `json/read` keeps the last value of a key an object repeats, as other JSON readers do, instead of failing with a message about map literals.
+- `image/color` and every image function that takes a color know the theme's faces, such as `:keyword` and `:error`, as their documentation says, instead of refusing every face name.
+- `r-layout-restore` brings the windows back with their points and scrolling, even when one of their buffers was closed since, and running `r-layout` twice keeps the windows from before the first.
+- A view that shows a widget built once, outside its drawing function, keeps that widget's buttons working after the view redraws.
+- A panic Ox recovers from is no longer written as a crash report or printed by `ox`, and background work that panics says why instead of "The work stopped unexpectedly".
+- A tab drag let go outside the tab bar is forgotten, so letting go over a tab later no longer moves the tab picked up before.
 - The explorer's rename, copy, new file and new folder ask for a path as `C-x C-f` does, so an absolute path or one starting with `~` goes where it says instead of into a folder of that name under the project.
 - Zen no longer rearranges your windows: while it hides the chrome only the selected window is drawn, and the others come back as they were, so leaving zen in another tab no longer replaces that tab's windows.
 - A rodeo game whose first load failed starts once you save the fix or resume it, instead of saying it reloaded and showing nothing.
