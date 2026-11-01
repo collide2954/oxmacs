@@ -152,6 +152,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A large `game-speed` no longer freezes or crashes the editor: game speed stays between 0 and 4, and a frame runs at most 32 ticks, dropping game time beyond that instead of falling ever further behind.
 - `regex/find-all` counts each match's character offsets on from the last one, instead of from the start of the text every time, so finding the matches in a long text no longer slows down with the square of its length.
 - A map of keyword parameters with a name and no default, as in `(def (pos {name}) …)`, or with a bare name for a default, as in `{name age}`, is an error saying what such a map means and how to take a map argument apart, instead of dropping the name or reading `age` as a default. `ox check` reports it too.
 - `console-start` takes regexes in `:prompts`, `:errors` and `:watch` instead of turning them into the text `#<regex>`, which never matched.

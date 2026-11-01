@@ -1,6 +1,9 @@
 use std::time::Duration;
 
 const LONGEST_FRAME: Duration = Duration::from_millis(250);
+const MOST_TICKS: u32 = 32;
+
+pub const MAX_SCALE: f64 = 4.0;
 
 #[derive(Clone, Debug)]
 pub struct Clock {
@@ -67,7 +70,7 @@ impl Clock {
 
     pub fn set_scale(&mut self, scale: f64) {
         self.scale = if scale.is_finite() {
-            scale.max(0.0)
+            scale.clamp(0.0, MAX_SCALE)
         } else {
             1.0
         };
@@ -95,12 +98,11 @@ impl Clock {
             std::mem::take(&mut self.queued)
         } else {
             self.accumulated += elapsed.min(LONGEST_FRAME).mul_f64(self.scale);
-            let mut ran = 0;
-            while self.accumulated >= self.step {
-                self.accumulated -= self.step;
-                ran += 1;
-            }
-            ran
+            let step = self.step.as_nanos().max(1);
+            let due = self.accumulated.as_nanos() / step;
+            let left = self.accumulated.as_nanos() % step;
+            self.accumulated = Duration::from_nanos(u64::try_from(left).unwrap_or(0));
+            u32::try_from(due).unwrap_or(u32::MAX).min(MOST_TICKS)
         };
         self.ticks += u64::from(ran);
         ran

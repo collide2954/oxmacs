@@ -46,6 +46,23 @@ fn a_paused_clock_only_runs_requested_steps() {
 }
 
 #[test]
+fn game_speed_stays_between_still_and_four_times_and_a_frame_runs_at_most_32_ticks() {
+    let mut clock = Clock::default();
+    clock.set_scale(1e300);
+    assert_eq!(clock.scale(), 4.0);
+    clock.set_scale(-2.0);
+    assert_eq!(clock.scale(), 0.0);
+    clock.set_scale(f64::NAN);
+    assert_eq!(clock.scale(), 1.0);
+
+    let mut fast = Clock::new(1_000_000);
+    fast.set_scale(4.0);
+    assert_eq!(fast.advance(Duration::from_secs(1)), 32);
+    assert_eq!(fast.advance(Duration::ZERO), 0);
+    assert_eq!(fast.ticks(), 32);
+}
+
+#[test]
 fn slow_motion_and_other_rates_scale_game_time() {
     let mut clock = Clock::default();
     clock.set_scale(0.5);

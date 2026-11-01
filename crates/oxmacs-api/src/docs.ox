@@ -165,7 +165,7 @@
 (step-game) "Runs one tick of a paused game and draws it."
 (stop-game) "Stops the game and closes its window."
 (restart-game) "Loads the game's file again and calls start, keeping defonce state."
-(game-speed factor) "Runs game time factor times as fast: 0.25 is slow motion, 1 normal."
+(game-speed factor) "Runs game time factor times as fast, from 0 to 4: 0.25 is slow motion, 1 normal. A frame runs at most 32 ticks, and game time beyond that is dropped."
 (game-playing?) "True while a game runs and isn't paused."
 
 (ui/column & children {spacing 0}) "Stacks children from top to bottom, :spacing apart."
