@@ -16,9 +16,12 @@
 
 (def (remembered)
   (when (nil? @saved)
-    (reset! saved (or (when-let [file (places-file)]
-                        (maybe (json/read (file/read file))))
-                      [])))
+    (let [file (places-file)]
+      (reset! saved (if (and file (file/exists? file))
+                      (try (vec (json/read (file/read file)))
+                        (catch error e
+                          (raise (error $"Can't read {file}, where books keep their places, so it is left as it is: {e.message}"))))
+                      []))))
   @saved)
 
 (def (remembered-book place)

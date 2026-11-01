@@ -273,6 +273,26 @@ fn highlights_and_places_are_remembered() {
 }
 
 #[test]
+fn a_books_file_that_cannot_be_read_is_left_as_it_is() {
+    let mut reader = reader("");
+    let folder = reader.home.path().join("data").join("epub");
+    std::fs::create_dir_all(&folder).unwrap();
+    let file = folder.join("books.json");
+    std::fs::write(&file, "{ not json").unwrap();
+
+    reader.open();
+
+    let shown = reader.editor.message().unwrap_or_default().to_owned();
+    assert!(shown.starts_with("Couldn't open sample.epub: Can't read"), "{shown}");
+    assert!(shown.contains("books.json"), "{shown}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
+
+    std::fs::remove_file(&file).unwrap();
+    reader.open();
+    assert_eq!(reader.pages().header.0, "A Sample Voyage");
+}
+
+#[test]
 fn the_library_shows_the_books_in_a_folder() {
     let mut reader = reader("");
     let folder = reader.books.path().display().to_string();

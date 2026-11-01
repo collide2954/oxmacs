@@ -54,7 +54,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `cpp` | 0.1.2 | opt-in | C++ with highlighting, indentation and the clangd language server |
 | `customize` | 0.1.7 | on | Change the editor's and plugins' settings in a form |
 | `dired` | 0.3.5 | on | List directories and manage their files |
-| `epub` | 0.2.7 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
+| `epub` | 0.2.8 | opt-in | Read EPUB books in pages, with contents, search, highlights, notes and a library |
 | `explorer` | 0.2.5 | on | A file tree beside the windows that follows the file you're in |
 | `git` | 0.5.1 | opt-in | Git status and staging in the style of Magit |
 | `go` | 0.1.1 | opt-in | Go with highlighting, indentation with tabs and the gopls language server |
@@ -63,7 +63,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `json` | 0.1.1 | opt-in | JSON and JSON with comments, with highlighting and indentation |
 | `keycast` | 0.2.5 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.6 | opt-in | Conway's Game of Life on a canvas |
-| `manual` | 0.5.101 | on | The oxmacs tutorial and the Ox manual |
+| `manual` | 0.5.102 | on | The oxmacs tutorial and the Ox manual |
 | `markdown` | 0.2.11 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.6 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
