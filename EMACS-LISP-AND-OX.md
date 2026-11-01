@@ -647,4 +647,4 @@ Both write macros with backquote; Ox writes `~` and `~@` where Emacs Lisp writes
 | Benchmark | `benchmark-run` | `ox perf bench` |
 | Update old code | by hand | `ox migrate` |
 | Run a script | `emacs --batch -l script.el` | `ox script.ox` |
-| Other editors | — | `ox lsp` for VS Code, Helix and Neovim |
+| Other editors | — | `ox lsp` for Helix, Neovim and other LSP editors |

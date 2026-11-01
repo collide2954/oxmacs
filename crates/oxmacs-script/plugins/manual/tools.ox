@@ -19,7 +19,7 @@ ox migrate --strings PATH…  also rewrite strings, once, coming from Ox 0.14
 ox test PATH…          run the test blocks in files or folders
 ox profile FILE        run a file and show where the time went
 ox perf bench FILE     benchmark the functions a file returns
-ox perf sample FILE NAME  sample where one benchmark spends its time
+ox perf sample FILE NAME  sample where one benchmark spends its time, on Windows x86-64 only
 ox lsp                 serve Ox to other editors over LSP
 ```
 
@@ -79,10 +79,43 @@ A test fails when its body raises, or a task it spawned raises within ten second
  sum: [1000 (fn [] (reduce + (range 1000)))]}
 ```
 
-`ox perf sample FILE NAME` samples where Ox's Rust code spends one benchmark's time, for work on Ox itself.
+`ox perf sample FILE NAME` samples where Ox's Rust code spends one benchmark's time, for work on Ox itself. It works only on Windows x86-64 for now.
 
 ## Other editors
 
-`ox lsp` gives VS Code, Helix and Neovim diagnostics, completion, signatures, documentation on hover, definitions, references, renaming, an outline and formatting for Ox.
+`ox lsp` gives editors that speak the Language Server Protocol diagnostics, completion, signatures, documentation on hover, definitions, references, renaming, an outline and formatting for Ox. It finds a file's imports in its own folder, as `ox check` does, so it needs no project setup.
+
+In Helix, add Ox to `languages.toml`:
+
+```toml
+[language-server.ox]
+command = "ox"
+args = ["lsp"]
+
+[[language]]
+name = "ox"
+scope = "source.ox"
+file-types = ["ox"]
+roots = []
+comment-token = ";"
+indent = { tab-width = 2, unit = "  " }
+language-servers = ["ox"]
+```
+
+In Neovim, start it for `.ox` files from `init.lua`:
+
+```lua
+vim.filetype.add({ extension = { ox = "ox" } })
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "ox",
+  callback = function(args)
+    vim.lsp.start({
+      name = "ox",
+      cmd = { "ox", "lsp" },
+      root_dir = vim.fs.dirname(vim.api.nvim_buf_get_name(args.buf)),
+    })
+  end,
+})
+```
 
 """"})

@@ -105,6 +105,10 @@ fn help_lists_the_subcommands_and_version_prints_the_version() {
                 "{flag} doesn't mention {subcommand}: {shown}"
             );
         }
+        assert!(
+            shown.contains("time, on Windows x86-64 only"),
+            "{flag} doesn't say where sampling works: {shown}"
+        );
     }
 
     let output = ox().arg("--version").output().unwrap();

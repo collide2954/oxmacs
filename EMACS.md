@@ -68,7 +68,7 @@ In Ox, the same command reads top to bottom, and the editor stays responsive whi
 
 **Errors with types.** Ox errors are typed: `deferror` declares your own, and `try` handles them with `catch` and `finally`. `C-g` raises a quit of its own kind, so a `catch` meant for errors never swallows it.
 
-**Tools in one command.** The `ox` command runs Ox outside the editor too, so Ox works as a scripting language as well as an extension language. `ox check` finds unknown names, wrong argument counts and unused variables, and oxmacs runs the same checks as you type. `ox fmt` formats in one house style, `ox test` runs `test` blocks kept next to the code they test, and `ox profile` and `ox perf` find where time goes. `ox migrate` rewrites your code when Ox changes, and `ox lsp` brings Ox to VS Code, Helix and Neovim.
+**Tools in one command.** The `ox` command runs Ox outside the editor too, so Ox works as a scripting language as well as an extension language. `ox check` finds unknown names, wrong argument counts and unused variables, and oxmacs runs the same checks as you type. `ox fmt` formats in one house style, `ox test` runs `test` blocks kept next to the code they test, and `ox profile` and `ox perf` find where time goes. `ox migrate` rewrites your code when Ox changes, and `ox lsp` brings Ox to Helix, Neovim and other LSP editors.
 
 **Plugins with manifests.** A plugin declares its version, the plugins it requires and their versions, its commands, keys, modes and typed settings in one `plugin.ox`. oxmacs loads it the first time you use it, and a plugin can lend its modules to others as a library.
 
