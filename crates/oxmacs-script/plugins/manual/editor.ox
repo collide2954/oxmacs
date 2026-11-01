@@ -59,14 +59,14 @@ Positions count characters from 0. `insert` adds text at point and moves point a
 
 Hooks call a function, as a task, when something happens. Registering the same key again replaces the earlier function.
 
-```text
+```no-run
 (on-saved :log-saves (fn [path] (message $"Saved {path}")))
 (on-idle :rest 300 (fn [] (message "Time for a break")))
 ```
 
 Three hooks follow the buffers people type in, leaving plugin buffers out. `on-buffer-open` hears each one open, `on-mode-enter` hears it enter a mode, and `on-buffer-change` gets the buffer and its edits after each command, each edit a map of `start`, `removed` and `inserted`. `on-buffer-close` hears every buffer close, plugin buffers too, with the handle it had while open, so a plugin can let go of what it kept for it. `on-before-save` runs before a file is written, and the save waits for it, so a handler can tidy the text first; an error in it cancels the save.
 
-```text
+```no-run
 (module (import (ox string)))
 (on-before-save :trim (fn [buffer]
   (with-buffer buffer

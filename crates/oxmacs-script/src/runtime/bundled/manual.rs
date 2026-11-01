@@ -254,6 +254,23 @@ fn every_example_in_the_guide_runs() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+#[test]
+fn every_example_in_the_guide_that_does_not_run_checks_clean() {
+    let mut isolate = oxmacs_api::editor_isolate();
+    let mut problems = Vec::new();
+    let mut count = 0;
+    for (page, text) in GUIDE {
+        for source in blocks(text, &["no-run"]) {
+            count += 1;
+            for found in isolate.check(&format!("{page}.ox"), &source) {
+                problems.push(format!("{page}: {source}\n  {}", found.message));
+            }
+        }
+    }
+    assert!(count > 5, "only {count} examples");
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
 fn links(page: &str) -> Vec<String> {
     page.split("](")
         .skip(1)
@@ -298,7 +315,8 @@ fn the_plugins_the_guide_builds_work() {
         .find(|(id, _)| *id == "plugins")
         .map(|(_, text)| *text)
         .unwrap();
-    let [manifest, entry, init, library]: [String; 4] = blocks(page, &["text"]).try_into().unwrap();
+    let [manifest, entry, init, library]: [String; 4] =
+        blocks(page, &["text", "no-run"]).try_into().unwrap();
     let init = format!("{init}\n(use-plugin strings)");
     let home = home_with(&[
         ("plugins/hello/plugin.ox", manifest.as_str()),

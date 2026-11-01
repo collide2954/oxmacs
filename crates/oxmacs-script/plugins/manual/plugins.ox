@@ -31,14 +31,14 @@ So plugins do two jobs. They extend the editor, and they are where shared Ox cod
 
 3. Add `hello.ox`, the entry:
 
-```text
+```no-run
 (defcommand hello "Say hello"
   (message $"Hello, {(setting :name)}!"))
 ```
 
 4. Press `C-c C-k` in `hello.ox`. The plugin starts, and `M-x hello` works. Plugins in your folder stay off until you turn them on, so to have it in every session, add this to `init.ox`:
 
-```text
+```no-run
 (use-plugin hello :config {name: "Ana"})
 ```
 
@@ -108,7 +108,7 @@ json         0.1.1    opt-in   JSON and JSON with comments, with highlighting an
 keycast      0.2.5    opt-in   Shows the keys you press and the commands they run, for demos
 life         0.2.6    opt-in   Conway's Game of Life on a canvas
 manual       0.5.109  on       The oxmacs tutorial and the Ox manual
-markdown     0.2.12   on       Markdown with highlighting, a rendered preview and the marksman language server
+markdown     0.2.13   on       Markdown with highlighting, a rendered preview and the marksman language server
 ox-lang      0.1.0    on       Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL
 pdf          0.2.8    opt-in   Read PDF documents drawn by PDFium, with search, an outline, links and copying
 pixi         0.1.2    opt-in   pixi projects as environments: programs started in one run in its pixi environment, with its tasks, packages and environments on *pixi*

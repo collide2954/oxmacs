@@ -64,7 +64,7 @@ Most of oxmacs is bundled Ox plugins. Those on by default load the first time yo
 | `keycast` | 0.2.5 | opt-in | Shows the keys you press and the commands they run, for demos |
 | `life` | 0.2.6 | opt-in | Conway's Game of Life on a canvas |
 | `manual` | 0.5.109 | on | The oxmacs tutorial and the Ox manual |
-| `markdown` | 0.2.12 | on | Markdown with highlighting, a rendered preview and the marksman language server |
+| `markdown` | 0.2.13 | on | Markdown with highlighting, a rendered preview and the marksman language server |
 | `ox-lang` | 0.1.0 | on | Ox, the language oxmacs is extended in, with highlighting, indentation, ox fmt and the REPL |
 | `pdf` | 0.2.8 | opt-in | Read PDF documents drawn by PDFium, with search, an outline, links and copying |
 | `pixi` | 0.1.2 | opt-in | pixi projects as environments: programs started in one run in its pixi environment, with its tasks, packages and environments on *pixi* |

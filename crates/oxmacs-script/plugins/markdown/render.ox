@@ -110,7 +110,7 @@
       [(= para.kind :quote) (add-lines page (wrap (inline para.text) width :lead "  │ " :indent "  │ "))]
       [else (add-lines page (wrap (inline para.text) width))])))
 
-(def ox-fences #{"" "ox" "clojure"})
+(def ox-fences #{"" "ox" "clojure" "no-run"})
 
 (def (code-block page)
   (let [source page.code
@@ -155,7 +155,7 @@
       [else (assoc (flush page width) :para {kind: :text text: (string/trim line)})])))
 
 (def (render text width)
-  "Renders a page of Markdown at width: a map of :lines for open-buffer, whose links are [text :link :link target] pieces, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Headings of every level, quotes, bullets and numbered items, and ``` or ~~~ fences are understood; fences marked text, or any language but ox, show as plain text."
+  "Renders a page of Markdown at width: a map of :lines for open-buffer, whose links are [text :link :link target] pieces, :headings with their :line and :title, and :blocks of Ox code with their :first and :last line and :source. Headings of every level, quotes, bullets and numbered items, and ``` or ~~~ fences are understood; fences marked text, or any language but ox, show as plain text, and no-run marks Ox that is only checked, not run, by the manual's tests."
   (let [page (reduce (fn [page line] (step page line width))
                      {lines: [] headings: [] blocks: [] para: nil code: nil fence: nil open: nil}
                      (string/lines text))

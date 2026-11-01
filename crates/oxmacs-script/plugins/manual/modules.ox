@@ -105,7 +105,7 @@ ox/rodeo     Games played with rodeo-play: drawing, images, keys, actions and ga
 
 A module is also how work moves to another thread. `worker` loads a module in a fresh isolate on a thread of its own, calls one of its functions and returns a promise of the result:
 
-```text
+```no-run
 (await (worker 'stats/math 'crunch (range 1000000)))
 ```
 

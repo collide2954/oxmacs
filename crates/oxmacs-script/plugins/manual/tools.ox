@@ -72,7 +72,7 @@ A test fails when its body raises, or a task it spawned raises within ten second
 
 `ox perf bench FILE` runs a file whose last form is a map of names to functions, calls each over and over, and prints its best time and how much it allocated. A `[count function]` pair also shows the time for each of count items. Name benchmarks after the file to run only those.
 
-```text
+```no-run
 (def (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
 
 {fib: (fn [] (fib 15))

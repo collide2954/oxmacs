@@ -37,7 +37,8 @@ An error in a task is raised again in whatever awaits its promise; when nothing 
 (do (sleep 10) :awake)
 ```
 
-```text
+```no-run
+(module (import (ox time)))
 (every (time/minutes 5) (fn [] (message "Stretch")))
 ```
 
@@ -52,7 +53,7 @@ The `ox time` module reads, formats and adds times in any time zone; see its [re
 
 These calls pause their task until the answer comes, so their results are ready to use; to run several at once, `spawn` each and `await` the promises. Paths are used as they are given, so expand a leading `~` with `path/expand`.
 
-```text
+```no-run
 (module (import (ox file) (ox path) (ox process) (ox http) (ox json)))
 
 (def notes (file/read (path/expand "~/notes.txt")))
@@ -65,7 +66,8 @@ These calls pause their task until the answer comes, so their results are ready 
 
 `process/start` runs a program alongside your code instead. Its `:lines` channel gives each line the program prints, as it comes, and `:exit` is a promise of its exit status. `process/stop` asks it to end and `process/kill` ends it at once, with any programs it started. In oxmacs it shows in `M-x list-processes`, where its `:id` names it for `stop-process` and `kill-process`.
 
-```text
+```no-run
+(module (import (ox process)))
 (let [git (process/start "git" ["log" "--oneline"])]
   (spawn (loop [] (when-let [line (receive git.lines)] (message line) (again))))
   (await git.exit))
