@@ -1,5 +1,6 @@
 [graph]
 all-features = true
+exclude = ["workspace-hack"]
 
 [advisories]
 version = 2
