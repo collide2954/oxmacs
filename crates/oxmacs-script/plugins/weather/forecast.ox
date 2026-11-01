@@ -136,11 +136,8 @@
 (def (percent value)
   (if (nil? value) "–" $"{(round value)}%"))
 
-(def (two number)
-  (string/pad-start (str number) 2 "0"))
-
 (def (clock moment)
-  $"{(two moment.hour)}:{(two moment.minute)}")
+  (time/format moment "%H:%M"))
 
 (def (weekday moment)
   (string/capitalize (string/slice (str moment.weekday) 1 4)))

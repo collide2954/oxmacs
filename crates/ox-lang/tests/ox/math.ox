@@ -33,6 +33,8 @@
 ;; clamp and lerp
 (module (import (ox math))) [(math/clamp 5 0 3) (math/clamp -1 0 3) (math/clamp 2 0 3) (math/clamp 2.5 0 3)] ;=> [3 0 2 2.5]
 (module (import (ox math))) (math/clamp 1 3 0) ;! math/clamp needs low at most high, got 3 and 0
+(module (import (ox math))) [(math/fixed 3.14159 3) (math/fixed -0.25 2) (math/fixed 2 1) (math/fixed 0.5 0) (math/fixed -0.001 2) (math/fixed (+ 0.1 0.2) 2)] ;=> ["3.142" "-0.25" "2.0" "0" "0.00" "0.30"]
+(module (import (ox math))) (math/fixed 1.5 -1) ;! math/fixed expects a count of places from 0, got -1
 (module (import (ox math))) [(math/lerp 0 10 0.5) (math/lerp 10 20 0) (math/lerp 0 4 1.5)] ;=> [5.0 10.0 6.0]
 
 ;; angles

@@ -1,21 +1,14 @@
 (module
-  (import (ox path) (ox string))
+  (import (ox path) (ox string) (ox math))
   (export rows))
-
-(def (fixed number places)
-  (let [scale (if (= places 1) 10 100)
-        whole (round (* number scale))
-        integer (int (// whole scale))
-        fraction (- whole (* integer scale))]
-    (str integer "." (string/pad-start (str fraction) places "0"))))
 
 (def (shown ms)
   (if (>= ms 1000)
-    (str (fixed (/ ms 1000.0) 2) " s")
-    (str (fixed ms 2) " ms")))
+    (str (math/fixed (/ ms 1000.0) 2) " s")
+    (str (math/fixed ms 2) " ms")))
 
 (def (percent share)
-  (str (fixed share 1) "%"))
+  (str (math/fixed share 1) "%"))
 
 (def (placed row)
   (if row.file (str (path/name row.file) ":" row.line) ""))

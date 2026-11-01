@@ -184,10 +184,15 @@ fn add(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
 }
 
 fn format(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
-    let start = moment(heap, "time/format", arguments[0])?;
     let pattern = print::display(heap, arguments[1]);
-    let zone = zone_option(heap, arguments[2])?;
-    let text = jiff::fmt::strtime::format(&pattern, &start.to_zoned(zone))
+    let written = if let Some(fields) = heap.entries(arguments[0]) {
+        jiff::fmt::strtime::format(&pattern, civil(heap, &fields)?)
+    } else {
+        let start = moment(heap, "time/format", arguments[0])?;
+        let zone = zone_option(heap, arguments[2])?;
+        jiff::fmt::strtime::format(&pattern, &start.to_zoned(zone))
+    };
+    let text = written
         .map_err(|error| Error::new(format!("time/format can't use {pattern:?}: {error}")))?;
     heap.string(&text).map_err(Error::from)
 }

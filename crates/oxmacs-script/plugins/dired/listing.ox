@@ -5,9 +5,6 @@
 (def months ["Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"])
 (def six-months 15778476000)
 
-(def (two number)
-  (string/pad-start (str number) 2 "0"))
-
 (def (ls-time modified now)
   (if (nil? modified)
     ""
@@ -17,7 +14,7 @@
           age (- now modified)]
       (if (or (neg? age) (> age six-months))
         $"{month} {day}  {moment.year}"
-        $"{month} {day} {(two moment.hour)}:{(two moment.minute)}"))))
+        $"{month} {day} {(time/format moment "%H:%M")}"))))
 
 (def (next-order order)
   (cond [(= order :name) :newest] [(= order :newest) :largest] [else :name]))

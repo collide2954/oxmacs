@@ -35,6 +35,7 @@
 
 (module (import (ox time))) (time/format 0 "%Y" :place "UTC") ;! time/format has no keyword parameter :place
 (module (import (ox time))) (time/format 0 "%Y" :zone "UTC") ;=> "1970"
+(module (import (ox time))) [(time/format {year: 2026 month: 3 day: 7 hour: 9 minute: 5} "%d.%m %H:%M") (time/format (time/local 0 "UTC") "%Y-%m-%d %H:%M")] ;=> ["07.03 09:05" "1970-01-01 00:00"]
 
 ;; URLs: everything but letters, digits and -_.~ is written as %XX of its UTF-8 bytes
 (module (import (ox string))) [(string/url-encode "a b&c/d?") (string/url-encode "São Paulo-_.~")] ;=> ["a%20b%26c%2Fd%3F" "S%C3%A3o%20Paulo-_.~"]

@@ -66,7 +66,7 @@
 (zip/entries path) "The entries in the zip archive at path, each a map of :name, :size and :dir."
 (zip/read path name) "The entry called name in the zip archive at path, as text."
 (zip/read-base64 path name) "The bytes of the entry called name in the zip archive at path, written as base64."
-(file/read path) "The contents of the file at path, as a string without a leading byte order mark. Use await to get it."
+(file/read path) "The contents of the file at path, as a string without a leading byte order mark."
 (file/write path text) "Writes text to the file at path, replacing what was there, and returns once it is done. The text goes to a new file that then takes the old one's place, so a crash never leaves it half written; a file with other hard links is written in place, and a symlink keeps pointing at its target."
 (file/append path text) "Adds text to the end of the file at path, making the file when it is missing, and returns once it is done."
 (file/read-base64 path) "The bytes of the file at path, written as base64, for files that aren't text."

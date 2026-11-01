@@ -143,6 +143,29 @@ pub fn install(isolate: &mut Isolate) {
         .arity(3, Some(3))
         .function(|heap, arguments| clamp(heap, arguments));
     isolate
+        .native(MODULE, "fixed")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let number = float(heap, "math/fixed", arguments[0])?;
+            let places = match arguments[1] {
+                Value::Int(places) if (0..=30).contains(&places) => {
+                    usize::try_from(places).unwrap_or(0)
+                }
+                other => {
+                    return Err(Error::new(format!(
+                        "math/fixed expects a count of places from 0, got {}",
+                        print::brief(heap, other)
+                    ))
+                    .of(ErrorKind::Type));
+                }
+            };
+            let mut shown = format!("{number:.places$}");
+            if shown.starts_with('-') && shown[1..].chars().all(|c| c == '0' || c == '.') {
+                shown.remove(0);
+            }
+            heap.string(&shown).map_err(Error::from)
+        });
+    isolate
         .native(MODULE, "lerp")
         .arity(3, Some(3))
         .function(|heap, arguments| {
