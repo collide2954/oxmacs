@@ -315,6 +315,55 @@ impl Known<'_> {
         })
     }
 
+    fn is_cond(&self, head: &Syntax) -> bool {
+        if !matches!(&head.datum, Datum::Symbol(name) if name == "cond") {
+            return false;
+        }
+        let found = self
+            .occurrences
+            .iter()
+            .find(|occurrence| occurrence.span == head.span);
+        match found {
+            Some(occurrence) => {
+                matches!(&occurrence.binding, Binding::Global { module: Some(module), name } if module == "ox" && name == "cond")
+            }
+            None => !self
+                .occurrences
+                .iter()
+                .any(|occurrence| occurrence.defines && unbound(occurrence, "cond")),
+        }
+    }
+
+    fn bracketed(&self, form: &Syntax) -> Vec<Rewrite> {
+        let Datum::List(items) = &form.datum else {
+            return Vec::new();
+        };
+        let Some((head, clauses)) = items.split_first() else {
+            return Vec::new();
+        };
+        if !self.is_cond(head) {
+            return Vec::new();
+        }
+        clauses
+            .iter()
+            .filter(|clause| matches!(clause.datum, Datum::List(_)))
+            .flat_map(|clause| {
+                let start = clause.span.start as usize;
+                let end = clause.span.end as usize;
+                [
+                    Rewrite {
+                        span: Span::new(start, start + 1),
+                        text: "[".to_owned(),
+                    },
+                    Rewrite {
+                        span: Span::new(end - 1, end),
+                        text: "]".to_owned(),
+                    },
+                ]
+            })
+            .collect()
+    }
+
     fn redundant(&self, form: &Syntax) -> Option<Span> {
         let Datum::List(items) = &form.datum else {
             return None;
@@ -342,6 +391,11 @@ fn collect(
             span: form.span,
             text: source(text, call.start, call.end).to_owned(),
         });
+        return;
+    }
+    let brackets = known.bracketed(form);
+    if !brackets.is_empty() {
+        rewrites.extend(brackets);
         return;
     }
     if let Datum::List(items) = &form.datum

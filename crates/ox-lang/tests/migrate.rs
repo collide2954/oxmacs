@@ -36,6 +36,20 @@ fn case_becomes_match_and_still_gives_nil_when_nothing_matches() {
 }
 
 #[test]
+fn cond_clauses_move_into_brackets() {
+    assert_eq!(
+        migrated(
+            "(def (f n)\n  (cond ((< n 1) :small)\n        ((< n (cond ((= n 5) 9) (else 7))) :mid)\n        [else :big]))"
+        ),
+        "(def (f n)\n  (cond [(< n 1) :small]\n        [(< n (cond [(= n 5) 9] [else 7])) :mid]\n        [else :big]))"
+    );
+    assert_eq!(
+        migrated("(def (cond x) x)\n(cond (1 2))"),
+        "(def (cond x) x)\n(cond (1 2))"
+    );
+}
+
+#[test]
 fn nested_forms_are_migrated_too() {
     assert_eq!(
         migrated("(case a [1 (case b [2 (with p :x 1)])] [else nil])"),

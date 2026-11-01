@@ -123,8 +123,9 @@
 (->> 1 [2] (vector 3)) ;! [2] is not a function
 [(-> {a: 1} :a) (->> [1 2] (map inc)) (let [x 5] (-> x (- 1) (* 2)))] ;=> [1 [2 3] 8]
 [(some-> 1) (some-> nil inc) (some-> {a: {b: nil}} :a :b inc) (as-> 1 x) (as-> 1 x [x x])] ;=> [1 nil nil 1 [1 1]]
-[(cond [else 1 2]) (cond (true 3)) (cond [nil 1] [false 2])] ;=> [2 3 nil]
-(cond 5) ;! first expects a collection, got 5
+[(cond [else 1 2]) (cond [true 3]) (cond [nil 1] [false 2])] ;=> [2 3 nil]
+(cond 5) ;! cond takes clauses in brackets, as [test body…], got 5
+(cond (true 3)) ;! cond takes clauses in brackets, as [test body…], got (true 3); ox migrate rewrites them
 [(if-let [x 1] x) (if-let [x nil] x) (when-let [x false] 1)] ;=> [1 nil nil]
 (if-let 5 1) ;! second expects a collection, got 5
 (if-let [x nil] x 1 2) ;! if takes a test, a then form and an optional else form

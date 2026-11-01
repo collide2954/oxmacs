@@ -1,11 +1,12 @@
 use crate::builtins::collections::{self, is_list};
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
 use crate::forms::BUILT_IN;
 use crate::heap::Heap;
 use crate::isolate::Isolate;
 use crate::symbol::Sym;
 use crate::value::Value;
 use crate::value::equal::equal;
+use crate::value::print;
 use crate::vm::build::{make_map, make_vector};
 use crate::vm::modules::PRELUDE;
 
@@ -75,6 +76,18 @@ fn cond(heap: &mut Heap, clauses: &[Value]) -> Result<Value, Error> {
     let Some((clause, more)) = clauses.split_first() else {
         return Ok(Value::Nil);
     };
+    if heap.vector_of(*clause).is_none() {
+        let hint = if is_list(heap, *clause) {
+            "; ox migrate rewrites them"
+        } else {
+            ""
+        };
+        return Err(Error::new(format!(
+            "cond takes clauses in brackets, as [test body…], got {}{hint}",
+            print::brief(heap, *clause)
+        ))
+        .of(ErrorKind::Type));
+    }
     let test = collections::first(heap, *clause)?;
     let rest = collections::rest(heap, *clause)?;
     let body = spliced(heap, rest)?;

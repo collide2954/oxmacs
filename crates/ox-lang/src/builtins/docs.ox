@@ -268,7 +268,7 @@
 (unless test & body) "Evaluates body when test is falsy; otherwise nil."
 (and & forms) "Evaluates forms left to right until one is falsy and returns it, or the last value; (and) is true."
 (or & forms) "Evaluates forms left to right until one is truthy and returns it; otherwise the last value, and (or) is nil."
-(cond & clauses) "Tries (test body...) clauses in turn and evaluates the body of the first whose test is truthy; an else clause always matches."
+(cond & clauses) "Tries [test body...] clauses in turn and evaluates the body of the first whose test is truthy; an [else ...] clause always matches."
 (each [name coll ...] & body) "Evaluates body for each item of coll, bound to name, and returns nil. More name and coll pairs nest, :when test skips items and :let [bindings] names more values: (each [line lines :when (not (empty? line))] (println line))."
 (for [name coll ...] & body) "A vector of body's value for each item of coll, bound to name. More pairs nest, :when test skips items and :let [bindings] names more values: (for [x [1 2 3] :when (odd? x)] (* x x)) is [1 9]."
 (while test & body) "Evaluates body again and again while test is truthy, and returns nil."

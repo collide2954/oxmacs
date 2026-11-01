@@ -84,6 +84,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- Ox's `cond` takes its clauses in brackets only, as `[test body…]`, so every `cond` reads the same; a clause in parentheses raises an error that says so, and `ox migrate` rewrites them.
 - In Ox, `@state.current` reads the field `current` of the atom's value, so state kept in an atom reads with a dot like any map, where it used to look for a field of the atom itself. `@(. m :cell)` or `(deref m.cell)` reads an atom kept in a field.
 - `C-h t` opens your copy of the tutorial at the top every time, with your edits kept, instead of where you last were, and no longer writes `tutorial.place`. The Ox manual on `C-h i` still reopens at the page you were reading.
 - Rust, TOML and Ox are plugins like every other language. `rust`, opt-in, holds Rust's mode, rust-analyzer, `M-x rust-check`, `rust-build`, `rust-test`, `rust-run` and `rust-clippy` on `C-c C-c C-k`, `C-b`, `C-t`, `C-r` and `C-l`, the lint run on save, chosen with its `lint` setting (`:check`, `:clippy` or `:off`) in place of the editor's `rust-lint`, and the patterns that make cargo's errors and panics clickable. `toml`, opt-in, holds TOML's mode and taplo, and `ox-lang`, on by default, holds Ox's mode; a plugin can no longer be named `ox`, the name of Ox's built-in modules. The `r` plugin declares R's mode itself, with `C-c C-f` formatting.
