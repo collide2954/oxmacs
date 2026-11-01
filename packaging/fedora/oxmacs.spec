@@ -24,6 +24,8 @@ Recommends:     mesa-vulkan-drivers
 Recommends:     git-core
 Recommends:     openssh-clients
 Recommends:     curl
+Recommends:     libnotify
+Recommends:     xdg-utils
 
 %description
 oxmacs feels like Emacs to use: the same keys, a minibuffer, M-x, buffers,
