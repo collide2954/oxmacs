@@ -51,7 +51,7 @@
           (chunks runs)))
 
 (def (width-of word)
-  (reduce + 0 (map (fn [chunk] (string/length chunk.text)) word)))
+  (reduce + 0 (map (fn [chunk] (string/width chunk.text)) word)))
 
 (def (piece-of chunk)
   (cond

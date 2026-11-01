@@ -152,7 +152,7 @@
       (let [table (map (fn [p] (cells p now)) shown-processes)
             heading (into {} (map (fn [column] [column (title-text column options)]) columns))
             widths (into {} (map (fn [column]
-                                   [column (apply max (map (fn [texts] (count (get texts column))) (conj (vec table) heading)))])
+                                   [column (apply max (map (fn [texts] (string/width (get texts column))) (conj (vec table) heading)))])
                                  columns))
             [shown details] (fit widths width)
             title [[(string/trim-end (apply str (map (fn [part] (if (vector? part) (first part) part))

@@ -1,3 +1,5 @@
+use unicode_width::UnicodeWidthChar;
+
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
@@ -46,15 +48,34 @@ fn capitalize(text: &str) -> String {
     })
 }
 
+fn character_at(whole: &str, byte: usize) -> Value {
+    Value::Int(i64::try_from(whole[..byte].chars().count()).unwrap_or(i64::MAX))
+}
+
+fn columns(c: char) -> usize {
+    c.width().unwrap_or(0)
+}
+
+fn width(text: &str) -> usize {
+    text.chars().map(columns).sum()
+}
+
 fn pad(heap: &mut Heap, name: &str, arguments: &[Value], start: bool) -> Result<Value, Error> {
     let original = text(heap, name, arguments[0])?.to_owned();
-    let width = count(heap, name, arguments[1])?;
+    let wanted = count(heap, name, arguments[1])?;
     let fill = match arguments.get(2) {
         Some(fill) => text(heap, name, *fill)?.to_owned(),
         None => " ".to_owned(),
     };
-    let missing = width.saturating_sub(original.chars().count());
-    let padding: String = fill.chars().cycle().take(missing).collect();
+    let mut missing = wanted.saturating_sub(width(&original));
+    let mut padding = String::new();
+    for c in fill.chars().filter(|c| columns(*c) > 0).cycle() {
+        if missing == 0 || columns(c) > missing {
+            break;
+        }
+        missing -= columns(c);
+        padding.push(c);
+    }
     let padded = if start {
         padding + &original
     } else {
@@ -110,11 +131,18 @@ fn install_shaping(isolate: &mut Isolate) {
         .arity(2, Some(2))
         .function(|heap, arguments| {
             let whole = text(heap, "string/truncate", arguments[0])?.to_owned();
-            let width = count(heap, "string/truncate", arguments[1])?;
-            let cut = if whole.chars().count() <= width {
+            let room = count(heap, "string/truncate", arguments[1])?;
+            let cut = if width(&whole) <= room {
                 whole
             } else {
-                let kept: String = whole.chars().take(width.saturating_sub(1)).collect();
+                let mut used = 0;
+                let kept: String = whole
+                    .chars()
+                    .take_while(|c| {
+                        used += columns(*c);
+                        used < room
+                    })
+                    .collect();
                 format!("{kept}…")
             };
             heap.string(&cut).map_err(Error::from)
@@ -147,8 +175,16 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "length")
         .arity(1, Some(1))
         .function(|heap, arguments| {
-            let length = text(heap, "string/length", arguments[0])?.chars().count();
+            text(heap, "string/length", arguments[0])?;
+            let length = heap.length(arguments[0]).unwrap_or_default();
             Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
+        });
+    isolate
+        .native(MODULE, "width")
+        .arity(1, Some(1))
+        .function(|heap, arguments| {
+            let shown = width(text(heap, "string/width", arguments[0])?);
+            Ok(Value::Int(i64::try_from(shown).unwrap_or(i64::MAX)))
         });
     isolate
         .native(MODULE, "split")
@@ -227,13 +263,34 @@ fn install_pieces(isolate: &mut Isolate) {
         });
     isolate
         .native(MODULE, "index-of")
-        .arity(2, Some(2))
+        .arity(2, Some(3))
         .function(|heap, arguments| {
+            let from = match arguments.get(2) {
+                Some(start) => count(heap, "string/index-of", *start)?,
+                None => 0,
+            };
             let whole = text(heap, "string/index-of", arguments[0])?;
             let part = text(heap, "string/index-of", arguments[1])?;
-            Ok(whole.find(part).map_or(Value::Nil, |at| {
-                Value::Int(i64::try_from(whole[..at].chars().count()).unwrap_or(i64::MAX))
-            }))
+            let Some((skipped, _)) = whole
+                .char_indices()
+                .nth(from)
+                .or_else(|| (from == whole.chars().count()).then_some((whole.len(), ' ')))
+            else {
+                return Ok(Value::Nil);
+            };
+            Ok(whole[skipped..]
+                .find(part)
+                .map_or(Value::Nil, |at| character_at(whole, skipped + at)))
+        });
+    isolate
+        .native(MODULE, "last-index-of")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let whole = text(heap, "string/last-index-of", arguments[0])?;
+            let part = text(heap, "string/last-index-of", arguments[1])?;
+            Ok(whole
+                .rfind(part)
+                .map_or(Value::Nil, |at| character_at(whole, at)))
         });
     isolate
         .native(MODULE, "repeat")

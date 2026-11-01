@@ -9,6 +9,8 @@
 ;; and asks about and changes them
 (module (import (ox string))) [(string/starts-with? "weather" "wea") (string/ends-with? "weather" "her") (string/includes? "weather" "eat") (string/blank? " \t")] ;=> [true true true true]
 (module (import (ox string))) [(string/index-of "banana" "an") (string/index-of "banana" "x")] ;=> [1 nil]
+(module (import (ox string))) [(string/index-of "banana" "an" 2) (string/index-of "héhé" "h" 1) (string/index-of "ab" "a" 5)] ;=> [3 2 nil]
+(module (import (ox string))) [(string/last-index-of "banana" "an") (string/last-index-of "héhé" "h") (string/last-index-of "ab" "x")] ;=> [3 2 nil]
 (module (import (ox string))) (string/replace "a-b-c" "-" "+") ;=> "a+b+c"
 (module (import (ox string))) [(string/to-number "42") (string/to-number "+2") (string/to-number "-0") (string/to-number "-7") (string/to-number "1.5") (string/to-number "x") (string/to-number "") (string/to-number "inf")] ;=> [42 2 0 -7 1.5 nil nil nil]
 (module (import (ox string))) [(string/length "héllo") (string/slice "weather" 1 4) (string/slice "weather" 4) (string/repeat "ab" 3)] ;=> [5 "eat" "her" "ababab"]
@@ -17,6 +19,10 @@
 ;; padding lines things up in columns
 (module (import (ox string))) [(string/pad-start "7" 3) (string/pad-end "Mon" 5) (string/pad-start "7" 3 "0") (string/pad-start "long" 2)] ;=> ["  7" "Mon  " "007" "long"]
 (module (import (ox string))) (string/pad-start 5 3) ;! string/pad-start expects a string, got 5
+
+;; and measure columns as the editor draws them, where wide characters take two
+(module (import (ox string))) [(string/width "abc") (string/width "漢字") (string/width "🎉!") (count "漢字")] ;=> [3 4 3 2]
+(module (import (ox string))) [(string/pad-end "漢" 4) (string/pad-start "漢" 3 "·") (string/truncate "漢字です" 5)] ;=> ["漢  " "·漢" "漢字…"]
 
 ;; words, reversing and truncating
 (module (import (ox string))) [(string/words "  one two	three  ") (string/reverse "héllo") (string/truncate "hello world" 8) (string/truncate "short" 8)] ;=> [["one" "two" "three"] "olléh" "hello w…" "short"]

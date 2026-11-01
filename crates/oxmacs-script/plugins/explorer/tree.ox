@@ -124,7 +124,7 @@
   "The line showing row: indented by depth, a chevron on folders, its name in the color of its git change, and its error and warning counts and change at the right of width columns; current rows have the region's background."
   (let [lead (str (string/repeat "  " row.depth) (if row.dir (if row.open "▾ " "▸ ") "  "))
         right (spaced (badges row change problems))
-        used (+ (count lead) (count row.name) (reduce + 0 (map (fn [part] (count (if (string? part) part (first part)))) right)))
+        used (+ (string/width lead) (string/width row.name) (reduce + 0 (map (fn [part] (string/width (if (string? part) part (first part)))) right)))
         gap (string/repeat " " (max 1 (- width used 1)))]
     {line: (vec (concat [[lead :comment] (named row change) gap] right))
      background: (when current :region)}))
