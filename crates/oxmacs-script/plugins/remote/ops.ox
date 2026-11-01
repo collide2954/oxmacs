@@ -3,8 +3,8 @@
           (remote shell)
           (remote hosts)
           (vault store :as vault))
-  (export home list-dir parse-listing read-text download! upload! remove! rename! make-dir! run search join-path
-          parent-of ftp-url can-run? transfer-file local-copy))
+  (export home list-dir parse-listing download! upload! remove! rename! make-dir! run search join-path
+          parent-of ftp-url can-run? local-copy))
 
 (def listing-pattern
   "^([-dlbcpsD])([-rwxsStT]{9})\\S*\\s+\\d+\\s+\\S+\\s+\\S+\\s+(\\d+)\\s+(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}|[A-Z][a-z]{2}\\s+\\d{1,2}\\s+(?:\\d{4}|\\d{1,2}:\\d{2}))\\s(.*)$")
@@ -75,10 +75,6 @@
       (raise (error (string/trim (str "sftp: " found.stderr)))))
     found))
 
-(def (transfer-file)
-  "A file of its own in the remote plugin's cache for one sftp transfer to pass through."
-  (path/join (plugin-folder 'remote :cache true) (str ".transfer-" (crypto/random 8))))
-
 (def (local-copy host remote)
   "The local file a remote file on host is edited through, inside the remote plugin's cache."
   (let [parts (remove (fn [part] (contains? #{"" "." ".."} part))
@@ -113,19 +109,6 @@
 
 (def (base64-of host remote on-line)
   (get (checked (shell/run! host (str "base64 < " (shell/quoted remote)) :on-line on-line) (str "Couldn't read " remote)) :lines))
-
-(def (read-text host remote)
-  "The text of the file remote on host."
-  (let [protocol (hosts/protocol-of host)]
-    (cond [(= protocol :ftp) (get (curl host remote []) :stdout)]
-      [(= protocol :sftp)
-       (let [local (transfer-file)]
-         (file/make-dir (path/parent local))
-         (try (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])
-           (file/read local)
-           (finally (when (file/exists? local)
-                      (file/remove local)))))]
-      [else (crypto/from-base64 (string/join "" (base64-of host remote nil)))])))
 
 (def (download! host remote local {size nil on-progress nil})
   "Copies the file remote on host to local, calling on-progress with the share copied so far."

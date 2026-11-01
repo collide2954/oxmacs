@@ -205,7 +205,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 - `M-x list-tools` lists only the language servers of languages oxmacs knows, instead of offering to install servers for languages it has no mode for, which could never start.
 - Renaming or moving a file or folder with `R` in dired moves the buffers visiting it along, as dired did before it became a plugin, instead of leaving them on the old path, where saving brought the old file back.
 - A command run with `!` in the remote file browser that reads its input, such as `cat`, gets none and finishes, instead of hanging the host's connection and swallowing the commands after it.
-- Files read over sftp each pass through a file of their own, removed once read, so two reads at once no longer overwrite each other.
+- Opening a remote file copies its bytes as they are, over FTP, sftp or a shell, and opens the copy, so a file that isn't UTF-8 text is refused instead of being read lossily and replaced on the server by the next save. Two files opened at once each go to a copy of their own.
 - The dnf repository on GitHub Pages is served: Pages was never turned on, so `oxmacs.repo` and `oxmacs-nightly.repo` were not found. Each publish now replaces the site with a single commit instead of keeping every old RPM in the repository's history.
 - Releases carry the Fedora RPMs, as the README says; 0.14.0's were attached by hand.
 - `M-x remote-add-host` saves the hosts in `custom.ox`, as `M-x irc-setup` saves networks, instead of adding another `use-plugin` form to the end of `init.ox` each time.

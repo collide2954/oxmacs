@@ -112,21 +112,6 @@ fn saved_hosts_go_to_custom_ox_once_and_leave_init_ox_alone() {
 }
 
 #[test]
-fn every_sftp_transfer_gets_a_file_of_its_own() {
-    let (home, mut editor, mut ox) = started("");
-
-    let found = eval(
-        &mut editor,
-        &mut ox,
-        r"(module (import (remote ops :as ops) (ox path)))
-           (let [first (ops/transfer-file) second (ops/transfer-file)]
-             [(= first second) (= (path/parent first) (plugin-folder 'remote :cache true))])",
-    );
-
-    assert_eq!(found, "[false true]", "{}", home.path().display());
-}
-
-#[test]
 fn remote_files_are_edited_through_copies_inside_the_oxmacs_home() {
     let (_home, mut editor, mut ox) = started("");
 
@@ -166,6 +151,22 @@ fn remote_files_open_locally_and_go_back_when_saved() {
             .is_ok_and(|text| text.ends_with("third line"))
     });
     assert!(sent, "{:?}", editor.message());
+}
+
+#[test]
+fn a_remote_file_that_is_not_utf8_is_refused_and_left_as_it_is() {
+    let (far, _home, mut editor, mut ox) = browsing();
+    fs::write(far.path().join("latin.txt"), b"caf\xE9\n").unwrap();
+    press(&mut editor, &mut ox, "g");
+    let browser = editor.buffer().name().to_owned();
+
+    go_to(&mut editor, "latin.txt");
+    press(&mut editor, &mut ox, "RET");
+
+    assert_eq!(editor.buffer().name(), browser);
+    let shown = editor.message().unwrap_or_default().to_owned();
+    assert!(shown.contains("not valid UTF-8"), "{shown}");
+    assert_eq!(fs::read(far.path().join("latin.txt")).unwrap(), b"caf\xE9\n");
 }
 
 #[test]

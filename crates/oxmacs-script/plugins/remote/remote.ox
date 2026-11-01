@@ -96,13 +96,12 @@
 (def (open-remote! host remote {line nil})
   (let [local (ops/local-copy host remote)]
     (message (str "Fetching " remote "…"))
-    (file/make-dir (path/parent local))
-    (file/write local (ops/read-text host remote))
-    (swap! opened assoc local {host: host remote: remote})
-    (open-file local)
-    (when line
-      (goto-line (dec line)))
-    (message (str "Editing " (browser-name host remote) "; saving sends it back"))))
+    (ops/download! host remote local)
+    (when (open-file local)
+      (swap! opened assoc local {host: host remote: remote})
+      (when line
+        (goto-line (dec line)))
+      (message (str "Editing " (browser-name host remote) "; saving sends it back")))))
 
 (defcommand remote-visit "Open the file or folder on this line"
   (let [found (browser)
