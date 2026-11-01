@@ -140,6 +140,22 @@ fn opening_a_file_publishes_the_checker_findings() {
 }
 
 #[test]
+fn changes_in_quick_succession_are_checked_once_they_settle() {
+    let (_dir, file, mut client) = shapes();
+    client.open(&file, "(def x 1)\n");
+
+    for (version, text) in [(2, "(helpr 1)\n"), (3, "(def x 2)\nx\n")] {
+        client.notify(
+            "textDocument/didChange",
+            json!({"textDocument": {"uri": file, "version": version}, "contentChanges": [{"text": text}]}),
+        );
+    }
+    let published = client.notification("textDocument/publishDiagnostics");
+
+    assert_eq!(published["diagnostics"], json!([]));
+}
+
+#[test]
 fn completion_offers_the_file_s_names_and_the_library() {
     let (_dir, file, mut client) = shapes();
     client.open(&file, "(def (area w h) (* w h))\n(ar");

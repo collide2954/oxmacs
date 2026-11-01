@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
 use ox_lang::Isolate;
@@ -15,6 +16,8 @@ use oxmacs_files::uri;
 use serde_json::{Value, json};
 
 type Failure = Box<dyn Error + Send + Sync>;
+
+const SETTLE: Duration = Duration::from_millis(300);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flavor {
@@ -60,6 +63,7 @@ impl Document {
 struct Server<'a> {
     options: &'a Options,
     documents: HashMap<String, Document>,
+    changed: HashMap<String, Instant>,
     plain: Option<Isolate>,
     editor: Option<Isolate>,
 }
@@ -127,9 +131,29 @@ impl<'a> Server<'a> {
         Self {
             options,
             documents: HashMap::new(),
+            changed: HashMap::new(),
             plain: None,
             editor: None,
         }
+    }
+
+    fn settles(&self) -> Option<Instant> {
+        self.changed.values().min().copied()
+    }
+
+    fn settled(&mut self, now: Instant) -> Vec<Notification> {
+        let due: Vec<String> = self
+            .changed
+            .iter()
+            .filter(|(_, at)| **at <= now)
+            .map(|(uri, _)| uri.clone())
+            .collect();
+        due.iter().filter_map(|uri| self.settle(uri)).collect()
+    }
+
+    fn settle(&mut self, uri: &str) -> Option<Notification> {
+        self.changed.remove(uri)?;
+        self.diagnostics(uri)
     }
 
     fn isolate(&mut self, path: Option<&Path>) -> &mut Isolate {
@@ -214,10 +238,12 @@ impl<'a> Server<'a> {
                     .as_str()?
                     .to_owned();
                 self.documents.get_mut(&uri)?.text = text;
-                self.diagnostics(&uri)
+                self.changed.insert(uri, Instant::now() + SETTLE);
+                None
             }
             "textDocument/didClose" => {
                 self.documents.remove(&uri);
+                self.changed.remove(&uri);
                 Some(Notification::new(
                     "textDocument/publishDiagnostics".to_owned(),
                     json!({"uri": uri, "diagnostics": []}),
@@ -463,11 +489,33 @@ fn capabilities() -> Value {
 pub fn run(connection: &Connection, options: &Options) -> Result<(), Failure> {
     connection.initialize(capabilities())?;
     let mut server = Server::new(options);
-    for message in &connection.receiver {
+    loop {
+        let message = match server.settles() {
+            Some(at) => match connection.receiver.recv_deadline(at) {
+                Ok(message) => Some(message),
+                Err(error) if error.is_timeout() => None,
+                Err(_) => break,
+            },
+            None => match connection.receiver.recv() {
+                Ok(message) => Some(message),
+                Err(_) => break,
+            },
+        };
+        for out in server.settled(Instant::now()) {
+            connection.sender.send(out.into())?;
+        }
+        let Some(message) = message else {
+            continue;
+        };
         match message {
             Message::Request(request) => {
                 if connection.handle_shutdown(&request)? {
                     return Ok(());
+                }
+                if let Some(uri) = request.params["textDocument"]["uri"].as_str()
+                    && let Some(out) = server.settle(uri)
+                {
+                    connection.sender.send(out.into())?;
                 }
                 let response = server.answer(&request);
                 connection.sender.send(response.into())?;
