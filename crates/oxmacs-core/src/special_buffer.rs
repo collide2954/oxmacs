@@ -31,8 +31,8 @@ pub trait SpecialBuffer: Any + Send + fmt::Debug {
         false
     }
 
-    fn watched(&self) -> Option<&Path> {
-        None
+    fn watched(&self) -> Vec<&Path> {
+        Vec::new()
     }
 
     fn position(&self) -> Option<String> {

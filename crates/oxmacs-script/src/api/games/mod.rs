@@ -377,7 +377,7 @@ fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 ViewBuffer {
                     scope,
                     file: None,
-                    watched: None,
+                    watched: Vec::new(),
                     node: Node::Game(Box::new(Screen::blank(size))),
                 }
             })

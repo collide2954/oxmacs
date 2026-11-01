@@ -70,7 +70,7 @@ pub enum Message {
     Tick(Instant),
     Pasted(Option<String>),
     PastedPrimary(Option<String>),
-    DiskChanged,
+    DiskChanged(Vec<PathBuf>),
     Opened(Result<(), String>),
     Clock,
     Delivered(Delivery),
@@ -299,7 +299,7 @@ impl App {
                 files: self.editor.visited_files(),
                 directories: self.editor.watched_directories(),
             })
-            .map(|()| Message::DiskChanged),
+            .map(Message::DiskChanged),
             event::listen_with(focus_changes),
             ticker::ticks(self.clock.as_deref().map(|format| {
                 if clock::shows_seconds(format) {
@@ -1239,7 +1239,7 @@ mod tests {
         assert_eq!(app.title(), "a.txt - oxmacs");
         std::fs::write(&path, "new text").unwrap();
 
-        let _ = app.update(Message::DiskChanged);
+        let _ = app.update(Message::DiskChanged(vec![dir.path().to_owned()]));
 
         assert_eq!(app.editor().buffer().contents(), "new text");
     }

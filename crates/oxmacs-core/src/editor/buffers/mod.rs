@@ -154,10 +154,10 @@ impl BufferList {
         matches!(self.mode(index), Some(Mode::Special(view)) if view.fixed_name())
     }
 
-    pub(super) fn watched(&self, index: usize) -> Option<&Path> {
-        match self.mode(index)? {
-            Mode::Special(view) => view.watched(),
-            Mode::Text(_) => None,
+    pub(super) fn watched(&self, index: usize) -> Vec<&Path> {
+        match self.mode(index) {
+            Some(Mode::Special(view)) => view.watched(),
+            _ => Vec::new(),
         }
     }
 

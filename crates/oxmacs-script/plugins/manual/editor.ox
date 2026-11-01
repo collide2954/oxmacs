@@ -73,7 +73,7 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
     (set-buffer-text (string/trim-end (buffer-text))))))
 ```
 
-`on-disk-change` and `on-settings-change` take a key and a function the same way, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `on-key-command` hears each command run from the keyboard, other than typing, with the `keys` pressed and the `command` they ran, as the keycast plugin shows them. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.
+`on-disk-change` and `on-settings-change` take a key and a function the same way, the first calling it with a vector of the folders where something changed, and `on-processes-change` follows the processes oxmacs runs, which `processes` lists. `on-key-command` hears each command run from the keyboard, other than typing, with the `keys` pressed and the `command` they ran, as the keycast plugin shows them. `(on-open-directory f)` makes `f` the way directories open, with no key; a plugin that does this declares `:opens-directories true`, as dired does. `every` repeats work on a timer.
 
 ## The mode line and notifications
 

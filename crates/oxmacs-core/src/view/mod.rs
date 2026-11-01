@@ -197,7 +197,7 @@ pub enum Arg {
 pub struct ViewBuffer {
     pub scope: ScopeId,
     pub file: Option<PathBuf>,
-    pub watched: Option<PathBuf>,
+    pub watched: Vec<PathBuf>,
     pub node: Node<usize>,
 }
 
@@ -210,7 +210,7 @@ impl SpecialBuffer for ViewBuffer {
         self.file.as_deref()
     }
 
-    fn watched(&self) -> Option<&Path> {
-        self.watched.as_deref()
+    fn watched(&self) -> Vec<&Path> {
+        self.watched.iter().map(PathBuf::as_path).collect()
     }
 }

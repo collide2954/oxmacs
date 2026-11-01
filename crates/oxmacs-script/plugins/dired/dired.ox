@@ -239,4 +239,4 @@
         (map (fn [entry] (open-externally (path/join listing.directory entry.name))) found)))))
 
 (on-open-directory (fn [directory] (visit directory nil :name true)))
-(on-disk-change :dired (fn [] (refresh-all)))
+(on-disk-change :dired (fn [_folders] (refresh-all)))

@@ -655,8 +655,8 @@ impl SpecialBuffer for Repository {
         true
     }
 
-    fn watched(&self) -> Option<&Path> {
-        Some(&self.2)
+    fn watched(&self) -> Vec<&Path> {
+        vec![&self.2]
     }
 }
 
@@ -688,14 +688,15 @@ fn disk_changes_and_claimed_directories_come_back_as_events() {
     editor.subscribe(EventKind::DiskChanged);
     editor.claim_directories("explorer");
 
-    editor.check_disk_changes();
-    editor.check_disk_changes();
+    let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+    editor.disk_changed_in(vec![b.clone()]);
+    editor.disk_changed_in(vec![b.clone(), a.clone()]);
     assert!(editor.open_file(dir.path()));
 
     assert_eq!(
         editor.take_events(),
         [
-            Event::DiskChanged,
+            Event::DiskChanged(vec![a, b]),
             Event::OpenDirectory {
                 path: dir.path().to_owned(),
                 owner: "explorer".to_owned()

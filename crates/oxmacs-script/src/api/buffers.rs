@@ -31,7 +31,7 @@ pub struct LinesBuffer {
     links: Vec<Vec<Range<usize>>>,
     directory: Option<PathBuf>,
     file: Option<PathBuf>,
-    watched: Option<PathBuf>,
+    watched: Vec<PathBuf>,
     linked: Option<Hold>,
     moved: Option<Hold>,
     resized: Option<Hold>,
@@ -74,8 +74,8 @@ impl SpecialBuffer for LinesBuffer {
         self.file.as_deref()
     }
 
-    fn watched(&self) -> Option<&Path> {
-        self.watched.as_deref().or(self.directory.as_deref())
+    fn watched(&self) -> Vec<&Path> {
+        self.watched.iter().map(PathBuf::as_path).collect()
     }
 
     fn fixed_name(&self) -> bool {
@@ -445,7 +445,7 @@ struct Options {
     bindings: Vec<(String, String)>,
     directory: Option<PathBuf>,
     file: Option<PathBuf>,
-    watched: Option<PathBuf>,
+    watched: Option<Vec<PathBuf>>,
     beside: bool,
     select: bool,
     moved: Option<Value>,
@@ -491,7 +491,7 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
             "label" => found.label = Some(print::display(heap, value)),
             "directory" => found.directory = Some(PathBuf::from(print::display(heap, value))),
             "file" => found.file = Some(PathBuf::from(print::display(heap, value))),
-            "watch" => found.watched = Some(PathBuf::from(print::display(heap, value))),
+            "watch" => found.watched = Some(folders(heap, "open-buffer", value)?),
             "beside" => found.beside = value.truthy(),
             "select" => found.select = value.truthy(),
             "on-move" => found.moved = Some(value),
@@ -520,6 +520,23 @@ fn options(heap: &Heap, slots: &[Value]) -> Result<Options, Error> {
         }
     }
     Ok(found)
+}
+
+pub(crate) fn folders(heap: &Heap, native: &str, value: Value) -> Result<Vec<PathBuf>, Error> {
+    if let Some(folder) = heap.text(value) {
+        return Ok(vec![PathBuf::from(folder)]);
+    }
+    let refused = || {
+        Error::new(format!(
+            "{native}'s :watch is a folder or a vector of folders, got {}",
+            print::brief(heap, value)
+        ))
+    };
+    heap.elements(value)
+        .ok_or_else(refused)?
+        .into_iter()
+        .map(|item| heap.text(item).map(PathBuf::from).ok_or_else(refused))
+        .collect()
 }
 
 fn hold(heap: &mut Heap, old: Option<Hold>, value: Option<Value>) -> Option<Hold> {
@@ -566,7 +583,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 links: Vec::new(),
                 directory: None,
                 file,
-                watched: None,
+                watched: Vec::new(),
                 linked: None,
                 moved: None,
                 resized: None,
@@ -601,8 +618,8 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         if given.directory.is_some() {
             view.directory = given.directory;
         }
-        if given.watched.is_some() {
-            view.watched = given.watched;
+        if let Some(watched) = given.watched {
+            view.watched = watched;
         }
         view.moved = hold(heap, view.moved, given.moved);
         view.resized = hold(heap, view.resized, given.resized);
@@ -1054,6 +1071,32 @@ mod tests {
         assert_eq!(view.pills(0), [(6..10, Highlight::Link)]);
         assert_eq!(editor.default_directory(), folder.path());
         assert!(editor.watched_directories().contains(&metadata));
+    }
+
+    #[test]
+    fn buffers_watch_each_folder_given_until_told_otherwise() {
+        let folder = tempfile::tempdir().unwrap();
+        let (a, b) = (folder.path().join("a"), folder.path().join("b"));
+        let quoted = |path: &std::path::Path| format!("{:?}", path.display().to_string());
+        let (mut editor, mut ox) = opened(&format!(
+            r#"(open-buffer "*tree*" ["x"] :watch [{} {}])"#,
+            quoted(&a),
+            quoted(&b)
+        ));
+        assert_eq!(editor.watched_directories(), [a.clone(), b]);
+
+        ox.eval(
+            &mut editor,
+            &format!(r#"(open-buffer "*tree*" ["y"] :watch [{}])"#, quoted(&a)),
+        )
+        .unwrap();
+        assert_eq!(editor.watched_directories(), [a]);
+        assert_eq!(
+            ox.eval(&mut editor, r#"(open-buffer "*tree*" ["z"] :watch [3])"#)
+                .unwrap_err()
+                .message,
+            "open-buffer's :watch is a folder or a vector of folders, got [3]"
+        );
     }
 
     #[test]

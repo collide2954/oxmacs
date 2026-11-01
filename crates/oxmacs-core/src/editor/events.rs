@@ -32,7 +32,7 @@ pub enum Event {
         link: usize,
     },
     Saved(BufferId),
-    DiskChanged,
+    DiskChanged(Vec<PathBuf>),
     Configured,
     Processes,
     Opened(BufferId),
@@ -134,13 +134,23 @@ impl Editor {
     }
 
     pub(super) fn record(&mut self, event: Event) {
-        let once = matches!(
-            event,
-            Event::DiskChanged | Event::Configured | Event::Processes
-        );
-        if self.subscribed(EventKind::from(&event))
-            && !(once && self.events.queued.contains(&event))
+        if !self.subscribed(EventKind::from(&event)) {
+            return;
+        }
+        if let Event::DiskChanged(folders) = &event
+            && let Some(Event::DiskChanged(queued)) = self
+                .events
+                .queued
+                .iter_mut()
+                .find(|queued| matches!(queued, Event::DiskChanged(_)))
         {
+            queued.extend(folders.iter().cloned());
+            queued.sort();
+            queued.dedup();
+            return;
+        }
+        let once = matches!(event, Event::Configured | Event::Processes);
+        if !(once && self.events.queued.contains(&event)) {
             self.events.queued.push(event);
         }
     }

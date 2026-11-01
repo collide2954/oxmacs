@@ -488,5 +488,5 @@
 (defmode git-commit "Git commit"
   :highlight commit/highlight)
 
-(on-disk-change :git (fn [] (refresh-all)))
+(on-disk-change :git (fn [_folders] (refresh-all)))
 (on-saved :git (fn [_path] (refresh-all)))

@@ -230,7 +230,7 @@ impl App {
             Message::Tick(now) => self.tick(now),
             Message::Pasted(text) => self.editor.paste(text),
             Message::PastedPrimary(text) => self.editor.paste_primary(text),
-            Message::DiskChanged => self.editor.check_disk_changes(),
+            Message::DiskChanged(folders) => self.editor.disk_changed_in(folders),
             Message::Opened(Err(error)) => self.editor.show_message(error),
             Message::ProcessTick => self.sample_processes(),
             Message::FocusWindow(window) => {

@@ -110,7 +110,7 @@
 (on-open-file "pdf" (fn [place] (open-document place)))
 
 (on-disk-change :pdf
-                (fn []
+                (fn [_folders]
                   (each [name (buffer-list)]
                     (when-let [state (with-buffer name (buffer-value :pdf))]
                       (when (load state) (message $"Reloaded {name}"))))))

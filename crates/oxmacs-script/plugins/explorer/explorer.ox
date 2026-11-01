@@ -12,6 +12,9 @@
 (defonce files (atom nil))
 (defonce refreshing (atom false))
 (defonce stale (atom false))
+(defonce pending (atom #{}))
+(defonce kept (atom {}))
+(def kept-fields [:open :entries :changes :ignored :problems :repo])
 (def settle-ms 150)
 
 (def (windows?)
@@ -30,8 +33,8 @@
   (when-let [side (side-window)]
     (= side.buffer tree-buffer)))
 
-(def (root-of start)
-  (or (project-root start) (language-root start) start))
+(def (project-of start)
+  (or (project-root start) (language-root start)))
 
 (def (load folder)
   (let [found (try (file/list folder) (catch error _e []))]
@@ -116,11 +119,13 @@
                                        width (and s.current (= (key-of row.path) (key-of s.current))))
                             row))
                    rows)
-        at (row-index rows focus)]
+        at (row-index rows focus)
+        shown (if (empty? lines) [""] lines)
+        watched (vec s.open)]
     (set-header tree-buffer (header s rows))
     (if at
-      (set-lines tree-buffer (if (empty? lines) [""] lines) :line at)
-      (set-lines tree-buffer (if (empty? lines) [""] lines)))))
+      (open-buffer tree-buffer shown :show false :watch watched :line at)
+      (open-buffer tree-buffer shown :show false :watch watched))))
 
 (def (ancestors place root)
   (loop [folder (path/parent place)
@@ -138,20 +143,32 @@
     (draw place)))
 
 (def (open-root root place)
-  (swap! state assoc :root root :open #{} :entries {} :filter "" :found nil :current place
-         :repo (file/exists? (path/join root ".git")))
-  (reset! files nil)
-  (ensure-buffer root)
-  (load root)
-  (load-git)
-  (load-problems)
-  (if place (reveal place) (draw)))
+  (let [s @state
+        back (get @kept (key-of root))]
+    (when s.root
+      (swap! kept assoc (key-of s.root) (select-keys s kept-fields)))
+    (swap! state merge
+           {root: root open: #{} entries: {} changes: {} ignored: #{} problems: {}
+            filter: "" found: nil current: place repo: (file/exists? (path/join root ".git"))}
+           (or back {}))
+    (reset! files nil)
+    (ensure-buffer root)
+    (unless back
+      (load root)
+      (load-git)
+      (load-problems))
+    (if place (reveal place) (draw))
+    (when back (spawn (refresh)))))
 
 (def (follow-to place directory)
-  (let [root (get @state :root)]
+  (let [root (get @state :root)
+        start (if place (path/parent place) directory)]
     (cond
       [(and place (inside? place root)) (reveal place)]
-      [(or (nil? root) (setting :follow)) (open-root (root-of (if place (path/parent place) directory)) place)]
+      [(nil? root) (open-root (or (project-of start) start) place)]
+      [(setting :follow)
+       (when-let [found (project-of start)]
+         (unless (same? found root) (open-root found place)))]
       [else nil])))
 
 (def tree-keys
@@ -254,23 +271,28 @@
       (draw (get @state :current)))
     (select-main-window)))
 
-(def (reload)
-  (let [s @state]
+(def (reload folders)
+  (let [s @state
+        wanted (when (not= folders :all) (set (map key-of folders)))]
     (when s.root
-      (each [folder (keys s.entries)] (load folder))
+      (each [folder (keys s.entries)]
+        (when (or (nil? wanted) (contains? wanted (key-of folder))) (load folder)))
       (load-git)
       (load-problems)
       (reset! files nil)
       (if (filtering? @state) (refilter) (draw)))))
 
-(def (refresh)
+(def (refresh (folders :all))
+  (swap! pending (fn [now] (if (or (= now :all) (= folders :all)) :all (into now folders))))
   (reset! stale true)
   (when (and (shown?) (compare-and-set! refreshing false true))
     (try
       (loop []
         (sleep settle-ms)
         (reset! stale false)
-        (reload)
+        (let [folders @pending]
+          (reset! pending #{})
+          (reload folders))
         (when (and @stale (shown?)) (again)))
       (finally (reset! refreshing false)))))
 
@@ -390,6 +412,6 @@
                     (when (and (shown?) (not= (buffer-name) tree-buffer) (or (buffer-file) (nil? (get @state :root))))
                       (follow-to (buffer-file) (default-directory)))))
 
-(on-saved :explorer (fn [_place] (refresh)))
-(on-disk-change :explorer (fn [] (refresh)))
+(on-saved :explorer (fn [place] (when place (refresh [(path/parent place)]))))
+(on-disk-change :explorer (fn [folders] (refresh folders)))
 (on-diagnostics-change :explorer (fn [] (when (shown?) (load-problems) (draw))))

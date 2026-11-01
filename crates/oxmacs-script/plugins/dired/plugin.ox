@@ -1,5 +1,5 @@
 (plugin dired
-  :version "0.3.5"
+  :version "0.3.6"
   :summary "List directories and manage their files"
   :commands [dired dired-jump]
   :keys {"C-x d" dired "C-x C-j" dired-jump}

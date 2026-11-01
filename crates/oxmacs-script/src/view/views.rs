@@ -351,8 +351,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
     let (beside, select) = (beside.truthy(), select.truthy());
     let show = show == Value::Nil || show.truthy();
     let resized = (resized != Value::Nil).then_some(resized);
-    let watched =
-        (watched != Value::Nil).then(|| std::path::PathBuf::from(print::display(heap, watched)));
+    let watched = crate::api::buffers::folders(heap, "open-view", watched)?;
     let mut views = editor.take_plugin_state::<Views>().unwrap_or_default();
     let (alive, closed): (Vec<Open>, Vec<Open>) = std::mem::take(&mut views.open)
         .into_iter()
@@ -384,7 +383,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
             ViewBuffer {
                 scope,
                 file,
-                watched: None,
+                watched: Vec::new(),
                 node: Node::Column {
                     spacing: 0.0,
                     children: Vec::new(),

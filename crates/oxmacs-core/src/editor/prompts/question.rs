@@ -229,7 +229,7 @@ impl Editor {
                         self.note_disk_state(index, disk, true);
                     }
                 }
-                self.check_disk_changes();
+                self.reread_changed_files();
             }
             Pending::SaveOver { buffer, after } => {
                 if let (true, Some(index)) = (answer == 'y', self.index_of(buffer))

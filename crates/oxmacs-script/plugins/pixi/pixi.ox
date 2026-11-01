@@ -121,7 +121,7 @@
 
 (on-window-change :pixi (fn [] (look!)))
 
-(on-disk-change :pixi (fn [] (changed!)))
+(on-disk-change :pixi (fn [_folders] (changed!)))
 
 (on-saved :pixi (fn [path]
                   (when (some (fn [name] (= name (path/name path))) manifests)

@@ -29,10 +29,12 @@ impl Editor {
             .filter_map(|index| self.buffers.location(index))
             .filter(|(_, directory)| *directory)
             .map(|(path, _)| path.to_owned())
-            .chain(
-                (0..self.buffers.len())
-                    .filter_map(|index| self.buffers.watched(index).map(Path::to_path_buf)),
-            )
+            .chain((0..self.buffers.len()).flat_map(|index| {
+                self.buffers
+                    .watched(index)
+                    .into_iter()
+                    .map(Path::to_path_buf)
+            }))
             .collect();
         directories.sort();
         directories.dedup();
@@ -40,7 +42,18 @@ impl Editor {
     }
 
     pub fn check_disk_changes(&mut self) {
-        self.record(Event::DiskChanged);
+        let folders = self.watched_directories();
+        self.disk_changed_in(folders);
+    }
+
+    pub fn disk_changed_in(&mut self, mut folders: Vec<PathBuf>) {
+        folders.sort();
+        folders.dedup();
+        self.record(Event::DiskChanged(folders));
+        self.reread_changed_files();
+    }
+
+    pub(in crate::editor) fn reread_changed_files(&mut self) {
         if self.config.on_disk_change == OnDiskChange::Ignore {
             return;
         }

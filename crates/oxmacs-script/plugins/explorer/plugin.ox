@@ -1,5 +1,5 @@
 (plugin explorer
-  :version "0.2.5"
+  :version "0.2.6"
   :summary "A file tree beside the windows that follows the file you're in"
   :commands [explorer]
   :keys {"C-x C-d" explorer}

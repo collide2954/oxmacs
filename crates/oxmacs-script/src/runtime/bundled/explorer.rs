@@ -314,6 +314,90 @@ fn changes_made_while_the_tree_is_hidden_show_when_it_comes_back() {
     );
 }
 
+fn watched(editor: &Editor, project: &Path) -> Vec<String> {
+    editor
+        .watched_directories()
+        .iter()
+        .filter_map(|folder| folder.strip_prefix(project).ok())
+        .map(|inside| inside.display().to_string().replace('\\', "/"))
+        .collect()
+}
+
+#[test]
+fn the_tree_watches_its_root_and_the_folders_it_has_open() {
+    let project = project();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+    assert_eq!(watched(&editor, project.path()), ["", "src"]);
+
+    press(&mut editor, &mut ox, "M-< RET");
+    assert_eq!(watched(&editor, project.path()), ["", "docs", "src"]);
+    press(&mut editor, &mut ox, "C-n C-n TAB");
+    assert_eq!(watched(&editor, project.path()), ["", "docs"]);
+}
+
+#[test]
+fn a_change_lists_again_only_the_folder_it_names() {
+    let project = project();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+    press(&mut editor, &mut ox, "M-< RET");
+    fs::write(project.path().join("docs").join("new.md"), "").unwrap();
+    fs::write(project.path().join("src").join("new.rs"), "").unwrap();
+    let has = |editor: &Editor, name: &str| tree(editor).iter().any(|row| row.trim() == name);
+
+    editor.disk_changed_in(vec![project.path().join("src")]);
+    settle(&mut editor, &mut ox);
+    assert!(has(&editor, "new.rs"), "{:#?}", tree(&editor));
+    assert!(!has(&editor, "new.md"), "{:#?}", tree(&editor));
+
+    editor.disk_changed_in(vec![project.path().join("docs")]);
+    settle(&mut editor, &mut ox);
+    assert!(has(&editor, "new.md"), "{:#?}", tree(&editor));
+}
+
+#[test]
+fn each_project_keeps_its_open_folders_for_when_the_tree_comes_back() {
+    let (first, second) = (project(), project());
+    let (_home, mut editor, mut ox) = opened(first.path(), "src/main.rs");
+    press(&mut editor, &mut ox, "M-< RET C-x o");
+
+    editor.open_file(&second.path().join("README.md"));
+    settle(&mut editor, &mut ox);
+    assert_eq!(tree(&editor), ["▸ docs", "▸ src", "  README.md"]);
+    assert_eq!(watched(&editor, second.path()), [""]);
+
+    editor.open_file(&first.path().join("src").join("lib.rs"));
+    settle(&mut editor, &mut ox);
+    assert_eq!(
+        tree(&editor),
+        [
+            "▾ docs",
+            "    guide.md",
+            "▾ src",
+            "    lib.rs",
+            "    main.rs",
+            "  README.md"
+        ]
+    );
+    assert_eq!(watched(&editor, second.path()), Vec::<String>::new());
+}
+
+#[test]
+fn a_file_outside_any_project_leaves_the_tree_where_it_is() {
+    let project = project();
+    let loose = tempfile::tempdir().unwrap();
+    fs::write(loose.path().join("notes.txt"), "x").unwrap();
+    let (_home, mut editor, mut ox) = opened(project.path(), "src/main.rs");
+    editor.set_home_directory(Some(loose.path().to_owned()));
+    let before = tree(&editor);
+    press(&mut editor, &mut ox, "C-x o");
+
+    editor.open_file(&loose.path().join("notes.txt"));
+    settle(&mut editor, &mut ox);
+
+    assert_eq!(editor.buffer().name(), "notes.txt");
+    assert_eq!(tree(&editor), before);
+}
+
 #[test]
 fn reading_git_status_leaves_the_repository_untouched() {
     let project = project();

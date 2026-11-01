@@ -1,16 +1,15 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use iced::futures::channel::mpsc;
 use oxmacs_files::wsl;
 use oxmacs_process::{Launch, Process, Started};
 
-use super::Interest;
+use super::{Interest, Noticed};
 
 const EVENTS: &str = "close_write,create,delete,moved_to,moved_from,attrib";
 const POLL: Duration = Duration::from_secs(2);
@@ -36,23 +35,23 @@ impl Watch {
         distro: String,
         folders: Vec<Folder>,
         interest: Arc<Interest>,
-        sender: mpsc::Sender<()>,
+        noticed: Noticed,
     ) -> Self {
-        Self::spawn(distro, folders, interest, sender, true)
+        Self::spawn(distro, folders, interest, noticed, true)
     }
 
     fn spawn(
         distro: String,
         folders: Vec<Folder>,
         interest: Arc<Interest>,
-        sender: mpsc::Sender<()>,
+        noticed: Noticed,
         listen: bool,
     ) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
         let process = Arc::new(Mutex::new(None));
         let mut changes = Changes {
             interest,
-            sender,
+            noticed,
             stop: Arc::clone(&stop),
         };
         let slot = Arc::clone(&process);
@@ -79,7 +78,7 @@ type Seen = Vec<(PathBuf, Option<SystemTime>, u64)>;
 
 struct Changes {
     interest: Arc<Interest>,
-    sender: mpsc::Sender<()>,
+    noticed: Noticed,
     stop: Arc<AtomicBool>,
 }
 
@@ -88,8 +87,11 @@ impl Changes {
         self.stop.load(Ordering::Relaxed)
     }
 
-    fn signal(&mut self) {
-        let _ = self.sender.try_send(());
+    fn note<'a>(&mut self, paths: impl IntoIterator<Item = &'a Path>) {
+        let folders = paths
+            .into_iter()
+            .filter_map(|path| self.interest.folder_touched(path));
+        self.noticed.note(folders.collect::<Vec<_>>());
     }
 
     fn listen(&mut self, distro: &str, folders: &[Folder], slot: &Mutex<Option<Process>>) -> bool {
@@ -122,9 +124,7 @@ impl Changes {
             if self.stopped() {
                 return false;
             }
-            if self.interest.touches(&path_of(distro, folders, &line)) {
-                self.signal();
-            }
+            self.note([path_of(distro, folders, &line).as_path()]);
             true
         });
         self.stopped() || process.wait().is_ok_and(|status| status.success())
@@ -140,10 +140,17 @@ impl Changes {
                 thread::sleep(STEP);
             }
             let now = self.snapshot(folders);
-            if now != seen {
-                seen = now;
-                self.signal();
-            }
+            let differing: Vec<PathBuf> = now
+                .iter()
+                .filter(|entry| seen.binary_search(entry).is_err())
+                .chain(
+                    seen.iter()
+                        .filter(|entry| now.binary_search(entry).is_err()),
+                )
+                .map(|(path, ..)| path.clone())
+                .collect();
+            self.note(differing.iter().map(PathBuf::as_path));
+            seen = now;
         }
     }
 
@@ -155,7 +162,7 @@ impl Changes {
             .flatten()
             .filter_map(|entry| {
                 let path = entry.path();
-                self.interest.touches(&path).then(|| {
+                self.interest.folder_touched(&path).is_some().then(|| {
                     let metadata = entry.metadata().ok();
                     let modified = metadata.as_ref().and_then(|found| found.modified().ok());
                     (path, modified, metadata.map_or(0, |found| found.len()))
@@ -181,7 +188,7 @@ fn path_of(distro: &str, folders: &[Folder], line: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use iced::futures::channel::mpsc;
 
     use super::*;
     use crate::watcher::Watched;
@@ -235,17 +242,25 @@ mod tests {
             directories: Vec::new(),
         }));
         let (sender, mut receiver) = mpsc::channel(1);
+        let noticed = Noticed::new(sender);
         let folders = vec![Folder {
             share: dir.path().to_owned(),
             linux: "/x".to_owned(),
         }];
-        let watch = Watch::spawn("fedora".to_owned(), folders, interest, sender, false);
+        let watch = Watch::spawn(
+            "fedora".to_owned(),
+            folders,
+            interest,
+            noticed.clone(),
+            false,
+        );
         thread::sleep(STEP * 3);
 
         fs::write(dir.path().join("other.txt"), "x").unwrap();
         assert!(!signaled_within(&mut receiver, POLL * 2));
         fs::write(&visited, "new text").unwrap();
         assert!(signaled_within(&mut receiver, POLL * 3));
+        assert_eq!(noticed.take(), [dir.path().to_owned()]);
 
         drop(watch);
         fs::remove_file(&visited).unwrap();

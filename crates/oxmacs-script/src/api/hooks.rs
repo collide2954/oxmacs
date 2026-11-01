@@ -102,7 +102,7 @@ fn holds(editor: &Editor, event: &Event) -> Vec<Hold> {
                 .collect();
         }
         Event::OpenDirectory { .. } => Hook::OpenDirectory,
-        Event::DiskChanged => Hook::DiskChange,
+        Event::DiskChanged(_) => Hook::DiskChange,
         Event::Saved(_) => Hook::Saved,
         Event::Configured => Hook::SettingsChange,
         Event::Processes => Hook::ProcessesChange,
@@ -143,6 +143,13 @@ fn dispatch(isolate: &mut Isolate, editor: &mut Editor, event: Event) -> Result<
         }
         Event::OpenFile { path, .. } | Event::OpenDirectory { path, .. } => {
             vec![shown(heap, Some(&path))?]
+        }
+        Event::DiskChanged(folders) => {
+            let mut items = Vec::with_capacity(folders.len());
+            for folder in &folders {
+                items.push(shown(heap, Some(folder))?);
+            }
+            vec![heap.vector_from(&items)?]
         }
         Event::Saved(id) => {
             let path = editor
@@ -740,16 +747,17 @@ mod tests {
     }
 
     #[test]
-    fn disk_changes_reach_their_handlers() {
+    fn disk_changes_reach_their_handlers_with_the_folders_that_changed() {
         let home = tempfile::tempdir().unwrap();
         let (mut editor, mut ox) = started(home.path());
-        ox.eval(&mut editor, r"(def seen (atom 0)) (on-disk-change :count (fn [] (swap! seen inc))) (on-disk-change :count (fn [] (swap! seen + 10)))")
+        ox.eval(&mut editor, r"(module (import (ox path))) (def seen (atom [])) (on-disk-change :count (fn [folders] (swap! seen conj :replaced))) (on-disk-change :count (fn [folders] (swap! seen conj (map path/name folders))))")
             .unwrap();
 
-        editor.check_disk_changes();
+        editor.disk_changed_in(vec![home.path().join("b"), home.path().join("a")]);
+        editor.disk_changed_in(vec![home.path().join("a")]);
         settle(&mut editor, &mut ox);
 
-        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), "10");
+        assert_eq!(ox.eval(&mut editor, "@seen").unwrap(), r#"[["a" "b"]]"#);
     }
 
     #[test]
