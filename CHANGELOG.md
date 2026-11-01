@@ -153,6 +153,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- CalDAV sync reads the server's replies as XML, so events whose text the server writes with numeric character references, such as `&#233;` for é or `&#13;` for line ends, arrive as written instead of with the references left in.
 - PDFs let go of their document and text when their last buffer closes, instead of keeping them until oxmacs quits; PDFium starts once even when two documents open at once; and a search that finishes after the file changed no longer keeps the old file's text for the new one. `pdf/close` does this from Ox.
 - The R plugin writes the profile R starts with, the render script and the plots folder into a private folder only you can read, made for each run and removed when oxmacs quits, instead of at names anyone could guess in the shared temporary folder.
 - An EPUB books file that can't be read is left as it is, and books say why they won't open, instead of the next page turn replacing it and losing every other book's place and highlights.

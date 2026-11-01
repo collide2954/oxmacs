@@ -1,5 +1,5 @@
 (module
-  (import (ox file) (ox path) (ox string) (ox http) (ox regex)
+  (import (ox file) (ox path) (ox string) (ox http) (ox regex) (ox xml)
           (calendar store)
           (vault store :as vault))
   (export sync! responses))
@@ -11,29 +11,18 @@
   <C:filter><C:comp-filter name=\"VCALENDAR\"><C:comp-filter name=\"VEVENT\"/></C:comp-filter></C:filter>
 </C:calendar-query>")
 
-(def (xml-text text)
-  (let [inner (if-let [found (regex/find text #"(?s)<!\[CDATA\[(.*)\]\]>")] (first found.groups) text)]
-    (-> inner
-        (string/replace "&lt;" "<")
-        (string/replace "&gt;" ">")
-        (string/replace "&quot;" "\"")
-        (string/replace "&apos;" "'")
-        (string/replace "&#13;" "\r")
-        (string/replace "&#xD;" "\r")
-        (string/replace "&#xd;" "\r")
-        (string/replace "&amp;" "&"))))
-
-(def (tag-text block tag)
-  (when-let [found (regex/find block (str "(?s)<(?:[A-Za-z0-9_-]+:)?" tag "(?:\\s[^>]*)?>(.*?)</(?:[A-Za-z0-9_-]+:)?" tag ">"))]
-    (xml-text (string/trim (first found.groups)))))
+(def (found? propstat)
+  (let [status (xml/text (xml/find propstat "status"))]
+    (or (nil? status) (string/includes? status " 200"))))
 
 (def (responses body)
-  "The responses of a CalDAV multistatus body, each a map of :href, :etag and :data."
-  (keep (fn [match]
-          (let [block match.text]
-            (when-let [href (tag-text block "href")]
-              {href: href etag: (tag-text block "getetag") data: (tag-text block "calendar-data")})))
-        (regex/find-all body #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>")))
+  "The responses of a CalDAV multistatus body, each a map of :href, :etag and :data, read from its propstat that was found."
+  (keep (fn [response]
+          (when-let [href (xml/text (xml/find response "href"))]
+            (let [props (find found? (xml/find-all response "propstat"))
+                  prop (fn [name] (when props (some-> (xml/text (xml/find props $"prop/{name}")) string/trim)))]
+              {href: (string/trim href) etag: (prop "getetag") data: (prop "calendar-data")})))
+        (xml/find-all (xml/read body) "response")))
 
 (def (origin url)
   (or (get (regex/find url "^[a-zA-Z]+://[^/]+") :text) ""))

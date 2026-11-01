@@ -243,10 +243,22 @@ fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
                 "REPORT" => {
                     let mut responses = String::new();
                     for (href, etag, data) in &state.resources {
+                        let escaped: String = data
+                            .replace('&', "&amp;")
+                            .replace('<', "&lt;")
+                            .chars()
+                            .map(|c| {
+                                if c == '\r' || !c.is_ascii() {
+                                    format!("&#{};", u32::from(c))
+                                } else {
+                                    c.to_string()
+                                }
+                            })
+                            .collect();
                         let _ = write!(
                             responses,
-                            "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{etag}</d:getetag><cal:calendar-data>{}</cal:calendar-data></d:prop></d:propstat></d:response>",
-                            data.replace('&', "&amp;").replace('<', "&lt;")
+                            "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{}</d:getetag><cal:calendar-data>{escaped}</cal:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><d:displayname/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>",
+                            etag.replace('"', "&quot;")
                         );
                     }
                     (
@@ -284,6 +296,35 @@ fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
         }
     });
     port
+}
+
+#[test]
+fn caldav_replies_are_read_as_xml_with_every_character_reference() {
+    let dav = Arc::new(Mutex::new(Dav::default()));
+    dav.lock().unwrap().resources.push((
+        "/cal/work/review.ics".to_owned(),
+        "\"r1\"".to_owned(),
+        INVITATION
+            .replace("METHOD:REQUEST\r\n", "")
+            .replace("Design review", "Café & thé review"),
+    ));
+    let port = dav_server(Arc::clone(&dav));
+    let (home, mut editor, mut ox) = started(&format!(
+        r#"(use-plugin calendar :config {{calendars: [{{name: "Work" url: "http://127.0.0.1:{port}/cal/work/"}}]}})"#
+    ));
+
+    run_command(&mut editor, &mut ox, "calendar-sync");
+
+    assert_eq!(editor.message(), Some("Calendars synced"));
+    let saved = fs::read_to_string(
+        home.path()
+            .join("data")
+            .join("calendar")
+            .join("Work")
+            .join("review.ics"),
+    )
+    .unwrap();
+    assert!(saved.contains("SUMMARY:Café & thé review\r\n"), "{saved:?}");
 }
 
 #[test]
