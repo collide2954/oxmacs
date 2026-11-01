@@ -6,6 +6,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A buffer whose file was deleted follows it again when it comes back: an unmodified buffer rereads it, and one with edits keeps them and says the file changed. A buffer for a new file that another program creates follows it the same way.
 - `ox fmt` and formatting through `ox lsp` keep a file's CRLF line ends instead of turning them into LF, and `ox fmt --check` no longer lists a CRLF file that is already formatted.
 
 ## [0.15.0] - 2026-11-01

@@ -64,13 +64,10 @@ impl Editor {
             let Some(file) = buffer.file() else {
                 continue;
             };
-            let Some(recorded) = file.disk else {
-                continue;
-            };
             let Ok(now) = DiskState::of(&file.path) else {
                 continue;
             };
-            if now == Some(recorded) {
+            if now == file.disk {
                 continue;
             }
             let name = buffer.name().to_owned();
@@ -349,6 +346,29 @@ mod tests {
         editor.show_message("other");
         editor.check_disk_changes();
         assert_eq!(editor.message(), Some("other"));
+    }
+
+    #[test]
+    fn a_deleted_file_that_comes_back_is_followed_again() {
+        let (_dir, path, mut editor) = opened("old");
+        fs::remove_file(&path).unwrap();
+        editor.check_disk_changes();
+
+        fs::write(&path, "back again").unwrap();
+        editor.check_disk_changes();
+        assert_eq!(editor.buffer().contents(), "back again");
+        assert_eq!(editor.message(), Some("Reverted buffer a.txt"));
+
+        fs::remove_file(&path).unwrap();
+        editor.check_disk_changes();
+        type_text(&mut editor, "x");
+        fs::write(&path, "once more").unwrap();
+        editor.check_disk_changes();
+        assert_eq!(editor.buffer().contents(), "xback again");
+        assert_eq!(
+            editor.message(),
+            Some("a.txt changed on disk; keeping your edits")
+        );
     }
 
     #[test]
