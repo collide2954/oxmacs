@@ -205,6 +205,40 @@ pub fn install(isolate: &mut Isolate) {
     install_pieces(isolate);
 }
 
+fn install_searching(isolate: &mut Isolate) {
+    isolate
+        .native(MODULE, "index-of")
+        .arity(2, Some(3))
+        .function(|heap, arguments| {
+            let from = match arguments.get(2) {
+                Some(start) => count(heap, "string/index-of", *start)?,
+                None => 0,
+            };
+            let whole = text(heap, "string/index-of", arguments[0])?;
+            let part = text(heap, "string/index-of", arguments[1])?;
+            let Some((skipped, _)) = whole
+                .char_indices()
+                .nth(from)
+                .or_else(|| (from == whole.chars().count()).then_some((whole.len(), ' ')))
+            else {
+                return Ok(Value::Nil);
+            };
+            Ok(whole[skipped..]
+                .find(part)
+                .map_or(Value::Nil, |at| character_at(whole, skipped + at)))
+        });
+    isolate
+        .native(MODULE, "last-index-of")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let whole = text(heap, "string/last-index-of", arguments[0])?;
+            let part = text(heap, "string/last-index-of", arguments[1])?;
+            Ok(whole
+                .rfind(part)
+                .map_or(Value::Nil, |at| character_at(whole, at)))
+        });
+}
+
 fn install_pieces(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "lines")
@@ -261,37 +295,7 @@ fn install_pieces(isolate: &mut Isolate) {
             let replaced = whole.replace(from, to);
             heap.string(&replaced).map_err(Error::from)
         });
-    isolate
-        .native(MODULE, "index-of")
-        .arity(2, Some(3))
-        .function(|heap, arguments| {
-            let from = match arguments.get(2) {
-                Some(start) => count(heap, "string/index-of", *start)?,
-                None => 0,
-            };
-            let whole = text(heap, "string/index-of", arguments[0])?;
-            let part = text(heap, "string/index-of", arguments[1])?;
-            let Some((skipped, _)) = whole
-                .char_indices()
-                .nth(from)
-                .or_else(|| (from == whole.chars().count()).then_some((whole.len(), ' ')))
-            else {
-                return Ok(Value::Nil);
-            };
-            Ok(whole[skipped..]
-                .find(part)
-                .map_or(Value::Nil, |at| character_at(whole, skipped + at)))
-        });
-    isolate
-        .native(MODULE, "last-index-of")
-        .arity(2, Some(2))
-        .function(|heap, arguments| {
-            let whole = text(heap, "string/last-index-of", arguments[0])?;
-            let part = text(heap, "string/last-index-of", arguments[1])?;
-            Ok(whole
-                .rfind(part)
-                .map_or(Value::Nil, |at| character_at(whole, at)))
-        });
+    install_searching(isolate);
     isolate
         .native(MODULE, "repeat")
         .arity(2, Some(2))
