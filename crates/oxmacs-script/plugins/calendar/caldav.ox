@@ -59,6 +59,9 @@
 (def (remember sync href etag file)
   (update (forget sync href) :resources conj {href: href etag: etag file: file}))
 
+(def (still-pending sync change)
+  (update sync :pending conj change))
+
 (def (push! calendar credentials sync)
   (let [base (folder-url calendar.url)
         place (store/calendar-folder calendar.name)
@@ -70,7 +73,7 @@
                    (let [response (request credentials :delete url :headers (if known.etag {"If-Match" known.etag} {}))]
                      (if (or (< response.status 300) (= response.status 404))
                        [(forget sync href) problems]
-                       [sync (conj problems (str "couldn't delete " change.file " (" response.status ")"))]))
+                       [(still-pending sync change) (conj problems (str "couldn't delete " change.file " (" response.status ")"))]))
                    (let [body (file/read (path/join place change.file))
                          response (request credentials :put url
                                            :headers (merge {"Content-Type" "text/calendar; charset=utf-8"}
@@ -80,7 +83,7 @@
                             [(remember sync href (get response.headers :etag) change.file) problems]]
                        [(= response.status 412)
                         [sync (conj problems (str change.file " changed on the server too; kept the server's copy"))]]
-                       [else [sync (conj problems (str "couldn't send " change.file " (" response.status ")"))]])))))]
+                       [else [(still-pending sync change) (conj problems (str "couldn't send " change.file " (" response.status ")"))]])))))]
     (reduce step [(assoc sync :pending []) []] sync.pending)))
 
 (def (pull! calendar credentials sync)
@@ -90,8 +93,8 @@
         place (store/calendar-folder calendar.name)]
     (when (>= response.status 300)
       (raise (error (str calendar.name " answered " response.status " to the calendar query"))))
-    (let [found (filter :data (responses response.body))
-          seen (set (map :href found))
+    (let [listed (responses response.body)
+          seen (set (map :href listed))
           changed (reduce (fn [sync item]
                             (let [known (resource sync item.href)]
                               (if (and known (= known.etag item.etag) item.etag)
@@ -99,21 +102,24 @@
                                 (let [name (or (get known :file) (file-name item.href))]
                                   (file/write (path/join place name) item.data)
                                   (remember sync item.href item.etag name)))))
-                          sync found)
+                          sync (filter :data listed))
           gone (remove (fn [known] (contains? seen known.href)) changed.resources)]
-      (reduce (fn [sync known]
-                (let [file (path/join place known.file)]
-                  (when (file/exists? file)
-                    (file/trash file))
-                  (forget sync known.href)))
-              changed gone))))
+      (if (and (empty? listed) (not (empty? gone)))
+        [changed ["the server listed no events, so the local ones were kept"]]
+        [(reduce (fn [sync known]
+                   (let [file (path/join place known.file)]
+                     (when (file/exists? file)
+                       (file/trash file))
+                     (forget sync known.href)))
+                 changed gone)
+         []]))))
 
 (def (sync! calendar)
   "Sends this calendar's local changes to its CalDAV server and brings in the server's, returning the problems met."
   (let [credentials (login calendar)
         place (store/calendar-folder calendar.name)]
     (file/make-dir place)
-    (let [[pushed problems] (push! calendar credentials (store/read-sync calendar.name))
-          pulled (pull! calendar credentials pushed)]
+    (let [[pushed sent] (push! calendar credentials (store/read-sync calendar.name))
+          [pulled kept] (pull! calendar credentials pushed)]
       (store/write-sync! calendar.name pulled)
-      problems)))
+      (into sent kept))))

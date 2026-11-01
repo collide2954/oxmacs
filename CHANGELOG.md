@@ -154,6 +154,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- CalDAV sync no longer trashes local events when the server answers without their calendar data: events the server lists stay, and when it lists none at all the local ones are kept and the sync says so. Changes the server refuses to take or delete are sent again on the next sync instead of being dropped.
 - The explorer keeps each project's tree: going to a file in another project and back shows the folders you had open, read again in the background, and a file outside any project leaves the tree where it is instead of rooting it at that file's folder. It watches the folders it has open, so changes made inside them by other programs show, and a change lists again only the folder it happened in.
 - Consoles hear the control markers and prompts only of the program they started: each console gives its program a secret token in `OXMACS_MARKER`, and output that only looks like a marker, such as a file R prints, shows as text instead of opening paths or URLs. A stray control character no longer hides the output after it. R's viewer opens only web pages and HTML files, and its zoom only R's own plots. A `:prompter` can name `$OXMACS_MARKER`, which the console fills in.
 - Checking Ox as you type, `M-.` and `M-?` find each file's modules in its own folders, instead of an import in one project resolving to another project's module of the same name checked earlier.

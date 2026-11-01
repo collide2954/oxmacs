@@ -197,6 +197,9 @@ struct Dav {
     heard: Vec<String>,
     resources: Vec<(String, String, String)>,
     version: usize,
+    bare: bool,
+    empty: bool,
+    refuse: bool,
 }
 
 fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
@@ -240,9 +243,25 @@ fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
                     .to_owned(),
             );
             let (status, etag, reply) = match method.as_str() {
+                "PUT" | "DELETE" if state.refuse => {
+                    ("503 Service Unavailable", String::new(), String::new())
+                }
                 "REPORT" => {
                     let mut responses = String::new();
-                    for (href, etag, data) in &state.resources {
+                    let listed = if state.empty {
+                        &[][..]
+                    } else {
+                        &state.resources[..]
+                    };
+                    for (href, etag, data) in listed {
+                        if state.bare {
+                            let _ = write!(
+                                responses,
+                                "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{}</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>",
+                                etag.replace('"', "&quot;")
+                            );
+                            continue;
+                        }
                         let escaped: String = data
                             .replace('&', "&amp;")
                             .replace('<', "&lt;")
@@ -378,4 +397,89 @@ fn caldav_calendars_bring_in_server_events_and_send_local_changes() {
         "{heard:?}"
     );
     assert_eq!(dav.lock().unwrap().resources.len(), 1);
+}
+
+#[test]
+fn caldav_replies_without_events_keep_the_local_ones() {
+    let dav = Arc::new(Mutex::new(Dav::default()));
+    dav.lock().unwrap().resources.push((
+        "/cal/work/review.ics".to_owned(),
+        "\"r1\"".to_owned(),
+        INVITATION.replace("METHOD:REQUEST\r\n", ""),
+    ));
+    let port = dav_server(Arc::clone(&dav));
+    let (home, mut editor, mut ox) = started(&format!(
+        r#"(use-plugin calendar :config {{calendars: [{{name: "Work" url: "http://127.0.0.1:{port}/cal/work/"}}]}})"#
+    ));
+    let review = home
+        .path()
+        .join("data")
+        .join("calendar")
+        .join("Work")
+        .join("review.ics");
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert!(review.exists());
+
+    dav.lock().unwrap().bare = true;
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert_eq!(editor.message(), Some("Calendars synced"));
+    assert!(review.exists());
+
+    dav.lock().unwrap().empty = true;
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert_eq!(
+        editor.message(),
+        Some("Work: the server listed no events, so the local ones were kept")
+    );
+    assert!(review.exists());
+}
+
+#[test]
+fn caldav_changes_the_server_refuses_are_sent_again_on_the_next_sync() {
+    let dav = Arc::new(Mutex::new(Dav {
+        refuse: true,
+        ..Dav::default()
+    }));
+    let port = dav_server(Arc::clone(&dav));
+    let (_home, mut editor, mut ox) = started(&format!(
+        r#"(use-plugin calendar :config {{calendars: [{{name: "Work" url: "http://127.0.0.1:{port}/cal/work/"}}]}})"#
+    ));
+
+    add_event(&mut editor, &mut ox, "Planning", "10:00", "never");
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert!(
+        editor
+            .message()
+            .is_some_and(|message| message.contains("couldn't send")),
+        "{:?}",
+        editor.message()
+    );
+    assert!(dav.lock().unwrap().resources.is_empty());
+    dav.lock().unwrap().refuse = false;
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert_eq!(editor.message(), Some("Calendars synced"));
+    assert_eq!(dav.lock().unwrap().resources.len(), 1);
+
+    eval(
+        &mut editor,
+        &mut ox,
+        r#"(module (import (calendar store :as store)))
+           (store/load!)
+           (store/delete-event! (find (fn [event] (= event.summary "Planning")) (store/events)))"#,
+    );
+    settle(&mut editor, &mut ox);
+    dav.lock().unwrap().refuse = true;
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert!(
+        editor
+            .message()
+            .is_some_and(|message| message.contains("couldn't delete")),
+        "{:?}",
+        editor.message()
+    );
+    assert_eq!(dav.lock().unwrap().resources.len(), 1);
+    dav.lock().unwrap().refuse = false;
+    run_command(&mut editor, &mut ox, "calendar-sync");
+    assert_eq!(editor.message(), Some("Calendars synced"));
+    assert!(dav.lock().unwrap().resources.is_empty());
 }
