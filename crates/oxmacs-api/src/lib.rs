@@ -6,6 +6,18 @@ pub const DOCS: &str = include_str!("docs.ox");
 pub const GAME_DOCS: &str = include_str!("games.ox");
 pub const SOUND_DOCS: &str = include_str!("sound.ox");
 pub const PRELUDE: &str = include_str!("prelude.ox");
+pub const WAITING: &[&str] = &[
+    "delete-path",
+    "keepass/read",
+    "move-path",
+    "ox-evaluate",
+    "ox-reference",
+    "pdf/open",
+    "pdf/search",
+    "prompt",
+    "prompt-path",
+    "yes-or-no",
+];
 
 pub fn home() -> Option<PathBuf> {
     oxmacs_files::oxmacs_home()
@@ -71,17 +83,17 @@ pub fn extend_with_prelude(isolate: &mut Isolate) {
 pub fn plain_isolate() -> Isolate {
     let mut isolate = ox_library::isolate();
     add_editor_modules(&mut isolate);
-    isolate.define_stubs(DOCS, Stubs::Modules);
-    isolate.define_stubs(GAME_DOCS, Stubs::Modules);
-    isolate.define_stubs(SOUND_DOCS, Stubs::Modules);
+    isolate.define_stubs(DOCS, Stubs::Modules, WAITING);
+    isolate.define_stubs(GAME_DOCS, Stubs::Modules, WAITING);
+    isolate.define_stubs(SOUND_DOCS, Stubs::Modules, WAITING);
     isolate
 }
 
 pub fn editor_isolate() -> Isolate {
     let mut isolate = plain_isolate();
-    isolate.define_stubs(DOCS, Stubs::Globals);
-    isolate.define_stubs(GAME_DOCS, Stubs::Globals);
-    isolate.define_stubs(SOUND_DOCS, Stubs::Globals);
+    isolate.define_stubs(DOCS, Stubs::Globals, WAITING);
+    isolate.define_stubs(GAME_DOCS, Stubs::Globals, WAITING);
+    isolate.define_stubs(SOUND_DOCS, Stubs::Globals, WAITING);
     extend_with_prelude(&mut isolate);
     isolate
 }
@@ -166,6 +178,26 @@ mod tests {
         assert_eq!(
             isolate.eval("(message \"hi\")").unwrap_err().message,
             "message isn't available here"
+        );
+    }
+
+    #[test]
+    fn checking_editor_code_knows_which_editor_calls_wait_for_their_result() {
+        let found: Vec<String> = editor_isolate()
+            .check(
+                "plugin.ox",
+                "(module (import (ox pdf)))\n(def (f) [(await (prompt \"x\")) (await (pdf/open \"a.pdf\")) (await (spawn 1))])",
+            )
+            .into_iter()
+            .map(|diagnostic| diagnostic.message)
+            .collect();
+
+        assert_eq!(
+            found,
+            [
+                "prompt already waits for its result; drop the await",
+                "pdf/open already waits for its result; drop the await"
+            ]
         );
     }
 

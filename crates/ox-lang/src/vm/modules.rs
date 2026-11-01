@@ -149,6 +149,15 @@ impl Runtime {
         self.find(module, name, false).map(|(value, _)| value)
     }
 
+    pub fn suspends(&self, module: &str, name: &str) -> bool {
+        self.module_ids
+            .get(module)
+            .and_then(|id| self.modules.get(*id))
+            .and_then(|found| found.globals.get(&Sym::intern(name)).copied())
+            .and_then(|value| self.heap.native_of(value))
+            .is_some_and(|native| native.suspends)
+    }
+
     pub fn lookup_macro(&self, module: ModuleId, name: Sym) -> Option<(Value, ModuleId)> {
         self.find(module, name, true)
     }

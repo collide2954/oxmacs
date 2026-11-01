@@ -20,6 +20,24 @@ fn rewrite(path: &Path, text: &str, step: u64) {
 }
 
 #[test]
+fn awaiting_a_call_that_already_waits_is_pointed_out() {
+    let mut isolate = Isolate::new();
+    isolate
+        .native("ox", "double")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|_, arguments| Ok(arguments[0]));
+
+    let found = isolate.check("user", "(def (f) [(await (double 2)) (await (spawn 1))])");
+
+    assert_eq!(
+        messages(&found),
+        ["double already waits for its result; drop the await"]
+    );
+    assert_eq!(found[0].severity, Severity::Warning);
+}
+
+#[test]
 fn regex_literals_are_checked_before_they_run() {
     let found = Isolate::new().check("user", "(def (ok) #\"\\d+\")\n(def (bad) #\"(\")");
 

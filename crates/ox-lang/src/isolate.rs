@@ -782,6 +782,10 @@ impl Isolate {
         self.examine_within(budget, name, source).0
     }
 
+    pub fn suspends(&self, module: &str, name: &str) -> bool {
+        self.runtime.suspends(module, name)
+    }
+
     pub fn bindings(&mut self, name: &str, source: &str) -> Vec<Occurrence> {
         self.examine_within(check::BUDGET, name, source).1
     }
@@ -1013,7 +1017,7 @@ impl Isolate {
             .unwrap_or_else(|| format!("ox/{alias}"))
     }
 
-    pub fn define_stubs(&mut self, table: &'static str, which: Stubs) {
+    pub fn define_stubs(&mut self, table: &'static str, which: Stubs, waiting: &[&str]) {
         let docs = describe::parse(&[table]);
         for (shown, entry) in docs.entries.iter().filter(|(_, entry)| !entry.special) {
             let (module, name) = match shown.split_once('/') {
@@ -1024,10 +1028,14 @@ impl Isolate {
             };
             let keywords: Vec<&str> = entry.keywords.iter().map(String::as_str).collect();
             let missing = format!("{shown} isn't available here");
-            self.native(&module, name)
+            let mut stub = self
+                .native(&module, name)
                 .arity(entry.least, entry.positional)
-                .keywords(&keywords)
-                .function(move |_, _| Err(Error::new(missing.clone()).of(ErrorKind::Refused)));
+                .keywords(&keywords);
+            if waiting.contains(&shown.as_str()) {
+                stub = stub.suspends();
+            }
+            stub.function(move |_, _| Err(Error::new(missing.clone()).of(ErrorKind::Refused)));
         }
         self.add_native_docs(table);
     }
@@ -1354,9 +1362,14 @@ impl Isolate {
             .map(|native| {
                 let mut keywords = native.keywords.to_vec();
                 keywords.sort_by_key(|keyword| keyword.name());
+                let shape = describe::fallback_with(native.least, native.most, &keywords);
                 (
                     native.name.name().to_owned(),
-                    describe::fallback_with(native.least, native.most, &keywords),
+                    if native.suspends {
+                        format!("{shape}, waits")
+                    } else {
+                        shape
+                    },
                 )
             })
             .collect();

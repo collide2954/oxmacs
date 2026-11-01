@@ -77,6 +77,13 @@ fn symbol(syntax: &Syntax) -> Option<&str> {
     }
 }
 
+fn head_of(form: &Syntax) -> Option<&Syntax> {
+    match &form.datum {
+        Datum::List(items) => items.first().filter(|head| symbol(head).is_some()),
+        _ => None,
+    }
+}
+
 fn distance(a: &str, b: &str) -> usize {
     let b: Vec<char> = b.chars().collect();
     let mut previous: Vec<usize> = (0..=b.len()).collect();
@@ -681,6 +688,7 @@ impl Walker<'_> {
         let Some((head, rest)) = items.split_first() else {
             return;
         };
+        self.redundant_await(head, rest);
         if let Some(pattern) = regex_literal(head, rest) {
             if let Err(error) = crate::builtins::regex::compile(pattern) {
                 let span = head.span.through(rest[0].span);
@@ -732,6 +740,39 @@ impl Walker<'_> {
                 self.call(head, rest);
                 self.all(items);
             }
+        }
+    }
+
+    fn resolved(&self, head: &Syntax) -> Option<(String, String)> {
+        let sym = Sym::intern(symbol(head)?);
+        if self.bound(sym, &head.marks) {
+            return None;
+        }
+        match self.global(sym)? {
+            Binding::Global {
+                module: Some(module),
+                name,
+            } => Some((module, name)),
+            Binding::Global { .. } | Binding::Local(_) => None,
+        }
+    }
+
+    fn redundant_await(&mut self, head: &Syntax, rest: &[Syntax]) {
+        if let [call] = rest
+            && self
+                .resolved(head)
+                .is_some_and(|(module, name)| module == "ox" && name == "await")
+            && let Some(callee) = head_of(call)
+            && self
+                .resolved(callee)
+                .is_some_and(|(module, name)| self.runtime.suspends(&module, &name))
+            && let Some(written) = symbol(callee)
+        {
+            self.found.push(Diagnostic::warning(
+                "await",
+                format!("{written} already waits for its result; drop the await"),
+                head.span,
+            ));
         }
     }
 

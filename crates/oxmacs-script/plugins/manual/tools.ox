@@ -41,7 +41,7 @@ There are no style settings: `ox fmt` keeps your line breaks and fixes indentati
 
 ## Migrating
 
-When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, `case` into `match`, and `http/encode` into `string/url-encode`, importing `(ox string)` when the file doesn't.
+When a new Ox removes or renames something, `ox migrate` rewrites your files to match: run it over `init.ox`, `custom.ox` and your plugins after upgrading. It changes only names the file doesn't define itself, and `ox migrate --check` lists the files it would change without touching them. So far it turns `with` into `assoc`, `defrule` into `defrules`, `case` into `match`, and `http/encode` into `string/url-encode`, importing `(ox string)` when the file doesn't, and drops the `await` around calls that already wait for their result, such as `(await (prompt "Name: "))`.
 
 Coming from Ox 0.14, run `ox migrate --strings` once as well: it puts a `$` before every string with holes, writes `{{` and `}}` in the others as single braces, and turns `#r"…"` into `"""…"""`. Run it only once, since on a file it has already rewritten it would take literal braces for holes. `ox check` also warns about a plain string holding what looks like an old hole, such as `"Hi {name}"`.
 

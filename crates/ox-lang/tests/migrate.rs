@@ -112,6 +112,26 @@ fn old_strings_take_their_new_spelling_and_keep_their_values() {
     );
 }
 
+fn doubling() -> Isolate {
+    let mut isolate = Isolate::new();
+    isolate
+        .native("ox", "double")
+        .arity(1, Some(1))
+        .suspends()
+        .function(|_, arguments| Ok(arguments[0]));
+    isolate
+}
+
+#[test]
+fn awaits_around_calls_that_already_wait_are_dropped() {
+    let source = "(def (f) [(await (double 2)) (await (spawn 1)) (await (-> 3 double))])";
+
+    assert_eq!(
+        migrate(&mut doubling(), "user", source).unwrap(),
+        "(def (f) [(double 2) (await (spawn 1)) (await (-> 3 double))])"
+    );
+}
+
 #[test]
 fn files_that_cannot_be_read_are_refused() {
     let mut isolate = Isolate::new();

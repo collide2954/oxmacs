@@ -93,7 +93,10 @@ fn stubs_from_a_docs_table_keep_their_arity_and_docs_but_refuse_to_run() {
     isolate.define_stubs(
         "(greet name (loud)) \"Greets name.\"\n(ui/label text {size 1}) \"A label.\"\n(special (never x) \"Not a native.\")",
         Stubs::All,
+        &["ui/label"],
     );
+    assert!(isolate.suspends("ox/ui", "label"));
+    assert!(!isolate.suspends("ox", "greet"));
 
     assert_eq!(
         isolate.eval("(greet \"a\")").unwrap_err().message,

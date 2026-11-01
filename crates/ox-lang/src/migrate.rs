@@ -255,10 +255,25 @@ pub fn migrate(isolate: &mut Isolate, name: &str, source: &str) -> Result<String
             return Err(format!("{line}:{column}: {}", error.message));
         }
         let occurrences = isolate.bindings(name, &text);
+        let waiting: Vec<Span> = occurrences
+            .iter()
+            .filter(|occurrence| match &occurrence.binding {
+                Binding::Global {
+                    module: Some(module),
+                    name,
+                } => isolate.suspends(module, name),
+                _ => false,
+            })
+            .map(|occurrence| occurrence.span)
+            .collect();
+        let known = Known {
+            occurrences: &occurrences,
+            waiting: &waiting,
+        };
         let mut imports = Imports::of(&forms);
         let mut rewrites = Vec::new();
         for form in &forms {
-            collect(&text, &occurrences, &mut imports, form, &mut rewrites);
+            collect(&text, &known, &mut imports, form, &mut rewrites);
         }
         rewrites.extend(imports.additions());
         if rewrites.is_empty() {
@@ -287,31 +302,66 @@ fn children(form: &Syntax) -> &[Syntax] {
     }
 }
 
+struct Known<'a> {
+    occurrences: &'a [Occurrence],
+    waiting: &'a [Span],
+}
+
+impl Known<'_> {
+    fn awaits(&self, head: &Syntax) -> bool {
+        self.occurrences.iter().any(|occurrence| {
+            occurrence.span == head.span
+                && matches!(&occurrence.binding, Binding::Global { module: Some(module), name } if module == "ox" && name == "await")
+        })
+    }
+
+    fn redundant(&self, form: &Syntax) -> Option<Span> {
+        let Datum::List(items) = &form.datum else {
+            return None;
+        };
+        let [head, call] = items.as_slice() else {
+            return None;
+        };
+        let Datum::List(parts) = &call.datum else {
+            return None;
+        };
+        let callee = parts.first()?;
+        (self.awaits(head) && self.waiting.contains(&callee.span)).then_some(call.span)
+    }
+}
+
 fn collect(
     text: &str,
-    occurrences: &[Occurrence],
+    known: &Known<'_>,
     imports: &mut Imports,
     form: &Syntax,
     rewrites: &mut Vec<Rewrite>,
 ) {
+    if let Some(call) = known.redundant(form) {
+        rewrites.push(Rewrite {
+            span: form.span,
+            text: source(text, call.start, call.end).to_owned(),
+        });
+        return;
+    }
     if let Datum::List(items) = &form.datum
         && let Some((head, arguments)) = items.split_first()
         && let Datum::Symbol(name) = &head.datum
-        && removed(occurrences, head, name)
+        && removed(known.occurrences, head, name)
         && let Some(rewrite) = rewritten(text, name, head, arguments)
     {
         rewrites.push(rewrite);
         return;
     }
     if let Datum::Symbol(name) = &form.datum
-        && removed(occurrences, form, name)
+        && removed(known.occurrences, form, name)
         && let Some(rewrite) = moved(imports, form, name)
     {
         rewrites.push(rewrite);
         return;
     }
     for child in children(form) {
-        collect(text, occurrences, imports, child, rewrites);
+        collect(text, known, imports, child, rewrites);
     }
 }
 
