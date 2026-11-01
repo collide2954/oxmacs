@@ -3857,7 +3857,7 @@ dependencies = [
 
 [[package]]
 name = "ox"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "ox-lang",
  "ox-library",
@@ -3874,7 +3874,7 @@ dependencies = [
 
 [[package]]
 name = "ox-lang"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "jiff",
  "num-bigint 0.5.1",
@@ -3891,7 +3891,7 @@ dependencies = [
 
 [[package]]
 name = "ox-library"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "argon2",
  "base64 0.23.1",
@@ -3925,7 +3925,7 @@ dependencies = [
 
 [[package]]
 name = "ox-lsp"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "lsp-server",
  "ox-lang",
@@ -3937,7 +3937,7 @@ dependencies = [
 
 [[package]]
 name = "ox-perf"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "ox-lang",
  "oxmacs-api",
@@ -3948,7 +3948,7 @@ dependencies = [
 
 [[package]]
 name = "ox-rodeo"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "image",
  "ox-library",
@@ -3963,7 +3963,7 @@ dependencies = [
 
 [[package]]
 name = "ox-synth"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "ox-lang",
  "oxmacs-files",
@@ -3974,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "oxmacs-core",
  "oxmacs-gui",
@@ -3984,7 +3984,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-api"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "dirs",
  "ox-lang",
@@ -3996,7 +3996,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "bitflags 2.13.2",
  "dirs",
@@ -4031,7 +4031,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-files"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "rustix 1.1.5",
  "tempfile",
@@ -4042,7 +4042,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-gui"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "dirs",
  "iced",
@@ -4071,7 +4071,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-pdf"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "pdfium-render",
  "workspace-hack",
@@ -4079,7 +4079,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-process"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "oxmacs-files",
  "rustix 1.1.5",
@@ -4090,7 +4090,7 @@ dependencies = [
 
 [[package]]
 name = "oxmacs-script"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "dirs",
  "image",
@@ -7048,7 +7048,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "workspace-hack"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "bitflags 2.13.2",
  "block2 0.6.2",
