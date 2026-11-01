@@ -73,6 +73,13 @@ impl Engine {
         self.wait(move |worker| worker.index(&path))
     }
 
+    pub fn close(&self, path: &Path) -> bool {
+        let path = path.to_owned();
+        self.send(move |worker| {
+            worker.documents.remove(&path);
+        })
+    }
+
     pub fn index_then(
         &self,
         path: &Path,

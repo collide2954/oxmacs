@@ -117,9 +117,14 @@ struct Shared {
 }
 
 static SHARED: LazyLock<Mutex<Shared>> = LazyLock::new(Mutex::default);
+static STARTING: Mutex<()> = Mutex::new(());
 
 fn shared() -> MutexGuard<'static, Shared> {
     SHARED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn revision_of(path: &Path) -> Option<u64> {
+    shared().loaded.get(path).map(|loaded| loaded.revision)
 }
 
 fn stamp(path: &Path) -> Option<SystemTime> {
@@ -137,6 +142,10 @@ pub fn use_library(library: Option<PathBuf>) {
 }
 
 fn engine() -> Result<Engine, String> {
+    if let Some(engine) = shared().engine.clone() {
+        return Ok(engine);
+    }
+    let _starting = STARTING.lock().unwrap_or_else(PoisonError::into_inner);
     let library = {
         let shared = shared();
         if let Some(engine) = &shared.engine {
@@ -144,9 +153,23 @@ fn engine() -> Result<Engine, String> {
         }
         shared.library.clone()
     };
-    let engine = Engine::start(&library.ok_or_else(|| MISSING.to_owned())?)?;
-    shared().engine = Some(engine.clone());
+    let engine = Engine::start(library.as_deref().ok_or_else(|| MISSING.to_owned())?)?;
+    let mut shared = shared();
+    if shared.library == library {
+        shared.engine = Some(engine.clone());
+    }
     Ok(engine)
+}
+
+pub fn forget(path: &Path) {
+    let engine = {
+        let mut shared = shared();
+        shared.loaded.remove(path);
+        shared.engine.clone()
+    };
+    if let Some(engine) = engine {
+        engine.close(path);
+    }
 }
 
 pub fn open(path: &Path) -> Result<(u64, Arc<Document>), String> {
@@ -205,15 +228,18 @@ pub fn texts(path: &Path) -> Result<Arc<Vec<PageText>>, String> {
     {
         return Ok(texts);
     }
+    let asked = revision_of(path);
     let texts = Arc::new(engine()?.index(path)?);
-    if let Some(loaded) = shared().loaded.get_mut(path) {
+    if let Some(loaded) = shared().loaded.get_mut(path)
+        && Some(loaded.revision) == asked
+    {
         loaded.texts = Some(Arc::clone(&texts));
     }
     Ok(texts)
 }
 
 pub fn texts_now(path: &Path) -> Option<Arc<Vec<PageText>>> {
-    let engine = {
+    let (engine, asked) = {
         let mut guard = shared();
         let shared = &mut *guard;
         let engine = shared.engine.clone();
@@ -226,13 +252,15 @@ pub fn texts_now(path: &Path) -> Option<Arc<Vec<PageText>>> {
         }
         let engine = engine?;
         loaded.indexing = true;
-        engine
+        (engine, loaded.revision)
     };
     let key = path.to_owned();
     engine.index_then(path, move |result| {
         if let Some(loaded) = shared().loaded.get_mut(&key) {
             loaded.indexing = false;
-            loaded.texts = Some(Arc::new(result.unwrap_or_default()));
+            if loaded.revision == asked {
+                loaded.texts = Some(Arc::new(result.unwrap_or_default()));
+            }
         }
     });
     None

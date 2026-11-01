@@ -85,11 +85,22 @@
         (swap! state assoc :error e.message :missing (nil? (library)))
         false))))
 
+(defonce documents (atom []))
+
+(def (closed buffer)
+  (when-let [[_ place] (find (fn [[shown _]] (= shown buffer)) @documents)]
+    (swap! documents (fn [kept] (remove (fn [[shown _]] (= shown buffer)) kept)))
+    (pdf/close place)))
+
+(on-buffer-close :pdf closed)
+
 (def (open-document place)
   (let [state (atom {path: place zoom: (start-zoom) continuous: (setting :continuous)
-                     dark: (setting :theme-colors)})]
-    (with-buffer (open-view (path/name place) (render state) :keys doc-keys :file place :label "PDF documents"
-                            :items (fn [] (outline-items state)))
+                     dark: (setting :theme-colors)})
+        buffer (open-view (path/name place) (render state) :keys doc-keys :file place :label "PDF documents"
+                          :items (fn [] (outline-items state)))]
+    (swap! documents conj [buffer place])
+    (with-buffer buffer
       (set-buffer-value! :pdf state))
     (load state)
     (let [doc @state]

@@ -45,6 +45,27 @@ fn viewer(config: &str) -> Viewer {
     let papers = tempfile::tempdir().unwrap();
     let paper = papers.path().join("paper.pdf");
     std::fs::write(&paper, "%PDF-1.7").unwrap();
+    preload(&paper);
+    std::fs::write(
+        home.path().join("init.ox"),
+        format!("(use-plugin pdf{config})"),
+    )
+    .unwrap();
+    let mut editor = Editor::new();
+    editor.set_tools_root(Some(home.path().join("tools")));
+    let mut ox = Ox::new();
+    ox.start(&mut editor, Some(home.path()));
+    settle(&mut editor, &mut ox);
+    Viewer {
+        _home: home,
+        papers,
+        editor,
+        ox,
+        paper,
+    }
+}
+
+fn preload(paper: &std::path::Path) {
     let mut first = line("Hello world");
     first.links.push(Link {
         rect: Rect {
@@ -56,7 +77,7 @@ fn viewer(config: &str) -> Viewer {
         target: Target::Page(3),
     });
     oxmacs_pdf::preload(
-        &paper,
+        paper,
         Document {
             pages: vec![LETTER; 5],
             outline: vec![
@@ -82,23 +103,6 @@ fn viewer(config: &str) -> Viewer {
             line("another needle"),
         ],
     );
-    std::fs::write(
-        home.path().join("init.ox"),
-        format!("(use-plugin pdf{config})"),
-    )
-    .unwrap();
-    let mut editor = Editor::new();
-    editor.set_tools_root(Some(home.path().join("tools")));
-    let mut ox = Ox::new();
-    ox.start(&mut editor, Some(home.path()));
-    settle(&mut editor, &mut ox);
-    Viewer {
-        _home: home,
-        papers,
-        editor,
-        ox,
-        paper,
-    }
 }
 
 impl Viewer {
@@ -172,9 +176,12 @@ fn shown_path(editor: &Editor, name: &str) -> Option<PathBuf> {
 fn a_closed_pdf_opens_again_and_one_of_the_same_name_gets_its_own_buffer() {
     let mut viewer = viewer("");
     viewer.open();
+    assert!(oxmacs_pdf::document(&viewer.paper).is_some());
     viewer.press("C-x k RET");
     assert!(viewer.editor.buffer_named("paper.pdf").is_none());
+    assert!(oxmacs_pdf::document(&viewer.paper).is_none());
 
+    preload(&viewer.paper);
     viewer.open();
     assert_eq!(viewer.editor.buffer().name(), "paper.pdf");
     assert_eq!(

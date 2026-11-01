@@ -153,6 +153,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- PDFs let go of their document and text when their last buffer closes, instead of keeping them until oxmacs quits; PDFium starts once even when two documents open at once; and a search that finishes after the file changed no longer keeps the old file's text for the new one. `pdf/close` does this from Ox.
 - The R plugin writes the profile R starts with, the render script and the plots folder into a private folder only you can read, made for each run and removed when oxmacs quits, instead of at names anyone could guess in the shared temporary folder.
 - An EPUB books file that can't be read is left as it is, and books say why they won't open, instead of the next page turn replacing it and losing every other book's place and highlights.
 - A large `game-speed` no longer freezes or crashes the editor: game speed stays between 0 and 4, and a frame runs at most 32 ticks, dropping game time beyond that instead of falling ever further behind.

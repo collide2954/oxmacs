@@ -268,6 +268,14 @@ pub fn install(isolate: &mut Isolate) {
             })
         });
     isolate
+        .native(MODULE, "close")
+        .arity(1, Some(1))
+        .outside()
+        .function(|heap, arguments| {
+            oxmacs_pdf::forget(&PathBuf::from(text(heap, "pdf/close", arguments[0])?));
+            Ok(Value::Nil)
+        });
+    isolate
         .native(UI, "pdf")
         .arity(1, Some(1))
         .keywords(&PDF)
