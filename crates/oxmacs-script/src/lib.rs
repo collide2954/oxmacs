@@ -95,6 +95,7 @@ pub struct Ox {
     checker: ide::checker::Checker,
     help: ide::help::Help,
     outside: Arc<api::outside::Outside>,
+    faces_of: Option<&'static oxmacs_core::theme::Theme>,
 }
 
 impl Default for Ox {
@@ -122,7 +123,24 @@ impl Ox {
             checker: ide::checker::Checker::default(),
             help: ide::help::Help::default(),
             outside,
+            faces_of: None,
         }
+    }
+
+    fn share_faces(&mut self, editor: &Editor) {
+        let theme = editor.theme();
+        if self
+            .faces_of
+            .is_some_and(|shared| std::ptr::eq(shared, theme))
+        {
+            return;
+        }
+        self.faces_of = Some(theme);
+        ox_library::image::set_faces(
+            theme
+                .named_faces()
+                .map(|(name, color)| (name.to_owned(), [color.r, color.g, color.b, 255])),
+        );
     }
 
     pub fn set_waker(&mut self, waker: impl Fn() + Send + Sync + 'static) {
@@ -249,6 +267,7 @@ impl Ox {
     }
 
     pub fn eval(&mut self, editor: &mut Editor, source: &str) -> Result<String, Error> {
+        self.share_faces(editor);
         let value = self.isolate.eval_with(editor, source)?;
         Ok(self.isolate.write(value))
     }
@@ -272,6 +291,7 @@ impl Ox {
 
     pub fn tick(&mut self, editor: &mut Editor) -> Pace {
         let started = self.isolate.profiling().then(Instant::now);
+        self.share_faces(editor);
         self.checker.collect(editor);
         self.drain(editor);
         while editor.macro_playing() {

@@ -7,7 +7,7 @@
 (image/width image) "The width of image in pixels."
 (image/height image) "The height of image in pixels."
 (image/image? value) "True when value is an image."
-(image/color color) "color as [red green blue alpha]: a hex string such as \"#ff8800\", a vector, a CSS name such as :teal, :transparent, or a theme face such as :keyword."
+(image/color color) "color as [red green blue alpha]: a hex string such as \"#ff8800\", a vector, a CSS name such as :teal, :transparent, or, in oxmacs, a theme face such as :keyword."
 (image/pixel image x y) "The color of the pixel at x, y as [red green blue alpha]."
 (image/resize image width {height nil filter :lanczos}) "image scaled to width, and to :height or in proportion; :filter is :nearest, :linear, :cubic, :gaussian or :lanczos."
 (image/fit image width height {filter :lanczos}) "image scaled in proportion to fit inside width by height."

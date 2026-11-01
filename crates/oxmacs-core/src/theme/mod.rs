@@ -219,6 +219,12 @@ impl Theme {
         }
     }
 
+    pub fn named_faces(&self) -> impl Iterator<Item = (&'static str, Color)> + '_ {
+        FACE_NAMES
+            .iter()
+            .map(|(name, highlight)| (*name, self.highlight(*highlight)))
+    }
+
     pub fn highlight(&self, highlight: Highlight) -> Color {
         match highlight {
             Highlight::Region => self.region,

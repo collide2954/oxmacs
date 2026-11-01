@@ -166,6 +166,27 @@ mod tests {
     }
 
     #[test]
+    fn image_colors_know_the_themes_faces() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+        let keyword = editor
+            .theme()
+            .highlight(oxmacs_core::theme::Highlight::Keyword);
+
+        let shown = ox
+            .eval(
+                &mut editor,
+                "(module (import (ox image))) (image/color :keyword)",
+            )
+            .unwrap();
+
+        assert_eq!(
+            shown,
+            format!("[{} {} {} 255]", keyword.r, keyword.g, keyword.b)
+        );
+    }
+
+    #[test]
     fn secrets_copied_with_clear_after_are_cleared_at_the_deadline() {
         let mut editor = Editor::new();
         let mut ox = Ox::new();
