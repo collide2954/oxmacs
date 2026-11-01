@@ -128,29 +128,26 @@ impl std::fmt::Debug for Isolates {
 
 impl Isolates {
     pub fn get(&mut self, editor: bool, roots: Vec<PathBuf>) -> &mut Isolate {
-        match self
+        let known = self
             .kept
             .iter()
-            .position(|(known, found, _)| *known == editor && *found == roots)
-        {
-            Some(at) => {
-                let found = self.kept.remove(at);
-                self.kept.push(found);
+            .position(|(known, found, _)| *known == editor && *found == roots);
+        if let Some(at) = known {
+            let found = self.kept.remove(at);
+            self.kept.push(found);
+        } else {
+            let mut isolate = if editor {
+                editor_isolate()
+            } else {
+                plain_isolate()
+            };
+            for root in &roots {
+                isolate.add_root(root.clone());
             }
-            None => {
-                let mut isolate = if editor {
-                    editor_isolate()
-                } else {
-                    plain_isolate()
-                };
-                for root in &roots {
-                    isolate.add_root(root.clone());
-                }
-                if self.kept.len() >= KEPT {
-                    self.kept.remove(0);
-                }
-                self.kept.push((editor, roots, isolate));
+            if self.kept.len() >= KEPT {
+                self.kept.remove(0);
             }
+            self.kept.push((editor, roots, isolate));
         }
         let last = self.kept.len() - 1;
         &mut self.kept[last].2
