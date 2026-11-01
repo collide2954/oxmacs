@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::{self, Write as _};
 
 use num_traits::ToPrimitive;
@@ -105,11 +106,11 @@ fn value_of(heap: &mut Heap, json: Json) -> Result<Value, Error> {
             let mut kept: Vec<(String, Json)> = Vec::with_capacity(entries.len());
             let mut places: HashMap<String, usize> = HashMap::with_capacity(entries.len());
             for (key, value) in entries {
-                match places.get(&key) {
-                    Some(&place) => kept[place].1 = value,
-                    None => {
-                        places.insert(key.clone(), kept.len());
-                        kept.push((key, value));
+                match places.entry(key) {
+                    Entry::Occupied(found) => kept[*found.get()].1 = value,
+                    Entry::Vacant(free) => {
+                        kept.push((free.key().clone(), value));
+                        free.insert(kept.len() - 1);
                     }
                 }
             }
