@@ -1,5 +1,5 @@
 (plugin r
-  :version "0.21.1"
+  :version "0.21.2"
   :summary "R consoles, plots, data and help in the style of ESS and RStudio"
   :commands [run-r r-new-session r-send-statement r-send-function r-switch-to-console r-help
              r-environment r-peek r-layout r-layout-restore r-load-all r-document r-check

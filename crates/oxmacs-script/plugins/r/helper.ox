@@ -401,7 +401,7 @@ options(prompt = "\001>\002\003", continue = "\001+\002\003")
 
 (def (write)
   "Writes the helper R reads as its profile to a file of its own and returns a promise of its path."
-  (let [folder (path/join (path/temp) "oxmacs")
+  (let [folder (file/temp-dir)
         file (path/join folder $"r-{(crypto/random 8)}.R")]
     (spawn (file/make-dir folder)
       (file/write file script)

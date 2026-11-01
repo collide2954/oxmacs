@@ -1,7 +1,7 @@
 (module
   (import (ox string)
           (markdown grammar)
-          (markdown preview :as preview)
+          (markdown preview)
           (markdown style)))
 
 (def (items)

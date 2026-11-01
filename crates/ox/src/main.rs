@@ -142,6 +142,12 @@ fn refused(problem: &str, usages: &[String]) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    let code = run();
+    ox_library::remove_private_folder();
+    code
+}
+
+fn run() -> ExitCode {
     let arguments: Vec<OsString> = env::args_os().skip(1).collect();
     let Some(first) = arguments.first() else {
         let mut isolate = oxmacs_api::plain_isolate();

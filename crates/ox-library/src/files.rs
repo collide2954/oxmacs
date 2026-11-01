@@ -1,6 +1,7 @@
 use std::fs::{self, Metadata};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 use std::time::UNIX_EPOCH;
 
 use crate::crypto::{from_base64, to_base64};
@@ -13,6 +14,29 @@ use ox_lang::portable::{Failure, Portable};
 use ox_lang::value::{Value, print};
 
 const MODULE: &str = "ox/file";
+
+static PRIVATE: Mutex<Option<tempfile::TempDir>> = Mutex::new(None);
+
+pub fn private_folder() -> io::Result<PathBuf> {
+    let mut held = PRIVATE.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(folder) = held.as_ref().filter(|folder| folder.path().is_dir()) {
+        return Ok(folder.path().to_owned());
+    }
+    let made = tempfile::Builder::new().prefix("oxmacs-").tempdir()?;
+    let path = made.path().to_owned();
+    *held = Some(made);
+    Ok(path)
+}
+
+pub fn remove_private_folder() {
+    let taken = PRIVATE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
+    if let Some(folder) = taken {
+        let _ = folder.close();
+    }
+}
 
 fn failed(verb: &str, path: &Path, error: &dyn std::fmt::Display) -> Failure {
     Failure {
@@ -420,6 +444,17 @@ pub fn install(isolate: &mut Isolate) {
         .arity(1, Some(1))
         .keywords(&["by"])
         .function(sorted);
+    isolate
+        .native(MODULE, "temp-dir")
+        .arity(0, Some(0))
+        .outside()
+        .function(|heap, _| {
+            let folder = private_folder().map_err(|error| {
+                Error::new(format!("Couldn't make a private temporary folder: {error}"))
+            })?;
+            heap.string(&folder.display().to_string())
+                .map_err(Error::from)
+        });
     isolate
         .native(MODULE, "size-text")
         .arity(1, Some(1))

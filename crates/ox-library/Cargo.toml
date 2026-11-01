@@ -29,6 +29,7 @@ rustls.workspace = true
 same-file.workspace = true
 serde_json.workspace = true
 strum.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tiny-skia.workspace = true
 trash.workspace = true
@@ -36,9 +37,6 @@ ureq.workspace = true
 webpki-roots.workspace = true
 zip.workspace = true
 workspace-hack.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

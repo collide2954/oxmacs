@@ -81,6 +81,7 @@
 (file/copy from to) "Copies a file, or a folder and everything in it, from from to to."
 (file/remove path) "Deletes the file or folder at path for good. file/trash is the gentler choice."
 (file/trash path) "Moves the file or folder at path to the system's trash."
+(file/temp-dir) "A folder for temporary files that only you can read, made the first time it's asked for and removed when oxmacs or ox quits; every call gives the same folder."
 (process/run program arguments {cwd nil env nil input nil}) "Runs program with a vector of arguments and returns a map of :status, :stdout and :stderr. :cwd sets its folder, :env a map of variables to set or, with nil, remove, and :input text for its standard input."
 (process/env name) "The value of the environment variable name, or nil."
 (process/which program (folder)) "The path of program in the folders of PATH, or nil when it isn't there; with folder, the PATH of the environment programs started there get. On Windows it tries the extensions PATHEXT lists, such as .exe and .cmd."

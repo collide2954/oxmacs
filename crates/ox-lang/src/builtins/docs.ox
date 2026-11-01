@@ -217,7 +217,6 @@
 (path/abbreviate path) "path with the home folder shown as ~."
 (path/absolute? path) "True when path doesn't depend on the current folder."
 (path/separator) "The system's path separator, / or \\."
-(path/temp) "The system's folder for temporary files."
 
 (json/read text) "The value that JSON text describes: objects become maps with keyword keys, and arrays vectors."
 (json/write value) "value as JSON text. Map keys must be keywords or strings."

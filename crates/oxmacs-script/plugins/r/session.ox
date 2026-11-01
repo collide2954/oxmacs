@@ -191,7 +191,7 @@
   (if-let [program (find-r)]
     (let [profile (await (helper/write))
           launched (get (swap! state update :launched inc) :launched)
-          plots (path/join (path/temp) "oxmacs" $"plots-{(crypto/random 4)}-{launched}")
+          plots (path/join (file/temp-dir) $"plots-{(crypto/random 4)}-{launched}")
           original (process/env "R_PROFILE_USER")
           env (merge {R_PROFILE_USER: profile OXMACS_R_PLOTS: plots}
                      (if original {OXMACS_R_PROFILE_USER: original} {}))

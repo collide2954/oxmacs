@@ -421,8 +421,27 @@ fn paths_are_joined_and_taken_apart() {
         ),
         "[nil nil true false]"
     );
-    assert_eq!(
-        evaluated(&mut isolate, "(path/temp)"),
-        format!("{:?}", std::env::temp_dir().display().to_string())
-    );
+}
+
+#[test]
+fn the_private_temp_folder_is_made_once_kept_to_its_owner_and_removed_on_quitting() {
+    let mut isolate = ox_library::isolate();
+
+    let first = evaluated(&mut isolate, "(file/temp-dir)");
+    assert_eq!(evaluated(&mut isolate, "(file/temp-dir)"), first);
+    let folder = std::path::PathBuf::from(first.trim_matches('"').replace("\\\\", "\\"));
+    assert!(folder.is_dir(), "{}", folder.display());
+    assert!(folder.starts_with(std::env::temp_dir()));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&folder).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+
+    ox_library::remove_private_folder();
+    assert!(!folder.exists());
+    let again = evaluated(&mut isolate, "(file/temp-dir)");
+    assert_ne!(again, first);
+    ox_library::remove_private_folder();
 }

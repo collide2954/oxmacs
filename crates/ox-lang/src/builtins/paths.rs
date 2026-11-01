@@ -94,10 +94,6 @@ pub fn install(isolate: &mut Isolate) {
         });
     install_rules(isolate);
     isolate
-        .native(MODULE, "temp")
-        .arity(0, Some(0))
-        .function(|heap, _| shown(heap, Some(&std::env::temp_dir())));
-    isolate
         .native(MODULE, "separator")
         .arity(0, Some(0))
         .function(|heap, _| {

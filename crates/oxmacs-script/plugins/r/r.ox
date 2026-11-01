@@ -2,17 +2,17 @@
   (import (ox string)
           (r session)
           (r help)
-          (r pane :as pane)
-          (r plots :as plots)
-          (r data :as data)
+          (r pane)
+          (r plots)
+          (r data)
           (r complete)
           (r definition)
           (r layout)
-          (r package :as package)
-          (r markdown :as markdown)
+          (r package)
+          (r markdown)
           (r language)
           (r jobs)
-          (r debug :as debug)))
+          (r debug)))
 
 (def console-keys
   {"RET" 'comint-send-input

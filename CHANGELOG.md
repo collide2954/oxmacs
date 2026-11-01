@@ -148,10 +148,12 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - `with`, `defrule` and `case`, which each repeated another form: `assoc` changes a record's fields, `defrules` takes a single rule, and `match` compares with numbers, strings, keywords and quoted symbols as `case` did. `ox migrate` rewrites them.
 - `http/encode`, in favor of `string/url-encode`, which needs no network module; `ox migrate` rewrites it.
+- `path/temp`, in favor of `file/temp-dir`, a private folder for this run that is removed on quitting; `ox migrate` rewrites it.
 - `regex/replace`, `regex/split` and `regex/matches?`, in favor of `string/replace`, `string/split` and `string/includes?`, which take a regex in place of the text to look for; `string/length`, in favor of `count`; `xml/parse`, now `xml/read`; `buffer-exists?`, the same as `buffer-live?`; and `buffer-contents`, in favor of `(with-buffer b (buffer-text))`, which raises for a closed buffer where `buffer-contents` gave `nil`. `ox migrate` rewrites them all.
 
 ### Fixed
 
+- The R plugin writes the profile R starts with, the render script and the plots folder into a private folder only you can read, made for each run and removed when oxmacs quits, instead of at names anyone could guess in the shared temporary folder.
 - An EPUB books file that can't be read is left as it is, and books say why they won't open, instead of the next page turn replacing it and losing every other book's place and highlights.
 - A large `game-speed` no longer freezes or crashes the editor: game speed stays between 0 and 4, and a frame runs at most 32 ticks, dropping game time beyond that instead of falling ever further behind.
 - `regex/find-all` counts each match's character offsets on from the last one, instead of from the start of the text every time, so finding the matches in a long text no longer slows down with the square of its length.

@@ -181,6 +181,10 @@ impl Ox {
         self.checker.run(editor, rested, self.home.as_deref());
     }
 
+    pub fn quit(&mut self) {
+        ox_library::remove_private_folder();
+    }
+
     pub fn idle_wait(&self, editor: &Editor, since: Instant) -> Option<Duration> {
         let check = self.checker.wait(editor);
         api::idle::next(editor, since)

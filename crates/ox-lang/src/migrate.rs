@@ -32,6 +32,12 @@ const MOVED: &[Moved] = &[
         to_module: "ox",
         to_name: "count",
     },
+    Moved {
+        module: "ox/path",
+        name: "temp",
+        to_module: "ox/file",
+        to_name: "temp-dir",
+    },
 ];
 
 const TO_STRING: [(&str, &str); 3] = [

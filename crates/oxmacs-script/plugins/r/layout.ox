@@ -1,7 +1,7 @@
 (module
   (import (r session)
-          (r plots :as plots)
-          (r data :as data)))
+          (r plots)
+          (r data)))
 
 (defonce saved (atom nil))
 

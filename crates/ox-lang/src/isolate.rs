@@ -755,6 +755,9 @@ impl Isolate {
                 }
             };
             for spec in specs {
+                if let Some(import) = check::Import::of(spec) {
+                    found.extend(check::restated_aliases(std::slice::from_ref(&import)));
+                }
                 match self.import(module, spec, &mut ()) {
                     Ok(()) => imports.extend(check::Import::of(spec)),
                     Err(error) if error.kind == ErrorKind::Interrupt => return Err(spec.span),
@@ -907,7 +910,6 @@ impl Isolate {
         found.extend(named);
         let body: Vec<&Syntax> = forms.iter().filter(|form| header(form).is_none()).collect();
         found.extend(check::unused_imports(&imports, &body));
-        found.extend(check::restated_aliases(&imports));
         found.extend(check::strings(source, &imports, &body));
         found.sort_by_key(|diagnostic| (diagnostic.span.start, diagnostic.span.end));
         found.dedup();

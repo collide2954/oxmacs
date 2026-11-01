@@ -321,6 +321,7 @@ impl App {
     fn quit(&mut self) {
         let _ = self.pending_effects();
         self.runner.shutdown(&mut self.editor);
+        self.ox.quit();
     }
 
     fn settle(&mut self) {

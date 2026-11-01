@@ -1,10 +1,10 @@
 (module
   (import (ox string) (ox regex) (ox path) (ox file)
           (r session)
-          (r jobs :as jobs)
+          (r jobs)
           (markdown grammar)
           (markdown style)
-          (markdown preview :as preview))
+          (markdown preview))
   (export parse highlight render-with script-file saved))
 
 (def opening #"^\s*```+\s*\{\s*([A-Za-z][\w.-]*)(?:[\s,]+([^\s,}=]+)(?:[\s,}]|$))?")
@@ -299,7 +299,7 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
 """)
 
 (def (script-file)
-  (let [file (path/join (path/temp) "oxmacs-render.R")]
+  (let [file (path/join (file/temp-dir) "render.R")]
     (file/write file render-script)
     file))
 

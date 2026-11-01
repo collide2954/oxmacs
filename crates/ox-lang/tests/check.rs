@@ -87,6 +87,13 @@ fn an_alias_that_restates_the_default_is_pointed_out() {
         messages(&found),
         ["(ox string) is imported as string already; drop the :as"]
     );
+
+    let unloaded = Isolate::new().check("user", "(module (import (far away :as away)))");
+    assert!(
+        messages(&unloaded).contains(&"(far away) is imported as away already; drop the :as"),
+        "{:?}",
+        messages(&unloaded)
+    );
 }
 
 #[test]
