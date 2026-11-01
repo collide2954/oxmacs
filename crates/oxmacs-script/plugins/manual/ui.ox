@@ -131,7 +131,7 @@ With `:relative true`, x positions and widths are fractions of the canvas's widt
   :comment "#"
   :highlight (fn [_line text]
                (if (string/starts-with? text "#")
-                 [[0 (string/length text) :heading]]
+                 [[0 (count text) :heading]]
                  [])))
 ```
 

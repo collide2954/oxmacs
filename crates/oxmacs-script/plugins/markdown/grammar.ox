@@ -10,31 +10,31 @@
 
 (def (fence text)
   "A fence line's :marker, such as ``` or ~~~, and :info, the word after it naming the code's language, or nil."
-  (when-let [found (regex/find fence-line text)]
+  (when-let [found (regex/find text fence-line)]
     {marker: (nth found.groups 0) info: (or (nth found.groups 1) "")}))
 
 (def (closes? opened text)
   (when-let [found (fence text)]
     (and (= found.info "")
          (= (string/slice found.marker 0 1) (string/slice opened.marker 0 1))
-         (>= (string/length found.marker) (string/length opened.marker)))))
+         (>= (count found.marker) (count opened.marker)))))
 
 (def (heading text)
   "A heading line's :level, 1 to 6, and :title, or nil."
-  (when-let [found (regex/find heading-line text)]
-    {level: (string/length (nth found.groups 0)) title: (or (nth found.groups 1) "")}))
+  (when-let [found (regex/find text heading-line)]
+    {level: (count (nth found.groups 0)) title: (or (nth found.groups 1) "")}))
 
 (def (quoted text)
   "A quoted line's :text after its >, or nil."
-  (when-let [found (regex/find quote-line text)]
+  (when-let [found (regex/find text quote-line)]
     {text: (nth found.groups 0)}))
 
 (def (bullet text)
   "A list item's :marker, such as - or 1., its :start and :end columns and its :text, or nil."
-  (when-let [found (regex/find bullet-line text)]
-    (let [start (string/length (nth found.groups 0))
+  (when-let [found (regex/find text bullet-line)]
+    (let [start (count (nth found.groups 0))
           marker (nth found.groups 1)]
-      {marker: marker start: start end: (+ start (string/length marker)) text: (nth found.groups 2)})))
+      {marker: marker start: start end: (+ start (count marker)) text: (nth found.groups 2)})))
 
 (def (token-of found)
   (let [groups found.groups
@@ -47,7 +47,7 @@
 
 (def (tokens text)
   "The inline tokens of a line: maps of :start, :end, :kind (:code, :strong or :link), :text and, for links, :target."
-  (map token-of (regex/find-all inline text)))
+  (map token-of (regex/find-all text inline)))
 
 (def (step state text)
   "Reads one line of a document, given the state the line before left: nil, or the fence of the code block it is in. A map of the line's :kind (:fence-open, :fence-close, :code, :heading, :quote, :bullet, :blank or :text), the fields of that kind, and the :state for the next line."

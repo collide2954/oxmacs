@@ -351,19 +351,6 @@ fn install_syntax(isolate: &mut Isolate) {
 
 fn install_places(isolate: &mut Isolate) {
     isolate
-        .native("ox", "buffer-contents")
-        .arity(1, Some(1))
-        .host::<Editor>(|heap, editor, arguments| {
-            let found = target(heap, editor, "buffer-contents", arguments[0])
-                .ok()
-                .and_then(|id| editor.buffer_by_id(id))
-                .map(Buffer::contents);
-            match found {
-                Some(contents) => text(heap, &contents),
-                None => Ok(Value::Nil),
-            }
-        });
-    isolate
         .native("ox", "display-buffer")
         .arity(1, Some(1))
         .keywords(&["below", "right-of", "select"])
@@ -581,9 +568,9 @@ mod tests {
             eval(
                 &mut editor,
                 &mut ox,
-                r#"[(sort (buffer-list)) (buffer-contents "*other*") (buffer-contents "*none*")]"#
+                r#"[(sort (buffer-list)) (with-buffer "*other*" (buffer-text)) (buffer-live? "*none*")]"#
             ),
-            r#"[["*other*" "t"] "two" nil]"#
+            r#"[["*other*" "t"] "two" false]"#
         );
     }
 

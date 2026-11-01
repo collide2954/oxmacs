@@ -69,7 +69,7 @@
 
 (def (environment-buffer session)
   (let [name (environment-name session)]
-    (unless (buffer-exists? name)
+    (unless (buffer-live? name)
       (with-buffer (open-buffer name [] :keys environment-keys :show false :label "R environments"
                                 :on-resize (fn [width] (draw-environment name width)))
         (set-buffer-value! :r-environment (atom {session: session entries: []})))
@@ -210,7 +210,7 @@
 
 (def (open-table session object)
   (let [name $"{(stem session)} {object}*"]
-    (unless (buffer-exists? name)
+    (unless (buffer-live? name)
       (with-buffer (open-buffer name [] :keys table-keys :show false :label "R tables"
                                 :on-resize (fn [width] (draw-table name width)))
         (set-buffer-value! :r-table (atom {session: session object: object first: 0})))

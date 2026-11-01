@@ -89,7 +89,7 @@
   (when-let [entry (buffer-entry buffer)]
     (let [[lines rows context] (rendered entry)]
       (swap! state update-in [:buffers buffer] merge {context: context rows: rows})
-      (when (buffer-exists? buffer)
+      (when (buffer-live? buffer)
         (set-lines buffer lines)))))
 
 (def (ensure-buffer! name target kind {show false})
@@ -102,7 +102,7 @@
       (swap! state assoc-in [:buffers buffer]
              {buffer: buffer network: name target: target kind: kind messages: [] rows: []
               context: (format/fresh-context) marker: nil shown: false spoke: {} typing: {} replying: nil}))
-    (if (buffer-exists? buffer)
+    (if (buffer-live? buffer)
       (when show (switch-to-buffer buffer))
       (let [[lines rows context] (rendered (buffer-entry buffer))]
         (swap! state update-in [:buffers buffer] merge {context: context rows: rows})
@@ -162,7 +162,7 @@
               rows (concat (if mark [nil] []) (repeat (count made.lines) index))]
           (swap! state update-in [:buffers buffer] merge {context: made.context
                                                           rows: (concat (get (buffer-entry buffer) :rows) rows)})
-          (when (buffer-exists? buffer)
+          (when (buffer-live? buffer)
             (append-lines buffer lines))))
       (when (and hidden chat (not message.self))
         (note-activity! buffer message.mention)))))
@@ -229,7 +229,7 @@
         (entries (or (get (network name) :channels) {}))))
 
 (def (mentions? name text)
-  (let [words (map (fn [match] (fold match.text)) (regex/find-all #"[^\s,.:;!?()<>\"']+" text))
+  (let [words (map (fn [match] (fold match.text)) (regex/find-all text #"[^\s,.:;!?()<>\"']+"))
         wanted (set (map fold (cons (my-nick name) (setting :highlights))))]
     (some (fn [word] (contains? wanted word)) words)))
 
@@ -626,7 +626,7 @@
         has (fn [text] (string/includes? (string/lower (protocol/plain-text (or text ""))) wanted))
         chosen (filter (fn [channel] (or (has channel.name) (has channel.topic))) listed.channels)
         page (format/channel-lines listed.network chosen (count listed.channels) listed.filter)]
-    (if (or show (not (buffer-exists? buffer)))
+    (if (or show (not (buffer-live? buffer)))
       (open-buffer buffer page.lines :keys list-keys :line 0 :label "IRC channel lists")
       (set-lines buffer page.lines :line 0))
     (set-header buffer page.header)))

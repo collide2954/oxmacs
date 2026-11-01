@@ -297,12 +297,12 @@
       (client/note-seen! buffer))
     (if-let [back @came-from]
       (do (reset! came-from nil)
-        (when (buffer-exists? back)
+        (when (buffer-live? back)
           (switch-to-buffer back)))
       (message "No new IRC messages"))))
 
 (def (title-of html)
-  (when-let [match (regex/find "(?is)<title[^>]*>(.*?)</title>" html)]
+  (when-let [match (regex/find html "(?is)<title[^>]*>(.*?)</title>")]
     (string/trim (string/replace (first match.groups) "\n" " "))))
 
 (defcommand irc-preview "Fetch the page or image a link at point leads to and say what it is"

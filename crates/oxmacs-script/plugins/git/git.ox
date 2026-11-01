@@ -64,7 +64,7 @@
   (let [state @git
         key state.pane.file
         pane-name state.pane.name]
-    (when (and (or key state.pane.staged) (or reveal (buffer-exists? pane-name)))
+    (when (and (or key state.pane.staged) (or reveal (buffer-live? pane-name)))
       (let [state (ensure-diffs git)
             columns (or (buffer-width pane-name) 100)
             change (when key (repo/find-change state.snapshot (nth key 0) (nth key 1)))
@@ -130,7 +130,7 @@
 
 (def (show found)
   (let [name $"git: {(path/name found.root)}"
-        known (when (buffer-exists? name) (with-buffer name (buffer-value :git)))
+        known (when (buffer-live? name) (with-buffer name (buffer-value :git)))
         git (or known
                 (atom {name: name root: found.root metadata: found.metadata
                        folds: {closed: {} open: {} hidden: {}} diffs: {} snapshot: nil
@@ -386,7 +386,7 @@
 
 (def (back-to-status git)
   (let [name (get @git :name)]
-    (when (buffer-exists? name)
+    (when (buffer-live? name)
       (switch-to-buffer name)
       (unstaged-pane git))))
 
@@ -409,7 +409,7 @@
                             [(= kind :reword) ["--amend" "--only"]]
                             [else []]))
              history (messages state.root)]
-         (when (buffer-exists? "COMMIT_EDITMSG") (close-buffer "COMMIT_EDITMSG"))
+         (when (buffer-live? "COMMIT_EDITMSG") (close-buffer "COMMIT_EDITMSG"))
          (file/write file (commit/template text snapshot))
          (open-file file)
          (set-buffer-value! :git-commit {root: state.root git: git args: args history: history recalled: nil})

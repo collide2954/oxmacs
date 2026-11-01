@@ -29,11 +29,11 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
 (defonce state (atom (new-chat)))
 
 (def (show!)
-  (when (buffer-exists? chat-buffer)
+  (when (buffer-live? chat-buffer)
     (set-lines chat-buffer (render/lines-of (get @state :log)))))
 
 (def (open-chat!)
-  (unless (buffer-exists? chat-buffer)
+  (unless (buffer-live? chat-buffer)
     (open-buffer chat-buffer (render/lines-of (get @state :log))
                  :input "> " :keys chat-keys :label "Claude chat" :show false)
     (set-word-wrap chat-buffer true))
@@ -70,7 +70,7 @@ Keep answers short and plain, show code in fenced blocks, and say briefly what y
                (let [now (time/now)]
                  (when (> (- now @shown-at) redraw-every)
                    (reset! shown-at now)
-                   (when (buffer-exists? chat-buffer)
+                   (when (buffer-live? chat-buffer)
                      (set-lines chat-buffer (render/entry-lines {kind: :reply content: message.content live: true})
                                 :from base)))))
         reply (api/stream! {model: (setting :model) effort: (setting :effort) max-tokens: (setting :max-tokens)

@@ -19,7 +19,7 @@
            (string/join "\n" (map (fn [n] (str n "\t" (nth lines (dec n)))) (range first (inc last))))))))
 
 (def (cut text)
-  (if (> (string/length text) most-text)
+  (if (> (count text) most-text)
     (str (string/slice text 0 most-text) "\n[cut short]")
     text))
 
@@ -40,11 +40,10 @@
                            (buffer-list)))))
 
 (def (read-buffer input)
-  (let [buffer (asked-for input :buffer)
-        text (buffer-contents buffer)]
-    (if (nil? text)
-      (raise (error $"There is no buffer called {buffer}"))
-      (numbered text input.from_line input.to_line))))
+  (let [buffer (asked-for input :buffer)]
+    (if (buffer-live? buffer)
+      (numbered (with-buffer buffer (buffer-text)) input.from_line input.to_line)
+      (raise (error $"There is no buffer called {buffer}")))))
 
 (def (read-file input)
   (numbered (file/read (resolved (asked-for input :path))) input.from_line input.to_line))
@@ -76,7 +75,7 @@
 
 (def (show-buffer input)
   (let [buffer (asked-for input :buffer)]
-    (unless (buffer-exists? buffer)
+    (unless (buffer-live? buffer)
       (raise (error $"There is no buffer called {buffer}")))
     (in-main (fn [] (switch-to-buffer buffer)))
     $"Showing {buffer}"))
@@ -119,7 +118,7 @@
         edits (get input :edits)]
     (unless (and (vector? edits) (not (empty? edits)))
       (raise (error "edit_file needs edits, a list of {old_text, new_text}")))
-    (review/edits! (if (buffer-exists? target) target (resolved target)) edits)))
+    (review/edits! (if (buffer-live? target) target (resolved target)) edits)))
 
 (def (write input)
   (review/write! (resolved (asked-for input :path)) (or (get input :content) "")))

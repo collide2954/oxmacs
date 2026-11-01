@@ -76,7 +76,7 @@
   (unless @ticking
     (reset! ticking true)
     (spawn
-      (do (while (buffer-exists? workbench)
+      (do (while (buffer-live? workbench)
             (swap! ticks inc)
             (sleep (if (s/position) 100 1000)))
         (reset! ticking false)))))

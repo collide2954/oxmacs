@@ -31,7 +31,7 @@
   (let [shown (string/trim-end (string/join "\n" (unfenced (string/split (or text "") "\n"))))
         rest-of-line (string/trim (first (string/split after "\n")))
         shown (if (and (not (string/blank? rest-of-line)) (string/ends-with? shown rest-of-line))
-                (string/trim-end (string/slice shown 0 (- (string/length shown) (string/length rest-of-line))))
+                (string/trim-end (string/slice shown 0 (- (count shown) (count rest-of-line))))
                 shown)]
     (when (not (string/blank? shown)) shown)))
 
@@ -47,13 +47,13 @@
           at (point)
           text (buffer-text)
           before (string/slice text (max 0 (- at most-before)) at)
-          after (string/slice text at (min (string/length text) (+ at most-after)))
+          after (string/slice text at (min (count text) (+ at most-after)))
           reply (api/stream! (assoc (request-of (setting :suggestion-model) before after (buffer-language) (buffer-file))
                                     :key key)
                              (fn [_] nil)
                              (fn [response] (reset! asking response)))
           shown (tidy (text-of reply.content) after)]
-      (when (and shown (= ticket @latest) (= (point) at) (= (buffer-size) (string/length text)))
+      (when (and shown (= ticket @latest) (= (point) at) (= (buffer-size) (count text)))
         (suggest shown)))))
 
 (test "a suggestion is asked for with the code around point"

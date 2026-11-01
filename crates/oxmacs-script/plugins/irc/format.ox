@@ -23,7 +23,7 @@
 
 (def (linkify text face)
   "text as segments, with web addresses as links and the rest in face."
-  (let [found (regex/find-all url-pattern text)
+  (let [found (regex/find-all text url-pattern)
         [out at] (reduce (fn [[out at] match]
                            [(conj out (piece (string/slice text at match.start) face) [match.text :link]) match.end])
                          [[] 0] found)]
@@ -32,7 +32,7 @@
 (def (url-at text column)
   "The web address in text that column falls on, or nil."
   (when-let [match (find (fn [match] (and (<= match.start column) (< column match.end)))
-                         (regex/find-all url-pattern text))]
+                         (regex/find-all text url-pattern))]
     match.text))
 
 (def (segments-of text face)
@@ -46,7 +46,7 @@
 (def (words-of segments)
   (mapcat (fn [segment]
             (let [[text face] (if (string? segment) [segment nil] segment)]
-              (map (fn [match] [match.text face]) (regex/find-all #"\s+|\S+" text))))
+              (map (fn [match] [match.text face]) (regex/find-all text #"\s+|\S+"))))
           segments))
 
 (def (chop word width)

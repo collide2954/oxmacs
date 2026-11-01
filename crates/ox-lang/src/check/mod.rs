@@ -7,7 +7,7 @@ use crate::compile::parameters::parse_parameters;
 use crate::compile::regex_literal;
 use crate::expand::patterns;
 use crate::native::arguments;
-use crate::read::{Datum, Marks, Syntax, meta_flag, split_meta};
+use crate::read::{Datum, Marks, PRELUDE_MARK, Syntax, meta_flag, split_meta};
 use crate::span::Span;
 use crate::symbol::Sym;
 use crate::value::Value;
@@ -246,7 +246,7 @@ const VECTORS: [&str; 22] = [
     "vec",
 ];
 
-const REGEX_FUNCTIONS: [&str; 5] = ["find", "find-all", "matches?", "replace", "split"];
+const REGEX_FUNCTIONS: [&str; 2] = ["find", "find-all"];
 
 fn literal<'s>(source: &'s str, syntax: &Syntax) -> Option<&'s str> {
     if !matches!(syntax.datum, Datum::Str(_)) {
@@ -291,7 +291,7 @@ fn strings_in(source: &str, regex: &[&Import], form: &Syntax, found: &mut Vec<Di
             let pattern = items
                 .first()
                 .filter(|head| regex_call(regex, head))
-                .and_then(|_| items.get(1))
+                .and_then(|_| items.get(2))
                 .filter(|pattern| {
                     literal(source, pattern).is_some_and(|text| {
                         !text.starts_with("\"\"\"") && text.replace("\\\"", "").contains('\\')
@@ -738,6 +738,7 @@ impl Walker<'_> {
         };
         self.redundant_await(head, rest);
         self.redundant_vec(head, rest);
+        self.regex_order(head, rest);
         if let Some(pattern) = regex_literal(head, rest) {
             if let Err(error) = crate::builtins::regex::compile(pattern) {
                 let span = head.span.through(rest[0].span);
@@ -803,6 +804,30 @@ impl Walker<'_> {
                 name,
             } => Some((module, name)),
             Binding::Global { .. } | Binding::Local(_) => None,
+        }
+    }
+
+    fn regex_order(&mut self, head: &Syntax, rest: &[Syntax]) {
+        let regex = |syntax: &Syntax| {
+            head_of(syntax).is_some_and(|head| match symbol(head) {
+                Some("regex") => true,
+                Some(name) => head.marks.last() == Some(PRELUDE_MARK) && name.ends_with("regex"),
+                None => false,
+            })
+        };
+        if let [first, second] = rest
+            && regex(first)
+            && !regex(second)
+            && self.resolved(head).is_some_and(|(module, name)| {
+                module == "ox/regex" && (name == "find" || name == "find-all")
+            })
+            && let Some(written) = symbol(head)
+        {
+            self.found.push(Diagnostic::warning(
+                "regex-order",
+                format!("{written} takes the text first, then the pattern; ox migrate swaps them"),
+                head.span,
+            ));
         }
     }
 

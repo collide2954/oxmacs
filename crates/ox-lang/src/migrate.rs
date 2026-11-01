@@ -13,12 +13,34 @@ struct Moved {
     to_name: &'static str,
 }
 
-const MOVED: &[Moved] = &[Moved {
-    module: "ox/http",
-    name: "encode",
-    to_module: "ox/string",
-    to_name: "url-encode",
-}];
+const MOVED: &[Moved] = &[
+    Moved {
+        module: "ox/http",
+        name: "encode",
+        to_module: "ox/string",
+        to_name: "url-encode",
+    },
+    Moved {
+        module: "ox/xml",
+        name: "parse",
+        to_module: "ox/xml",
+        to_name: "read",
+    },
+    Moved {
+        module: "ox/string",
+        name: "length",
+        to_module: "ox",
+        to_name: "count",
+    },
+];
+
+const TO_STRING: [(&str, &str); 3] = [
+    ("replace", "replace"),
+    ("split", "split"),
+    ("matches?", "includes?"),
+];
+
+const REGEX_CHARACTERS: &[char] = &['\\', '^', '$', '(', '[', '*', '+', '?', '{', '|'];
 
 struct Rewrite {
     span: Span,
@@ -269,6 +291,7 @@ pub fn migrate(isolate: &mut Isolate, name: &str, source: &str) -> Result<String
         let known = Known {
             occurrences: &occurrences,
             waiting: &waiting,
+            patterns: patterns(&forms),
         };
         let mut imports = Imports::of(&forms);
         let mut rewrites = Vec::new();
@@ -305,6 +328,7 @@ fn children(form: &Syntax) -> &[Syntax] {
 struct Known<'a> {
     occurrences: &'a [Occurrence],
     waiting: &'a [Span],
+    patterns: Vec<(String, bool)>,
 }
 
 impl Known<'_> {
@@ -402,8 +426,12 @@ fn collect(
         && let Some((head, arguments)) = items.split_first()
         && let Datum::Symbol(name) = &head.datum
         && removed(known.occurrences, head, name)
-        && let Some(rewrite) = rewritten(text, name, head, arguments)
+        && let Some(rewrite) = rewritten(text, name, form, arguments)
     {
+        rewrites.push(rewrite);
+        return;
+    }
+    if let Some(rewrite) = reordered(text, known, imports, form) {
         rewrites.push(rewrite);
         return;
     }
@@ -425,11 +453,123 @@ fn moved(imports: &mut Imports, symbol: &Syntax, name: &str) -> Option<Rewrite> 
     let found = MOVED
         .iter()
         .find(|moved| moved.module == module && moved.name == member)?;
-    let alias = imports.alias_of(found.to_module);
+    let text = if found.to_module == "ox" {
+        found.to_name.to_owned()
+    } else {
+        format!("{}/{}", imports.alias_of(found.to_module), found.to_name)
+    };
     Some(Rewrite {
         span: symbol.span,
-        text: format!("{alias}/{}", found.to_name),
+        text,
     })
+}
+
+fn regex_form(syntax: &Syntax) -> bool {
+    head(syntax) == Some("regex")
+}
+
+fn regex_text(syntax: &Syntax) -> bool {
+    match &syntax.datum {
+        Datum::Str(text) => text.contains(REGEX_CHARACTERS),
+        Datum::List(items) if head(syntax) == Some("str") => items.iter().skip(1).any(regex_text),
+        _ => false,
+    }
+}
+
+fn patterns(forms: &[Syntax]) -> Vec<(String, bool)> {
+    forms
+        .iter()
+        .filter(|form| head(form) == Some("def"))
+        .filter_map(|form| match children(form) {
+            [_, name, value] if regex_form(value) || regex_text(value) => match &name.datum {
+                Datum::Symbol(name) => Some((name.clone(), regex_form(value))),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+fn defined_pattern(known: &Known<'_>, syntax: &Syntax) -> Option<bool> {
+    let Datum::Symbol(name) = &syntax.datum else {
+        return None;
+    };
+    let local = known.occurrences.iter().any(|occurrence| {
+        occurrence.span == syntax.span && matches!(occurrence.binding, Binding::Local(_))
+    });
+    if local {
+        return None;
+    }
+    known
+        .patterns
+        .iter()
+        .find(|(known, _)| known == name)
+        .map(|(_, regex)| *regex)
+}
+
+fn pattern_like(known: &Known<'_>, syntax: &Syntax) -> bool {
+    match &syntax.datum {
+        Datum::Symbol(_) => defined_pattern(known, syntax).is_some(),
+        _ => regex_form(syntax) || regex_text(syntax),
+    }
+}
+
+fn regex_call<'s>(known: &Known<'_>, imports: &Imports, head: &'s Syntax) -> Option<&'s str> {
+    let Datum::Symbol(name) = &head.datum else {
+        return None;
+    };
+    let (alias, member) = name.split_once('/')?;
+    let local = known.occurrences.iter().any(|occurrence| {
+        occurrence.span == head.span && matches!(occurrence.binding, Binding::Local(_))
+    });
+    (imports.module_of(alias) == Some("ox/regex") && !local).then_some(member)
+}
+
+fn reordered(
+    text: &str,
+    known: &Known<'_>,
+    imports: &mut Imports,
+    form: &Syntax,
+) -> Option<Rewrite> {
+    let (head, arguments) = children(form).split_first()?;
+    let member = regex_call(known, imports, head)?;
+    let written = |syntax: &Syntax| source(text, syntax.span.start, syntax.span.end).to_owned();
+    if let Some((_, to)) = TO_STRING.iter().find(|(from, _)| *from == member) {
+        let [pattern, whole, rest @ ..] = arguments else {
+            return None;
+        };
+        let pattern = if regex_form(pattern) || defined_pattern(known, pattern) == Some(true) {
+            written(pattern)
+        } else {
+            format!("(regex {})", written(pattern))
+        };
+        let mut parts = vec![
+            format!("{}/{to}", imports.alias_of("ox/string")),
+            written(whole),
+            pattern,
+        ];
+        parts.extend(rest.iter().map(written));
+        return Some(Rewrite {
+            span: form.span,
+            text: format!("({})", parts.join(" ")),
+        });
+    }
+    match (member, arguments) {
+        ("find" | "find-all", [pattern, whole])
+            if pattern_like(known, pattern) && !pattern_like(known, whole) =>
+        {
+            Some(Rewrite {
+                span: Span::new(pattern.span.start as usize, whole.span.end as usize),
+                text: format!(
+                    "{}{}{}",
+                    written(whole),
+                    source(text, pattern.span.end, whole.span.start),
+                    written(pattern)
+                ),
+            })
+        }
+        _ => None,
+    }
 }
 
 fn unbound(occurrence: &Occurrence, name: &str) -> bool {
@@ -450,14 +590,26 @@ fn source(text: &str, start: u32, end: u32) -> &str {
     &text[start as usize..end as usize]
 }
 
-fn rewritten(text: &str, name: &str, head: &Syntax, arguments: &[Syntax]) -> Option<Rewrite> {
-    match name {
-        "with" => Some(Rewrite {
+fn rewritten(text: &str, name: &str, form: &Syntax, arguments: &[Syntax]) -> Option<Rewrite> {
+    let head = children(form).first()?;
+    match (name, arguments) {
+        ("with", _) => Some(Rewrite {
             span: head.span,
             text: "assoc".to_owned(),
         }),
-        "defrule" => defrule(text, head, arguments),
-        "case" => case(text, head, arguments),
+        ("buffer-exists?", _) => Some(Rewrite {
+            span: head.span,
+            text: "buffer-live?".to_owned(),
+        }),
+        ("buffer-contents", [buffer]) => Some(Rewrite {
+            span: form.span,
+            text: format!(
+                "(with-buffer {} (buffer-text))",
+                source(text, buffer.span.start, buffer.span.end)
+            ),
+        }),
+        ("defrule", _) => defrule(text, head, arguments),
+        ("case", _) => case(text, head, arguments),
         _ => None,
     }
 }

@@ -50,7 +50,7 @@
     (set-header list-buffer page.header)))
 
 (def (redraw-list)
-  (when (and (buffer-exists? list-buffer) (not (store/locked?)))
+  (when (and (buffer-live? list-buffer) (not (store/locked?)))
     (let [page (list-page)]
       (set-lines list-buffer page.lines)
       (set-header list-buffer page.header))))
@@ -99,7 +99,7 @@
 
 (def (redraw-entry)
   (when-let [entry (by-id (get @view :shown))]
-    (when (buffer-exists? entry-buffer)
+    (when (buffer-live? entry-buffer)
       (set-lines entry-buffer (entry-lines entry))
       (set-header entry-buffer (entry-header entry)))))
 
@@ -112,7 +112,7 @@
     (when (not (blank? entry.totp))
       (every 1000
              (fn []
-               (if (and (= (get @view :ticks) ticks) (buffer-exists? entry-buffer) (not (store/locked?)))
+               (if (and (= (get @view :ticks) ticks) (buffer-live? entry-buffer) (not (store/locked?)))
                  (do (redraw-entry) nil)
                  :stop))))))
 

@@ -1,6 +1,5 @@
 (module
-  (import (ox string)
-          (markdown grammar))
+  (import (markdown grammar))
   (export prose highlight))
 
 (def faces {code: :constant strong: :keyword link: :link})
@@ -12,7 +11,7 @@
 
 (def (prose text)
   "The spans of a line of Markdown prose: headings, quotes, list markers, `code`, **strong** text and [links](targets)."
-  (let [width (string/length text)]
+  (let [width (count text)]
     (cond [(grammar/heading text) [[0 width :heading]]]
       [(grammar/quoted text) [[0 width :comment]]]
       [else (concat (list-marker text)
@@ -21,7 +20,7 @@
 
 (def (highlight _line text state)
   "The spans of a line of a Markdown document, and as its state the fence of the code block the next line is in, or nil."
-  (let [width (string/length text)
+  (let [width (count text)
         read (grammar/step state text)
         whole (fn [face] (if (= width 0) [] [[0 width face]]))]
     {spans: (cond [(contains? #{:fence-open :fence-close} read.kind) (whole :keyword)]

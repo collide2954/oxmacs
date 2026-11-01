@@ -1,5 +1,5 @@
 (module
-  (import (ox string) (ox path) (ox file) (ox regex)
+  (import (ox string) (ox path) (ox file)
           (r session)
           (r help)
           (r language))
@@ -14,10 +14,10 @@
 (def (assigns? text name equals)
   (let [trimmed (string/trim-start text)
         after (cond [(string/starts-with? trimmed $"`{name}`")
-                     (string/slice trimmed (+ (string/length name) 2))]
+                     (string/slice trimmed (+ (count name) 2))]
                 [(and (string/starts-with? trimmed name)
-                      (not (regex/matches? #"^[\p{L}\p{N}._]" (string/slice trimmed (string/length name)))))
-                 (string/slice trimmed (string/length name))]
+                      (not (string/includes? (string/slice trimmed (count name)) #"^[\p{L}\p{N}._]")))
+                 (string/slice trimmed (count name))]
                 [else nil])]
     (when after
       (let [after (string/trim-start after)]
@@ -30,7 +30,7 @@
   (let [lines (string/lines text)
         numbers (range (count lines))]
     (or (find (fn [at] (let [shown (nth lines at)]
-                         (and (not (regex/matches? #"^\s" shown)) (assigns? shown name true))))
+                         (and (not (string/includes? shown #"^\s")) (assigns? shown name true))))
               numbers)
         (find (fn [at] (assigns? (nth lines at) name false)) numbers))))
 
@@ -71,7 +71,7 @@
 (def (in-buffers name origin)
   (when-let [[buffer at] (some (fn [buffer]
                                  (when (= (buffer-language buffer) "R")
-                                   (when-let [found (line (or (buffer-contents buffer) "") name)]
+                                   (when-let [found (line (if (buffer-live? buffer) (with-buffer buffer (buffer-text)) "") name)]
                                      [buffer found])))
                                (buffer-list))]
     (apply remember-location origin)

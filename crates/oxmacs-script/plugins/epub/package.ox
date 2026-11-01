@@ -29,14 +29,14 @@
 
 (def (rootfile text)
   "The package document META-INF/container.xml names."
-  (xml/attr (xml/find (xml/parse text :html true) "rootfiles/rootfile") "full-path"))
+  (xml/attr (xml/find (xml/read text :html true) "rootfiles/rootfile") "full-path"))
 
 (def (properties item)
   (string/words (or (xml/attr item "properties") "")))
 
 (def (package text entry)
   "What the package document at entry says: :title, :creator and :language, the entries of the :chapters in reading order, and the entries of the :cover image, the :nav document and the :ncx table of contents, or nil."
-  (let [opf (xml/parse text :html true)
+  (let [opf (xml/read text :html true)
         base (folder-of entry)
         metadata (xml/find opf "metadata")
         named (fn [tag] (when-let [found (xml/find metadata tag)] (tidy (xml/text found))))
@@ -74,7 +74,7 @@
 
 (def (toc-from-nav text entry)
   "The table of contents of the EPUB 3 navigation document at entry, as maps of :title, :entry, :fragment and :depth."
-  (let [navs (named-below (xml/parse text :html true) "nav")
+  (let [navs (named-below (xml/read text :html true) "nav")
         toc (or (find (fn [nav] (= (xml/attr nav "type") "toc")) navs) (first navs))]
     (if toc (vec (listed (xml/find toc "ol") (folder-of entry) 0)) [])))
 
@@ -90,7 +90,7 @@
 
 (def (toc-from-ncx text entry)
   "The table of contents of the EPUB 2 NCX document at entry, in the same maps toc-from-nav gives."
-  (vec (points (xml/find (xml/parse text :html true) "navMap") (folder-of entry) 0)))
+  (vec (points (xml/find (xml/read text :html true) "navMap") (folder-of entry) 0)))
 
 (test "entries resolve against their folder"
   (expect (= (resolve "OEBPS/text" "../images/a%20b.jpg#x") "OEBPS/images/a b.jpg"))

@@ -41,7 +41,7 @@
 
 (def (fresh-windows)
   (arrange-windows (buffer-name))
-  (when (and (= (setting :new-tab) :scratch) (buffer-exists? "*scratch*"))
+  (when (and (= (setting :new-tab) :scratch) (buffer-live? "*scratch*"))
     (switch-to-buffer "*scratch*")))
 
 (def (open-tab fresh)
@@ -164,7 +164,7 @@
 (defcommand switch-to-buffer-other-tab "Show a buffer in a new tab"
   (let [name (prompt "Switch to buffer in new tab: " :choices (buffer-list))]
     (new-tab)
-    (if (buffer-exists? name)
+    (if (buffer-live? name)
       (switch-to-buffer name)
       (show-text name ""))
     (draw)))

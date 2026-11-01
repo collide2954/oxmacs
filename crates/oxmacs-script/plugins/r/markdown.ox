@@ -24,7 +24,7 @@
 (def (labelled chunk lines)
   (if chunk.name
     chunk
-    (assoc chunk :name (some (fn [at] (when-let [hit (regex/find label-option (nth lines at))]
+    (assoc chunk :name (some (fn [at] (when-let [hit (regex/find (nth lines at) label-option)]
                                         (unquoted (first hit.groups))))
                              (range (+ chunk.start 1) chunk.end)))))
 
@@ -44,7 +44,7 @@
                               (update :blocks conj (assoc state.open :end at))
                               (assoc :open nil))]
                      [(= read.kind :fence-open)
-                      (let [hit (regex/find opening line)]
+                      (let [hit (regex/find line opening)]
                         (assoc state :open {start: at
                                             language: (when hit (first hit.groups))
                                             name: (when hit (second hit.groups))}))]
@@ -58,7 +58,7 @@
      headings: done.headings}))
 
 (def (highlight line text state)
-  (let [width (string/length text)
+  (let [width (count text)
         trimmed (string/trim-end text)
         whole (fn [face] (if (= width 0) [] [[0 width face]]))]
     (cond [(and (= line 0) (= trimmed "---")) {spans: (whole :string) state: :front}]
@@ -68,8 +68,8 @@
        (let [read (grammar/step state text)]
          {spans: (cond [(contains? #{:fence-open :fence-close} read.kind) (whole :keyword)]
                    [(= read.kind :code)
-                    (cond [(regex/matches? option-line text) (whole :attribute)]
-                      [(regex/matches? comment-line text) (whole :comment)]
+                    (cond [(string/includes? text option-line) (whole :attribute)]
+                      [(string/includes? text comment-line) (whole :comment)]
                       [else []])]
                    [else (style/prose text)])
           state: read.state})])))
@@ -82,10 +82,10 @@
   (find (fn [chunk] (and (<= chunk.start line) (<= line chunk.end))) found.chunks))
 
 (def (code-line? text)
-  (and (not (string/blank? text)) (not (regex/matches? comment-line text))))
+  (and (not (string/blank? text)) (not (string/includes? text comment-line))))
 
 (def (body found chunk)
-  (let [code (filter (fn [text] (not (regex/matches? option-line text)))
+  (let [code (filter (fn [text] (not (string/includes? text option-line)))
                      (map (fn [at] (nth found.lines at))
                           (range (+ chunk.start 1) (min chunk.end (count found.lines)))))]
     (if (some (fn [text] (not (string/blank? text))) code)
@@ -104,7 +104,7 @@
       [else chunk])))
 
 (def (leading text)
-  (- (string/length text) (string/length (string/trim-start text))))
+  (- (count text) (count (string/trim-start text))))
 
 (def (in-code? found line)
   (when-let [chunk (chunk-at found line)]
@@ -135,13 +135,13 @@
   (let [head (string/trim-start (line-text top))
         tail (string/trim-end (line-text bottom))]
     (if (and (string/starts-with? head "<!--") (string/ends-with? tail "-->"))
-      (let [end (+ (line-start bottom) (string/length tail))
+      (let [end (+ (line-start bottom) (count tail))
             closing (if (string/ends-with? tail " -->") 4 3)
             start (+ (line-start top) (leading (line-text top)))
             opening (if (string/starts-with? head "<!-- ") 5 4)]
         (delete (- end closing) end)
         (delete start (+ start opening)))
-      (let [end (+ (line-start bottom) (string/length tail))
+      (let [end (+ (line-start bottom) (count tail))
             start (+ (line-start top) (leading (line-text top)))]
         (set-point end)
         (insert " -->")
@@ -162,7 +162,7 @@
        (let [text (line-text top)]
          (if (string/starts-with? (string/trim-start text) "#")
            (set-point (+ (line-start top) (leading text) (if (string/starts-with? (string/trim-start text) "# ") 2 1)))
-           (do (set-point (+ (line-start top) (string/length (string/trim-end text))))
+           (do (set-point (+ (line-start top) (count (string/trim-end text))))
              (delete (point) (line-end top))
              (insert " # "))))]
       [code
@@ -219,7 +219,7 @@
   (loop [to from]
     (let [text (string/join "\n" (map (fn [at] (nth lines at)) (range from (+ to 1))))]
       (if (and (< (+ to 1) end)
-               (or (> (depth text) 0) (regex/matches? continued (uncommented (nth lines to)))))
+               (or (> (depth text) 0) (string/includes? (uncommented (nth lines to)) continued)))
         (again (+ to 1))
         to))))
 
@@ -246,7 +246,7 @@
         at (point)]
     (try
       (insert (str before "```{r}\n\n```\n"))
-      (set-point (+ at (string/length before) 7))
+      (set-point (+ at (count before) 7))
       (catch error e (message e.message)))))
 
 (def (outline found)

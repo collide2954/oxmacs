@@ -52,8 +52,13 @@ pub fn regex_of(heap: &Heap, name: &str, value: Value) -> Result<Arc<Regex>, Err
 
 fn text<'a>(heap: &'a Heap, name: &str, value: Value) -> Result<&'a str, Error> {
     heap.text(value).ok_or_else(|| {
+        let order = if heap.foreign_of::<Regex>(value).is_some() {
+            "; it takes the text first, then the pattern"
+        } else {
+            ""
+        };
         Error::new(format!(
-            "regex/{name} expects text to search, got {}",
+            "regex/{name} expects text to search, got {}{order}",
             print::brief(heap, value)
         ))
         .of(ErrorKind::Type)
@@ -132,22 +137,11 @@ pub fn install(isolate: &mut Isolate) {
                 .map_err(Error::from)
         });
     isolate
-        .native(MODULE, "matches?")
-        .arity(2, Some(2))
-        .function(|heap, arguments| {
-            let regex = regex_of(heap, "regex/matches?", arguments[0])?;
-            Ok(Value::Bool(regex.is_match(text(
-                heap,
-                "matches?",
-                arguments[1],
-            )?)))
-        });
-    isolate
         .native(MODULE, "find")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "regex/find", arguments[0])?;
-            let whole = text(heap, "find", arguments[1])?.to_owned();
+            let whole = text(heap, "find", arguments[0])?.to_owned();
+            let regex = regex_of(heap, "regex/find", arguments[1])?;
             match regex.captures(&whole) {
                 Some(captures) => found(heap, &regex, &whole, &captures, &mut Counted::default()),
                 None => Ok(Value::Nil),
@@ -157,35 +151,13 @@ pub fn install(isolate: &mut Isolate) {
         .native(MODULE, "find-all")
         .arity(2, Some(2))
         .function(|heap, arguments| {
-            let regex = regex_of(heap, "regex/find-all", arguments[0])?;
-            let whole = text(heap, "find-all", arguments[1])?.to_owned();
+            let whole = text(heap, "find-all", arguments[0])?.to_owned();
+            let regex = regex_of(heap, "regex/find-all", arguments[1])?;
             let mut all = Vec::new();
             let mut counted = Counted::default();
             for captures in regex.captures_iter(&whole) {
                 all.push(found(heap, &regex, &whole, &captures, &mut counted)?);
             }
             heap.vector_from(&all).map_err(Error::from)
-        });
-    isolate
-        .native(MODULE, "replace")
-        .arity(3, Some(3))
-        .function(|heap, arguments| {
-            let regex = regex_of(heap, "regex/replace", arguments[0])?;
-            let whole = text(heap, "replace", arguments[1])?;
-            let with = text(heap, "replace", arguments[2])?;
-            let replaced = regex.replace_all(whole, with).into_owned();
-            heap.string(&replaced).map_err(Error::from)
-        });
-    isolate
-        .native(MODULE, "split")
-        .arity(2, Some(2))
-        .function(|heap, arguments| {
-            let regex = regex_of(heap, "regex/split", arguments[0])?;
-            let whole = text(heap, "split", arguments[1])?.to_owned();
-            let parts = regex
-                .split(&whole)
-                .map(|part| heap.string(part).map_err(Error::from))
-                .collect::<Result<Vec<_>, _>>()?;
-            heap.vector_from(&parts).map_err(Error::from)
         });
 }

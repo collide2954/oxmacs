@@ -45,8 +45,8 @@ Ox code blocks here are checked with `ox check`. Names prefixed `my-` in the Ema
 | `(unwind-protect body cleanup)` | `(try body (finally cleanup))` |
 | `(error "Oops")` | `(raise (error "Oops"))` |
 | `(ignore-errors x)` | `(maybe x)` |
-| `(string-match re s)`, `(match-string 1 s)` | `(regex/find #"…" s)`, its `:groups` |
-| `(replace-regexp-in-string re rep s)` | `(regex/replace #"…" s rep)` |
+| `(string-match re s)`, `(match-string 1 s)` | `(regex/find s #"…")`, its `:groups` |
+| `(replace-regexp-in-string re rep s)` | `(string/replace s #"…" rep)` |
 | `(split-string s ",")` | `(string/split s ",")` |
 | `(string-trim s)` | `(string/trim s)` |
 | `(string-prefix-p p s)` | `(string/starts-with? s p)` |
@@ -171,12 +171,14 @@ An Emacs Lisp regex is a string, so its backslashes are doubled, and results com
 ```
 
 ```clojure
-(module (import (ox regex)))
+(module (import (ox regex) (ox string)))
 
-(:groups (regex/find #"(\d+)-(\d+)" "pages 10-24"))   ; ["10" "24"]
+(:groups (regex/find "pages 10-24" #"(\d+)-(\d+)"))   ; ["10" "24"]
 
-(regex/replace #"\d+" "a1b22" "#")                     ; "a#b#"
+(string/replace "a1b22" #"\d+" "#")                    ; "a#b#"
 ```
+
+The `ox string` functions that look for a piece of text, `string/replace`, `string/split` and `string/includes?`, take a regex in its place too.
 
 ## Lists, vectors and maps
 

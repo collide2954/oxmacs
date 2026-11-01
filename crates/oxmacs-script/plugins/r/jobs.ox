@@ -37,7 +37,7 @@
       [else nil])))
 
 (def (heard-app line)
-  (when-let [hit (regex/find #"Listening on (https?://\S+)" line)]
+  (when-let [hit (regex/find line #"Listening on (https?://\S+)")]
     (open-externally (first hit.groups))
     (message $"Opened {(first hit.groups)}")))
 

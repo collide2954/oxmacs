@@ -49,7 +49,7 @@
                      (let [links (if (= built.section "See Also")
                                    (map (fn [found] {start: (+ found.start 1) end: (- found.end 1)
                                                      topic: (first found.groups)})
-                                        (regex/find-all #"['‘]([\p{L}\p{N}._:]+)['’]" shown))
+                                        (regex/find-all shown #"['‘]([\p{L}\p{N}._:]+)['’]"))
                                    [])]
                        (assoc built
                               :lines (conj built.lines (if (empty? links) shown (linked shown links)))
@@ -65,10 +65,10 @@
 
 (def (dedented lines)
   (let [indents (keep (fn [line] (when (not (string/blank? line))
-                                   (- (string/length line) (string/length (string/trim-start line)))))
+                                   (- (count line) (count (string/trim-start line)))))
                       lines)
         cut (if (empty? indents) 0 (apply min indents))]
-    (string/join "\n" (map (fn [line] (if (string/blank? line) "" (string/slice line (min cut (string/length line))))) lines))))
+    (string/join "\n" (map (fn [line] (if (string/blank? line) "" (string/slice line (min cut (count line))))) lines))))
 
 (def (example-at page line)
   "The example paragraph around line, without its indentation, or nil outside the examples."
@@ -88,8 +88,8 @@
 (def (symbol-in line column)
   "The R name in line around column, or nil."
   (when-let [found (find (fn [word] (and (<= word.start column) (<= column word.end)))
-                         (regex/find-all #"[\p{L}\p{N}._]+" line))]
-    (when (regex/matches? #"^[^0-9_]" found.text)
+                         (regex/find-all line #"[\p{L}\p{N}._]+"))]
+    (when (string/includes? found.text #"^[^0-9_]")
       found.text)))
 
 (def (symbol-at-point)

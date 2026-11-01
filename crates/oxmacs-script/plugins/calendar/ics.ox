@@ -12,9 +12,9 @@
           [] (string/lines (string/replace text "\r" ""))))
 
 (def (content-line line)
-  (let [head (or (get (regex/find "^(?:\"[^\"]*\"|[^\":])*" line) :text) "")
+  (let [head (or (get (regex/find line "^(?:\"[^\"]*\"|[^\":])*") :text) "")
         value (string/slice line (min (count line) (inc (count head))))
-        parts (map :text (regex/find-all "(?:\"[^\"]*\"|[^\";])+" head))
+        parts (map :text (regex/find-all head "(?:\"[^\"]*\"|[^\";])+"))
         params (reduce (fn [params part]
                          (let [[key given] (string/split part "=" 2)]
                            (assoc params (string/upper key) (string/replace (or given "") "\"" ""))))
@@ -92,7 +92,7 @@
   "An iCalendar duration such as PT1H30M or -P1D in milliseconds."
   (let [given (string/trim (or text ""))
         negative (string/starts-with? given "-")
-        match (regex/find #"P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?" given)
+        match (regex/find given #"P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?")
         part (fn [index] (or (string/to-number (or (get (get match :groups) index) "")) 0))
         total (+ (* (part 0) 604800000) (* (part 1) 86400000) (* (part 2) 3600000) (* (part 3) 60000) (* (part 4) 1000))]
     (if negative (- total) total)))

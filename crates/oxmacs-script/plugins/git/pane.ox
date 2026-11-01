@@ -15,7 +15,7 @@
   (add out {kind: :blank} ""))
 
 (def (digits hunks)
-  (string/length
+  (count
    (str (apply max 1 (map (fn [hunk] (max (+ hunk.old-start hunk.old-count)
                                           (+ hunk.new-start hunk.new-count)))
                           hunks)))))
@@ -54,7 +54,7 @@
           {} (pairs hunk)))
 
 (def (marked text ranges face)
-  (let [n (string/length text)]
+  (let [n (count text)]
     (loop [at 0 i 0 out []]
       (if (>= i (count ranges))
         (if (< at n) (conj out (string/slice text at n)) out)
@@ -94,12 +94,12 @@
                         [else shown]))))))))
 
 (def (clip text width)
-  (if (<= (string/length text) width)
+  (if (<= (count text) width)
     (string/pad-end text width)
     (str (string/slice text 0 (max 0 (- width 1))) "…")))
 
 (def (visible ranges text width)
-  (if (<= (string/length text) width)
+  (if (<= (count text) width)
     ranges
     (keep (fn [range]
             (let [end (min (nth range 1) (- width 1))]
@@ -129,7 +129,7 @@
                       (marked shown (visible words text text-width) face))]))))
 
 (def (split out file index hunk width columns)
-  (let [half (// (- columns (string/length separator)) 2)
+  (let [half (// (- columns (count separator)) 2)
         text-width (max narrowest (- half (+ width 1)))
         marks (word-marks hunk)]
     (reduce (fn [out pair]

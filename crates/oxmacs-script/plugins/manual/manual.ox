@@ -161,7 +161,7 @@
   (tutorial/open))
 
 (defcommand ox-manual "Read the Ox manual"
-  (if (buffer-exists? buffer)
+  (if (buffer-live? buffer)
     (switch-to-buffer buffer)
     (show! {id: (get @state :page)})))
 

@@ -1,14 +1,32 @@
+use std::sync::Arc;
+
+use regex::Regex;
 use unicode_width::UnicodeWidthChar;
 
+use crate::builtins::regex::regex_of;
 use crate::error::{Error, ErrorKind};
 use crate::heap::Heap;
 use crate::isolate::Isolate;
-use crate::native::{count, text};
+use crate::native::{count, expected, text};
 use crate::value::Value;
 use crate::value::print;
 use crate::vm::build::make_vector;
 
 const MODULE: &str = "ox/string";
+
+enum Pattern {
+    Text(String),
+    Regex(Arc<Regex>),
+}
+
+fn pattern(heap: &Heap, name: &str, value: Value) -> Result<Pattern, Error> {
+    if heap.foreign_of::<Regex>(value).is_some() {
+        return regex_of(heap, name, value).map(Pattern::Regex);
+    }
+    heap.text(value)
+        .map(|part| Pattern::Text(part.to_owned()))
+        .ok_or_else(|| expected(heap, name, "a string or a regex", value))
+}
 
 fn strings(heap: &mut Heap, parts: &[String]) -> Result<Value, Error> {
     let values = parts
@@ -162,7 +180,18 @@ pub fn install(isolate: &mut Isolate) {
         whole.starts_with(part)
     });
     test(isolate, "ends-with?", |whole, part| whole.ends_with(part));
-    test(isolate, "includes?", |whole, part| whole.contains(part));
+    isolate
+        .native(MODULE, "includes?")
+        .arity(2, Some(2))
+        .function(|heap, arguments| {
+            let whole = text(heap, "string/includes?", arguments[0])?;
+            Ok(Value::Bool(
+                match pattern(heap, "string/includes?", arguments[1])? {
+                    Pattern::Text(part) => whole.contains(&part),
+                    Pattern::Regex(regex) => regex.is_match(whole),
+                },
+            ))
+        });
     isolate
         .native(MODULE, "blank?")
         .arity(1, Some(1))
@@ -170,14 +199,6 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Bool(
                 text(heap, "string/blank?", arguments[0])?.trim().is_empty(),
             ))
-        });
-    isolate
-        .native(MODULE, "length")
-        .arity(1, Some(1))
-        .function(|heap, arguments| {
-            text(heap, "string/length", arguments[0])?;
-            let length = heap.length(arguments[0]).unwrap_or_default();
-            Ok(Value::Int(i64::try_from(length).unwrap_or(i64::MAX)))
         });
     isolate
         .native(MODULE, "width")
@@ -191,13 +212,23 @@ pub fn install(isolate: &mut Isolate) {
         .arity(2, Some(3))
         .function(|heap, arguments| {
             let whole = text(heap, "string/split", arguments[0])?;
-            let separator = text(heap, "string/split", arguments[1])?;
-            let parts: Vec<String> = match arguments.get(2) {
-                Some(limit) => whole
-                    .splitn(count(heap, "string/split", *limit)?, separator)
+            let separator = pattern(heap, "string/split", arguments[1])?;
+            let limit = match arguments.get(2) {
+                Some(limit) => Some(count(heap, "string/split", *limit)?),
+                None => None,
+            };
+            let parts: Vec<String> = match (separator, limit) {
+                (Pattern::Text(separator), Some(limit)) => whole
+                    .splitn(limit, separator.as_str())
                     .map(str::to_owned)
                     .collect(),
-                None => whole.split(separator).map(str::to_owned).collect(),
+                (Pattern::Text(separator), None) => {
+                    whole.split(separator.as_str()).map(str::to_owned).collect()
+                }
+                (Pattern::Regex(regex), Some(limit)) => {
+                    regex.splitn(whole, limit).map(str::to_owned).collect()
+                }
+                (Pattern::Regex(regex), None) => regex.split(whole).map(str::to_owned).collect(),
             };
             strings(heap, &parts)
         });
@@ -281,6 +312,7 @@ fn install_pieces(isolate: &mut Isolate) {
                     .of(ErrorKind::Type)
                 })?
                 .into_iter()
+                .filter(|item| *item != Value::Nil)
                 .map(|item| print::display(heap, item))
                 .collect();
             heap.string(&parts.join(&separator)).map_err(Error::from)
@@ -290,9 +322,11 @@ fn install_pieces(isolate: &mut Isolate) {
         .arity(3, Some(3))
         .function(|heap, arguments| {
             let whole = text(heap, "string/replace", arguments[0])?;
-            let from = text(heap, "string/replace", arguments[1])?;
             let to = text(heap, "string/replace", arguments[2])?;
-            let replaced = whole.replace(from, to);
+            let replaced = match pattern(heap, "string/replace", arguments[1])? {
+                Pattern::Text(from) => whole.replace(&from, to),
+                Pattern::Regex(regex) => regex.replace_all(whole, to).into_owned(),
+            };
             heap.string(&replaced).map_err(Error::from)
         });
     install_searching(isolate);

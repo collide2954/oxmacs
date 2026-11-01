@@ -84,6 +84,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Changed
 
+- `regex/find` and `regex/find-all` take the text first, then the pattern, as every module function takes its subject first. Given a regex where the text goes, they say so, `ox check` warns about a regex literal before the text, and `ox migrate` swaps the two where the pattern is plainly first.
+- `string/join` leaves out `nil`, as `str` does.
 - `ox fmt`, and saving an `.ox` file, leave one space between the parts of a line, keeping only the space before a comment at its end, so comments can still line up.
 - `ox lsp` checks a file once typing pauses for 300 ms instead of after every change, and before answering a request about it.
 - Taking a value apart in `let` or in function parameters works like reading it with `.field` or `nth`: a vector pattern takes a string apart into characters, a value that isn't a collection raises an error instead of giving `nil` for every part, and so does a field a record doesn't have. `nil` and a map's missing keys still give `nil`. Taking apart, reading a field of or matching a promise says to await it first, as does a function given a promise where it expects something else.
@@ -146,6 +148,7 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 - `with`, `defrule` and `case`, which each repeated another form: `assoc` changes a record's fields, `defrules` takes a single rule, and `match` compares with numbers, strings, keywords and quoted symbols as `case` did. `ox migrate` rewrites them.
 - `http/encode`, in favor of `string/url-encode`, which needs no network module; `ox migrate` rewrites it.
+- `regex/replace`, `regex/split` and `regex/matches?`, in favor of `string/replace`, `string/split` and `string/includes?`, which take a regex in place of the text to look for; `string/length`, in favor of `count`; `xml/parse`, now `xml/read`; `buffer-exists?`, the same as `buffer-live?`; and `buffer-contents`, in favor of `(with-buffer b (buffer-text))`, which raises for a closed buffer where `buffer-contents` gave `nil`. `ox migrate` rewrites them all.
 
 ### Fixed
 

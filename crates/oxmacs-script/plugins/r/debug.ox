@@ -18,7 +18,7 @@
       (session/show-console session false))))
 
 (def (heard session payload)
-  (when-let [hit (regex/find #"^debug at (.+)#(\d+): " payload)]
+  (when-let [hit (regex/find payload #"^debug at (.+)#(\d+): ")]
     (let [[file number] hit.groups
           path (if (path/absolute? file) file (path/join (or (session/directory-of session) (default-directory)) file))]
       (show-source session path (- (string/to-number number) 1))))

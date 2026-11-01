@@ -18,7 +18,7 @@
     (set-header buffer shown.header)))
 
 (def (refresh)
-  (if (buffer-exists? buffer)
+  (if (buffer-live? buffer)
     (do (watch-process-usage (buffer-shown? buffer))
       (draw false))
     (watch-process-usage false)))

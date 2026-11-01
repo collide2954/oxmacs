@@ -77,7 +77,7 @@
   (let [filled (reduce (fn [acc word]
                          (let [size (width-of word)
                                prefix (if (empty? acc.done) lead indent)
-                               used (+ (string/length prefix) acc.length)]
+                               used (+ (count prefix) acc.length)]
                            (if (and (not (empty? acc.line)) (> (+ used 1 size) width))
                              {done: (conj acc.done acc.line) line: word length: size}
                              {done: acc.done
@@ -106,7 +106,7 @@
        (let [lead (if (contains? #{"-" "*" "+"} para.marker) "  • " $"  {para.marker} ")]
          (add-lines page (wrap (inline para.text) width
                                :lead lead
-                               :indent (string/repeat " " (string/length lead)))))]
+                               :indent (string/repeat " " (count lead)))))]
       [(= para.kind :quote) (add-lines page (wrap (inline para.text) width :lead "  │ " :indent "  │ "))]
       [else (add-lines page (wrap (inline para.text) width))])))
 

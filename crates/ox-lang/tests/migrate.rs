@@ -94,6 +94,40 @@ fn moved_functions_take_their_new_name_and_module() {
         migrated("(module (import (ox http)))\n(http/encode q)"),
         "(module (import (ox http) (ox string)))\n(string/url-encode q)"
     );
+    assert_eq!(
+        migrated("(module (import (ox xml) (ox string :as s)))\n[(xml/parse t) (s/length t)]"),
+        "(module (import (ox xml) (ox string :as s)))\n[(xml/read t) (count t)]"
+    );
+}
+
+#[test]
+fn regex_calls_take_the_text_first_and_the_string_functions_take_over() {
+    let source = "(module (import (ox regex)))\n\
+                  (def word #\"\\w+\")\n\
+                  (def (f text p)\n  \
+                  [(regex/find #\"\\d\" text) (regex/find-all word text) (regex/find \"^a\" text)\n   \
+                  (regex/find text word) (regex/find p text)\n   \
+                  (regex/replace #\"\\s+\" text \" \") (regex/split \",\" text) (regex/matches? word text)])";
+    let once = migrated(source);
+
+    assert_eq!(
+        once,
+        "(module (import (ox regex) (ox string)))\n\
+         (def word #\"\\w+\")\n\
+         (def (f text p)\n  \
+         [(regex/find text #\"\\d\") (regex/find-all text word) (regex/find text \"^a\")\n   \
+         (regex/find text word) (regex/find p text)\n   \
+         (string/replace text #\"\\s+\" \" \") (string/split text (regex \",\")) (string/includes? text word)])"
+    );
+    assert_eq!(migrated(&once), once);
+}
+
+#[test]
+fn removed_buffer_functions_become_the_ones_that_stay() {
+    assert_eq!(
+        migrated("[(buffer-exists? b) (buffer-contents \"*x*\")]"),
+        "[(buffer-live? b) (with-buffer \"*x*\" (buffer-text))]"
+    );
 }
 
 #[test]

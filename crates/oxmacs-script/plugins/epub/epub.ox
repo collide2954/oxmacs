@@ -54,7 +54,7 @@
     (if (map? entry)
       (let [cover (decoded book entry.cover)]
         {blocks: (if cover [{kind: :image image: cover alt: "Cover"}] []) ids: {} sources: []})
-      (let [read (html/blocks (xml/parse (zip/read book.path entry) :html true) entry)
+      (let [read (html/blocks (xml/read (zip/read book.path entry) :html true) entry)
             blocks (map (fn [block]
                           (if (= block.kind :image)
                             (if-let [image (decoded book block.src)]
@@ -237,7 +237,7 @@
                  blocks (or (get book.blocks index)
                             (if (map? entry)
                               []
-                              (get (html/blocks (xml/parse (zip/read book.path entry) :html true) entry) :blocks)))]
+                              (get (html/blocks (xml/read (zip/read book.path entry) :html true) entry) :blocks)))]
              (map reading/block-text blocks)))
          (range total))))
 

@@ -324,7 +324,7 @@ mod tests {
         assert_eq!(
             ox.eval(
                 &mut editor,
-                "[(buffer-exists? other) (buffer-shown? other) (buffer-shown? home)]"
+                "[(buffer-live? other) (buffer-shown? other) (buffer-shown? home)]"
             )
             .unwrap(),
             "[true false true]"

@@ -38,7 +38,7 @@
       [])))
 
 (def (highlight line text)
-  (let [width (string/length text)]
+  (let [width (count text)]
     (cond
       [(string/starts-with? text "#") [[0 width :comment]]]
       [(= line 0)

@@ -74,9 +74,9 @@
     (when-let [[bracket at] (when (not (empty? opened)) (last opened))]
       (when (= bracket \()
         (let [before (string/trim-end (string/slice text 0 at))
-              found (regex/find #"[\p{L}\p{N}._:]+$" before)
+              found (regex/find before #"[\p{L}\p{N}._:]+$")
               name (if found found.text "")]
-          (when (and (regex/matches? #"^[\p{L}.]" name)
+          (when (and (string/includes? name #"^[\p{L}.]")
                      (not (string/ends-with? name ":"))
                      (not (contains? keywords name)))
             [name at]))))))

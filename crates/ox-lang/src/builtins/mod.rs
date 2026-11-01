@@ -31,11 +31,11 @@ const MODULES: &[(&str, &str)] = &[
     ),
     (
         "ox/string",
-        "Text: searching, splitting, joining, trimming, padding, changing case and URL encoding",
+        "Text: searching, splitting and replacing, by text or by regex, joining, trimming, padding, changing case and URL encoding",
     ),
     (
         "ox/regex",
-        "Regular expressions: matching, finding, replacing and splitting",
+        "Regular expressions: finding their matches, with groups and positions",
     ),
     ("ox/json", "Reading and writing JSON"),
     (

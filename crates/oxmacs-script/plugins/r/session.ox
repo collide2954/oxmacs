@@ -131,7 +131,7 @@
 (def (session-name directory)
   (let [folder (or (path/name directory) "R")
         named (fn [number] (if (= number 1) $"*R:{folder}*" $"*R:{folder}:{number}*"))]
-    (named (find (fn [number] (not (buffer-exists? (named number))))
+    (named (find (fn [number] (not (buffer-live? (named number))))
                  (range 1 (+ 2 (count (buffer-list))))))))
 
 (def (heard session kind payload)

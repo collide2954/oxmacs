@@ -62,6 +62,20 @@ fn vec_around_a_vector_is_pointed_out() {
 }
 
 #[test]
+fn a_regex_before_the_text_it_searches_is_pointed_out() {
+    let found = Isolate::new().check(
+        "user",
+        "(module (import (ox regex :as re)) (export f))\n\
+         (def (f text) [(re/find #\"\\d\" text) (re/find-all text #\"\\d\") (re/find text \"x\")])",
+    );
+
+    assert_eq!(
+        messages(&found),
+        ["re/find takes the text first, then the pattern; ox migrate swaps them"]
+    );
+}
+
+#[test]
 fn an_alias_that_restates_the_default_is_pointed_out() {
     let found = Isolate::new().check(
         "user",
@@ -212,17 +226,17 @@ fn undefined_names_are_errors_that_suggest_a_close_name() {
 
 #[test]
 fn escaped_regex_patterns_and_old_holes_are_pointed_out() {
-    let source = r#"(module (import (ox regex) (ox regex :as re :only [split])))
-(regex/find "^(\\d{4})$" "2026")
-(re/matches? "a+" "aa")
-(split "\\s+" "a b")
-(regex/find #"\d+" "1")
-(regex/find """\d"""  "1")
-(regex/find "\"[^\"]*\"" "a")
+    let source = r#"(module (import (ox regex) (ox regex :as re :only [find-all])))
+(regex/find "2026" "^(\\d{4})$")
+(re/find-all "aa" "a+")
+(find-all "a b" "\\s+")
+(regex/find "1" #"\d+")
+(regex/find "1" """\d""")
+(regex/find "a" "\"[^\"]*\"")
 (str "{\"a\": 1, \"b\": {}}")
 (def x 1)
 (str "Hi {x}, {(inc x)}")
-(regex/find $"{x}\\d" "1")"#;
+(regex/find "1" $"{x}\\d")"#;
     let pattern = r#"this pattern escapes backslashes; a regex literal, #"…", needs no escapes"#;
 
     assert_eq!(

@@ -1,5 +1,5 @@
 ;; ox string splits, joins and trims
-(module (import (ox string))) [(string/split "a,b,,c" ",") (string/join ", " ["a" 1 :b]) (string/join ["x" "y"])] ;=> [["a" "b" "" "c"] "a, 1, :b" "xy"]
+(module (import (ox string))) [(string/split "a,b,,c" ",") (string/join ", " ["a" 1 nil :b]) (string/join ["x" nil "y"])] ;=> [["a" "b" "" "c"] "a, 1, :b" "xy"]
 (module (import (ox string))) [(string/trim "  hi  ") (string/trim-start "  hi ") (string/trim-end " hi  ")] ;=> ["hi" "hi " " hi"]
 (module (import (ox string))) [(string/upper "café") (string/lower "ÉCOLE") (string/capitalize "monday") (string/capitalize "")] ;=> ["CAFÉ" "école" "Monday" ""]
 (module (import (ox string))) (string/lines "one\ntwo\r\nthree") ;=> ["one" "two" "three"]
@@ -13,7 +13,7 @@
 (module (import (ox string))) [(string/last-index-of "banana" "an") (string/last-index-of "héhé" "h") (string/last-index-of "ab" "x")] ;=> [3 2 nil]
 (module (import (ox string))) (string/replace "a-b-c" "-" "+") ;=> "a+b+c"
 (module (import (ox string))) [(string/to-number "42") (string/to-number "+2") (string/to-number "-0") (string/to-number "-7") (string/to-number "1.5") (string/to-number "x") (string/to-number "") (string/to-number "inf")] ;=> [42 2 0 -7 1.5 nil nil nil]
-(module (import (ox string))) [(string/length "héllo") (string/slice "weather" 1 4) (string/slice "weather" 4) (string/repeat "ab" 3)] ;=> [5 "eat" "her" "ababab"]
+(module (import (ox string))) [(count "héllo") (string/slice "weather" 1 4) (string/slice "weather" 4) (string/repeat "ab" 3)] ;=> [5 "eat" "her" "ababab"]
 (module (import (ox string))) (string/slice "abc" 2 9) ;! string/slice goes past the end of a 3-character string
 
 ;; padding lines things up in columns

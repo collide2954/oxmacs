@@ -114,7 +114,7 @@ const LIFE_END: &str = "(def (draw)
 (reset! world {cells: (set (map (fn [[x y]] [(+ x 36) (+ y 26)]) acorn)) generation: 0})
 (open-view \"*Conway*\" draw :keys {\"q\" 'quit-window})
 (every 100 (fn []
-(if (buffer-exists? \"*Conway*\")
+(if (buffer-live? \"*Conway*\")
 (do (swap! world (fn [now] {cells: (step now.cells) generation: (inc now.generation)}))
 nil)
 :stop))))";
@@ -1390,26 +1390,25 @@ fn news_home() -> PathBuf {
     home
 }
 
-const NEWS_HEADER: &str = "(module (import (ox http) (ox xml) (ox string) (ox regex) (ox ui)))";
+const NEWS_HEADER: &str = "(module (import (ox http) (ox xml) (ox string) (ox ui)))";
 
 const NEWS_FEED: &str = "(def feed \"https://blog.rust-lang.org/feed.xml\")";
 
 const NEWS_STATE: &str = "(defonce news (atom {entries: [] at: 0 open: false}))";
 
 const NEWS_PLAIN: &str = "(def (plain html)
-(string/trim (regex/replace \"[[:space:]]+\" (regex/replace \"<[^>]*>\" html \"\") \" \")))";
+(string/trim (string/replace (string/replace html #\"<[^>]*>\" \"\") #\"[[:space:]]+\" \" \")))";
 
 const NEWS_ENTRY: &str = "(def (entry el)
 {title: (xml/text (xml/find el \"title\"))
 date: (string/slice (xml/text (xml/find el \"updated\")) 0 10)
 summary: (plain (or (xml/text (xml/find el \"content\")) \"\"))})";
 
-const NEWS_TRY: &str =
-    "(count (xml/find-all (xml/parse (get (await (http/get feed)) :body)) \"entry\"))";
+const NEWS_TRY: &str = "(count (xml/find-all (xml/read (get (http/get feed) :body)) \"entry\"))";
 
 const NEWS_FETCH: &str = "(def (fetch)
-(let [reply (await (http/get feed))
-root (xml/parse reply.body)]
+(let [reply (http/get feed)
+root (xml/read reply.body)]
 (swap! news assoc :entries (map entry (xml/find-al root \"entry\")) :at 0 :open false)
 (count (get @news :entries))))";
 

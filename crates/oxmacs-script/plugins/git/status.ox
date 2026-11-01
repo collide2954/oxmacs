@@ -20,7 +20,7 @@
   (nth nicks (mod (hash name) (count nicks))))
 
 (def (shorten text width)
-  (if (<= (string/length text) width)
+  (if (<= (count text) width)
     text
     (str (string/slice text 0 (max 0 (- width 1))) "…")))
 
@@ -36,7 +36,7 @@
         $"{n} {(nth unit 1)}{(if (= n 1) "" "s")} ago"))))
 
 (def (segment-width segment)
-  (string/length (str (if (string? segment) segment (nth segment 0)))))
+  (count (str (if (string? segment) segment (nth segment 0)))))
 
 (def (width segments)
   (reduce + 0 (map segment-width segments)))
@@ -134,7 +134,7 @@
       (let [out (heading (blank out) section (count files) folds)]
         (if (get folds.closed section)
           out
-          (let [column (+ 5 (min path-column (apply max 0 (map (fn [change] (string/length change.path)) files))) 2)]
+          (let [column (+ 5 (min path-column (apply max 0 (map (fn [change] (count change.path)) files))) 2)]
             (reduce (fn [out change] (file out snapshot folds diffs section change column))
                     out files)))))))
 
@@ -158,12 +158,12 @@
       (let [out (heading (blank out) :recent nil folds)]
         (if (get folds.closed :recent)
           out
-          (let [summary-width (min summary-column (apply max 0 (map (fn [c] (string/length c.summary)) recent)))
-                author-width (apply max 0 (map (fn [c] (string/length c.author)) recent))]
+          (let [summary-width (min summary-column (apply max 0 (map (fn [c] (count c.summary)) recent)))
+                author-width (apply max 0 (map (fn [c] (count c.author)) recent))]
             (reduce (fn [out i]
                       (let [commit (nth recent i)
                             segments ["  " [commit.id :constant] "  " (shorten commit.summary summary-width)]
-                            column (+ 2 (string/length commit.id) 2 summary-width 2)
+                            column (+ 2 (count commit.id) 2 summary-width 2)
                             segments (conj (pad segments column) [commit.author (author-face commit.author)])
                             segments (pad segments (+ column author-width 2))]
                         (add out {kind: :commit index: i}

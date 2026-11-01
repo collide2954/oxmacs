@@ -28,7 +28,7 @@
   (if entry.dir "-" (file/size-text entry.size)))
 
 (def (size-width listing)
-  (apply max 1 (map (fn [entry] (string/length (size-text entry))) listing.entries)))
+  (apply max 1 (map (fn [entry] (count (size-text entry))) listing.entries)))
 
 (def (name-column listing)
   (if listing.details (+ 2 (size-width listing) 2 time-width 2) 2))

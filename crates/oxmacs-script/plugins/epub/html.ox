@@ -1,5 +1,5 @@
 (module
-  (import (ox regex) (ox string) (ox xml)
+  (import (ox string) (ox xml)
           (epub package))
   (export blocks))
 
@@ -21,7 +21,7 @@
   (= (dissoc a :text) (dissoc b :text)))
 
 (def (add-text state text style)
-  (let [text (regex/replace #"\s+" text " ")
+  (let [text (string/replace text #"\s+" " ")
         previous (last state.runs)
         text (if (and previous (string/ends-with? previous.text " ") (string/starts-with? text " "))
                (string/slice text 1 (count text))
@@ -60,7 +60,7 @@
         (update state :blocks conj (assoc shape :runs runs))))))
 
 (def (external? href)
-  (regex/matches? #"^[a-zA-Z][a-zA-Z0-9+.-]*:" href))
+  (string/includes? href #"^[a-zA-Z][a-zA-Z0-9+.-]*:"))
 
 (def (linked entry href)
   (if (external? href)
@@ -141,7 +141,7 @@
     {blocks: state.blocks ids: state.ids}))
 
 (def (read text)
-  (blocks (xml/parse text :html true) "OEBPS/text/one.xhtml"))
+  (blocks (xml/read text :html true) "OEBPS/text/one.xhtml"))
 
 (test "paragraphs keep their emphasis and links with whitespace run together"
   (expect (= (get (read "<html><body><p>  It   <em>was</em> a\n <a href=\"two.xhtml#s\">dark</a> <b><i>night</i></b>. </p></body></html>") :blocks)

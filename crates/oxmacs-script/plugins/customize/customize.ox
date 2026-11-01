@@ -31,7 +31,7 @@
 
 (on-settings-change :customize
                     (fn []
-                      (when (buffer-exists? buffer)
+                      (when (buffer-live? buffer)
                         (draw false))))
 
 (def (row-here)
@@ -78,7 +78,7 @@
          (message (str key " needs " (if whole "a whole number" "a number"))))])))
 
 (defcommand customize "Change settings in a form"
-  (let [fresh (not (buffer-exists? buffer))]
+  (let [fresh (not (buffer-live? buffer))]
     (draw true)
     (when fresh
       (go (goto-item {})))))

@@ -165,7 +165,7 @@ fn html_entities(text: &str) -> String {
 fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Result<Value, Error> {
     if depth > DEEPEST {
         return Err(Error::new(format!(
-            "xml/parse can't read elements nested more than {DEEPEST} deep"
+            "xml/read can't read elements nested more than {DEEPEST} deep"
         )));
     }
     let tag = heap.string(node.tag_name().name())?;
@@ -203,7 +203,7 @@ fn element(heap: &mut Heap, node: Node<'_, '_>, depth: usize, html: bool) -> Res
 fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
     let Some(text) = heap.text(arguments[0]).map(str::to_owned) else {
         return Err(Error::new(format!(
-            "xml/parse expects a string, got {}",
+            "xml/read expects a string, got {}",
             print::brief(heap, arguments[0])
         ))
         .of(ErrorKind::Type));
@@ -215,7 +215,7 @@ fn parse(heap: &mut Heap, arguments: &[Value]) -> Result<Value, Error> {
         ..ParsingOptions::default()
     };
     let document = Document::parse_with_options(&text, options)
-        .map_err(|error| Error::new(format!("xml/parse can't read this: {error}")))?;
+        .map_err(|error| Error::new(format!("xml/read can't read this: {error}")))?;
     element(heap, document.root_element(), 0, html)
 }
 
@@ -417,7 +417,7 @@ fn write(heap: &Heap, value: Value, out: &mut String) -> Result<(), Error> {
 
 pub fn install(isolate: &mut Isolate) {
     isolate
-        .native(MODULE, "parse")
+        .native(MODULE, "read")
         .arity(1, Some(1))
         .keywords(&["html"])
         .function(parse);

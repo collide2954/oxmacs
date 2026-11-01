@@ -1,5 +1,5 @@
 (module
-  (import (ox regex) (ox string))
+  (import (ox string))
   (export linger shown? push live rows caption wait))
 
 (def linger 2000)
@@ -9,10 +9,10 @@
 (def faintness [1 0.6 0.35])
 
 (def (chord? key)
-  (regex/matches? "^(?:[CMSs]-)*[CMs]-." key))
+  (string/includes? key (regex "^(?:[CMSs]-)*[CMs]-.")))
 
 (def (named? key)
-  (regex/matches? "^(?:S-)?(?:RET|TAB|ESC|DEL|<(?:up|down|left|right|home|end|prior|next|f[0-9]+)>)$" key))
+  (string/includes? key (regex "^(?:S-)?(?:RET|TAB|ESC|DEL|<(?:up|down|left|right|home|end|prior|next|f[0-9]+)>)$")))
 
 (def (letter? key)
   (or (= key "SPC") (= (count key) 1)))

@@ -91,12 +91,12 @@
     (goto-item {})))
 
 (def (redraw!)
-  (when (buffer-exists? agenda-buffer)
+  (when (buffer-live? agenda-buffer)
     (let [made (agenda (or (get @view :from) (today)) (agenda-days))]
       (set-lines agenda-buffer made.lines)
       (set-header agenda-buffer made.header)))
-  (when (buffer-exists? month-buffer) (draw-month!))
-  (when (buffer-exists? week-buffer) (draw-week!)))
+  (when (buffer-live? month-buffer) (draw-month!))
+  (when (buffer-live? week-buffer) (draw-week!)))
 
 (def (occurrence-here)
   (cond [(= (buffer-name) agenda-buffer) (get (line-item) :occurrence)]
@@ -180,13 +180,13 @@
   (reminders/default-minutes))
 
 (def (parse-date text)
-  (let [match (regex/find #"^(\d{4})-(\d{1,2})-(\d{1,2})$" (string/trim text))]
+  (let [match (regex/find (string/trim text) #"^(\d{4})-(\d{1,2})-(\d{1,2})$")]
     (when match
       (let [[year month day] (map string/to-number match.groups)]
         (time/day-number {year: year month: month day: day})))))
 
 (def (parse-clock text)
-  (let [match (regex/find #"^(\d{1,2})(?::(\d{2}))?$" (string/trim text))]
+  (let [match (regex/find (string/trim text) #"^(\d{1,2})(?::(\d{2}))?$")]
     (when match
       {hour: (string/to-number (first match.groups)) minute: (or (string/to-number (or (second match.groups) "0")) 0)})))
 

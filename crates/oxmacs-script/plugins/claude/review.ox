@@ -35,7 +35,7 @@
                          (when (> seen 1)
                            (raise (error $"Edit {n}'s old_text appears {seen} times; give more of the text around it"))))
                        (let [start (string/index-of text old)]
-                         {index: i start: start end: (+ start (string/length old)) old: old new: new})))
+                         {index: i start: start end: (+ start (count old)) old: old new: new})))
                    (range (count edits)))
         sorted (sort-by :start found)]
     (each [k (range 1 (count sorted))]
@@ -47,7 +47,7 @@
   (dec (count (string/split (string/slice text 0 offset) "\n"))))
 
 (def (start-of rows line)
-  (reduce + 0 (map (fn [row] (inc (string/length row))) (take line rows))))
+  (reduce + 0 (map (fn [row] (inc (count row))) (take line rows))))
 
 (def (between rows from to)
   (take (max 0 (- to from)) (drop from rows)))
@@ -68,7 +68,7 @@
   (let [first (line-at text change.start)
         last (line-at text change.end)
         region-start (start-of rows first)
-        region-end (+ (start-of rows last) (string/length (nth rows last)))
+        region-end (+ (start-of rows last) (count (nth rows last)))
         old (between rows first (inc last))
         new (string/split (str (string/slice text region-start change.start)
                                change.new
@@ -109,7 +109,7 @@
 (def (show!)
   (let [state @current
         lines (shown-lines state)]
-    (if (buffer-exists? review-buffer)
+    (if (buffer-live? review-buffer)
       (set-lines review-buffer lines)
       (in-main (fn []
                  (let [made (open-buffer review-buffer lines :keys review-keys :label "Claude review" :line 2)]
@@ -159,7 +159,7 @@
         (when (and from-chat (side-window)) (select-side-window))))))
 
 (def (buffer-for target)
-  (if (buffer-exists? target)
+  (if (buffer-live? target)
     target
     (in-main (fn []
                (unless (open-file target)
@@ -169,11 +169,11 @@
 (def (apply! buffer change)
   (with-buffer buffer
     (let [text (buffer-text)
-          here (if (= (string/slice text change.start (min (string/length text) change.end)) change.old)
+          here (if (= (string/slice text change.start (min (count text) change.end)) change.old)
                  change.start
                  (when (= (occurrences text change.old) 1) (string/index-of text change.old)))]
       (when here
-        (delete here (+ here (string/length change.old)))
+        (delete here (+ here (count change.old)))
         (set-point here)
         (insert change.new)
         true))))
@@ -188,8 +188,8 @@
 (def (edits! target edits)
   "Shows Claude's edits to target, a buffer or a file, for review and makes the accepted ones."
   (let [buffer (buffer-for target)
-        changes (located (buffer-contents buffer) edits)
-        decisions (reviewed! buffer (hunks-of (buffer-contents buffer) changes))
+        changes (located (with-buffer buffer (buffer-text)) edits)
+        decisions (reviewed! buffer (hunks-of (with-buffer buffer (buffer-text)) changes))
         numbered (fn [change] (str (inc change.index)))
         accepted (filter (fn [i] (= (nth decisions i) :accepted)) (range (count changes)))
         made (filter (fn [i] (apply! buffer (nth changes i))) (reverse accepted))]
@@ -203,7 +203,7 @@
     (edits! path [{old_text: (with-buffer (buffer-for path) (buffer-text)) new_text: content}])
     (let [old (if (file/exists? path) (file/read path) nil)
           hunks (if old
-                  (hunks-of old [{index: 0 start: 0 end: (string/length old) old: old new: content}])
+                  (hunks-of old [{index: 0 start: 0 end: (count old) old: old new: content}])
                   (diff/whole-file content))
           decisions (reviewed! path hunks)]
       (if (every? (fn [decision] (= decision :accepted)) decisions)

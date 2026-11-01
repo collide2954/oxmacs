@@ -12,7 +12,7 @@
 </C:calendar-query>")
 
 (def (xml-text text)
-  (let [inner (if-let [found (regex/find #"(?s)<!\[CDATA\[(.*)\]\]>" text)] (first found.groups) text)]
+  (let [inner (if-let [found (regex/find text #"(?s)<!\[CDATA\[(.*)\]\]>")] (first found.groups) text)]
     (-> inner
         (string/replace "&lt;" "<")
         (string/replace "&gt;" ">")
@@ -24,7 +24,7 @@
         (string/replace "&amp;" "&"))))
 
 (def (tag-text block tag)
-  (when-let [found (regex/find (str "(?s)<(?:[A-Za-z0-9_-]+:)?" tag "(?:\\s[^>]*)?>(.*?)</(?:[A-Za-z0-9_-]+:)?" tag ">") block)]
+  (when-let [found (regex/find block (str "(?s)<(?:[A-Za-z0-9_-]+:)?" tag "(?:\\s[^>]*)?>(.*?)</(?:[A-Za-z0-9_-]+:)?" tag ">"))]
     (xml-text (string/trim (first found.groups)))))
 
 (def (responses body)
@@ -33,10 +33,10 @@
           (let [block match.text]
             (when-let [href (tag-text block "href")]
               {href: href etag: (tag-text block "getetag") data: (tag-text block "calendar-data")})))
-        (regex/find-all #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>" body)))
+        (regex/find-all body #"(?s)<(?:[A-Za-z0-9_-]+:)?response\b.*?</(?:[A-Za-z0-9_-]+:)?response>")))
 
 (def (origin url)
-  (or (get (regex/find "^[a-zA-Z]+://[^/]+" url) :text) ""))
+  (or (get (regex/find url "^[a-zA-Z]+://[^/]+") :text) ""))
 
 (def (absolute url href)
   (cond [(string/starts-with? href "http") href]

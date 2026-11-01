@@ -679,7 +679,7 @@ mod tests {
         (defcommand note-shout "Shout" (swap! ran inc))
         (defmode notes "Notes" :extensions ["note"] :comment "#" :keys {"C-c C-c" 'note-shout}
           :highlight (fn [line text]
-                       (if (string/starts-with? text "#") [[0 (string/length text) :comment]] [])))"##;
+                       (if (string/starts-with? text "#") [[0 (count text) :comment]] [])))"##;
 
     #[test]
     fn plugins_define_modes_with_keys_and_highlighting() {
@@ -711,7 +711,7 @@ mod tests {
         (defmode blocks "Blocks" :extensions ["blk"]
           :highlight (fn [line text open]
                        (let [inside (or open (string/starts-with? text "<<"))]
-                         {spans: (if inside [[0 (string/length text) :string]] [])
+                         {spans: (if inside [[0 (count text) :string]] [])
                           state: (and inside (not (string/ends-with? text ">>")))})))"#;
 
     #[test]
@@ -841,7 +841,7 @@ mod tests {
                 r##"(module (import (ox string)))
 (defcommand note-shout "Shout" (message "shout"))
 (defmode notes "Notes"
-  :highlight (fn [line text] (if (string/starts-with? text "#") [[0 (string/length text) :comment]] [])))"##,
+  :highlight (fn [line text] (if (string/starts-with? text "#") [[0 (count text) :comment]] [])))"##,
             ),
         ],
     };

@@ -18,7 +18,7 @@
       (let [script (script-for running)
             environment (data/environment-buffer running)
             corner (or (plots/unpinned-of running)
-                       (when (buffer-exists? "*R help*") "*R help*")
+                       (when (buffer-live? "*R help*") "*R help*")
                        (plots/plots-buffer running))
             left (if script [:rows [0.6 script] [0.4 running]] running)]
         (unless @saved (reset! saved (window-layout)))

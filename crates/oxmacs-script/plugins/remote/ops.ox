@@ -21,7 +21,7 @@
               (if (= at 0) "/" (string/slice trimmed 0 at)))])))
 
 (def (entry-of line)
-  (when-let [match (regex/find listing-pattern line)]
+  (when-let [match (regex/find line listing-pattern)]
     (let [[kind mode size date rest] match.groups
           link (= kind "l")
           [shown target] (if link (string/split rest " -> " 2) [rest nil])
@@ -94,7 +94,7 @@
     (cond [(= protocol :ftp) "/"]
       [(= protocol :sftp)
        (let [found (sftp host ["pwd"])]
-         (or (some (fn [line] (when-let [match (regex/find "^Remote working directory: (.*)$" line)] (first match.groups)))
+         (or (some (fn [line] (when-let [match (regex/find line "^Remote working directory: (.*)$")] (first match.groups)))
                    (string/lines found.stdout))
              "/"))]
       [else (or (first (get (checked (shell/run! host "pwd") "pwd") :lines)) "/")])))
@@ -195,7 +195,7 @@
   "The lines below dir on host that hold pattern, each a map of :path, :line and :text."
   (let [found (run host dir (str "grep -rnI -- " (shell/quoted pattern) " . | head -n 1000"))]
     (keep (fn [line]
-            (when-let [match (regex/find #"^\./(.*?):(\d+):(.*)$" line)]
+            (when-let [match (regex/find line #"^\./(.*?):(\d+):(.*)$")]
               (let [[file number text] match.groups]
                 {path: (join-path dir file) line: (string/to-number number) text: text})))
           found.lines)))

@@ -71,8 +71,8 @@ Ox itself brings these modules, each a plug into the Rust bridge. Import them as
 ```table
 Module       What it gives
 prelude      Numbers, collections, text, records, errors, pattern matching, tasks, channels and promises, there without an import
-ox/string    Text: searching, splitting, joining, trimming, padding, changing case and URL encoding
-ox/regex     Regular expressions: matching, finding, replacing and splitting
+ox/string    Text: searching, splitting and replacing, by text or by regex, joining, trimming, padding, changing case and URL encoding
+ox/regex     Regular expressions: finding their matches, with groups and positions
 ox/json      Reading and writing JSON
 ox/xml       Reading XML into maps, finding elements along paths, and writing XML
 ox/math      Roots, powers, logarithms, trigonometry, angle conversion and clamping

@@ -127,11 +127,12 @@ An atom holds a value that can be replaced. `@` reads it, `reset!` replaces it a
 (count "héllo")
 ```
 
-`#"…"` writes a regular expression, and the `ox regex` module matches, finds and replaces with it:
+`#"…"` writes a regular expression. The `ox regex` module finds its matches in a text, and `string/replace`, `string/split` and `string/includes?` take one in place of the text to look for:
 
 ```
-(module (import (ox regex)))
-(regex/replace #"(\d+)-(\d+)" "10-20" "$2-$1")
+(module (import (ox regex) (ox string)))
+(regex/find "pages 10-20" #"(\d+)-(\d+)")
+(string/replace "10-20" #"(\d+)-(\d+)" "$2-$1")
 ```
 
 """})

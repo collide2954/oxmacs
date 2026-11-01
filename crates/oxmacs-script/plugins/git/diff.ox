@@ -54,7 +54,7 @@
   $"@@ -{hunk.old-start},{hunk.old-count} +{hunk.new-start},{hunk.new-count} @@")
 
 (def (shown text)
-  (if (string/ends-with? text "\r") (string/slice text 0 (- (string/length text) 1)) text))
+  (if (string/ends-with? text "\r") (string/slice text 0 (- (count text) 1)) text))
 
 (def (patch path hunk selected reverse)
   (let [lines hunk.lines

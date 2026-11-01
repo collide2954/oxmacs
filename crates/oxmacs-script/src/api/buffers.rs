@@ -840,16 +840,6 @@ pub fn install(isolate: &mut Isolate) {
 
 fn install_queries(isolate: &mut Isolate) {
     isolate
-        .native("ox", "buffer-exists?")
-        .arity(1, Some(1))
-        .host::<Editor>(|heap, editor, arguments| {
-            Ok(Value::Bool(crate::api::handles::live(
-                heap,
-                editor,
-                arguments[0],
-            )))
-        });
-    isolate
         .native("ox", "buffer-width")
         .arity(1, Some(1))
         .host::<Editor>(|heap, editor, arguments| {
@@ -1398,7 +1388,7 @@ mod tests {
         assert_eq!(
             ox.eval(
                 &mut editor,
-                r#"[(buffer-exists? "*scratch*") (buffer-exists? "*nowhere*")]"#
+                r#"[(buffer-live? "*scratch*") (buffer-live? "*nowhere*")]"#
             )
             .unwrap(),
             "[true false]"

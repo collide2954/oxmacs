@@ -173,7 +173,7 @@
         directory (default-directory)]
     (when (nil? (get @state :hidden))
       (swap! state assoc :hidden (setting :hidden)))
-    (unless (buffer-exists? tree-buffer)
+    (unless (buffer-live? tree-buffer)
       (ensure-buffer (or (get @state :root) directory)))
     (show-side-window tree-buffer :edge (setting :edge) :width (setting :width) :select true)
     (follow-to place directory)
