@@ -202,6 +202,44 @@ struct Dav {
     refuse: bool,
 }
 
+fn multistatus(state: &Dav) -> String {
+    let mut responses = String::new();
+    let listed = if state.empty {
+        &[][..]
+    } else {
+        &state.resources[..]
+    };
+    for (href, etag, data) in listed {
+        let etag = etag.replace('"', "&quot;");
+        if state.bare {
+            let _ = write!(
+                responses,
+                "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{etag}</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+            );
+            continue;
+        }
+        let escaped: String = data
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .chars()
+            .map(|c| {
+                if c == '\r' || !c.is_ascii() {
+                    format!("&#{};", u32::from(c))
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect();
+        let _ = write!(
+            responses,
+            "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{etag}</d:getetag><cal:calendar-data>{escaped}</cal:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><d:displayname/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>"
+        );
+    }
+    format!(
+        "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:cal=\"urn:ietf:params:xml:ns:caldav\">{responses}</d:multistatus>"
+    )
+}
+
 fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -246,48 +284,7 @@ fn dav_server(dav: Arc<Mutex<Dav>>) -> u16 {
                 "PUT" | "DELETE" if state.refuse => {
                     ("503 Service Unavailable", String::new(), String::new())
                 }
-                "REPORT" => {
-                    let mut responses = String::new();
-                    let listed = if state.empty {
-                        &[][..]
-                    } else {
-                        &state.resources[..]
-                    };
-                    for (href, etag, data) in listed {
-                        if state.bare {
-                            let _ = write!(
-                                responses,
-                                "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{}</d:getetag></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>",
-                                etag.replace('"', "&quot;")
-                            );
-                            continue;
-                        }
-                        let escaped: String = data
-                            .replace('&', "&amp;")
-                            .replace('<', "&lt;")
-                            .chars()
-                            .map(|c| {
-                                if c == '\r' || !c.is_ascii() {
-                                    format!("&#{};", u32::from(c))
-                                } else {
-                                    c.to_string()
-                                }
-                            })
-                            .collect();
-                        let _ = write!(
-                            responses,
-                            "<d:response><d:href>{href}</d:href><d:propstat><d:prop><d:getetag>{}</d:getetag><cal:calendar-data>{escaped}</cal:calendar-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><d:displayname/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response>",
-                            etag.replace('"', "&quot;")
-                        );
-                    }
-                    (
-                        "207 Multi-Status",
-                        String::new(),
-                        format!(
-                            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:cal=\"urn:ietf:params:xml:ns:caldav\">{responses}</d:multistatus>"
-                        ),
-                    )
-                }
+                "REPORT" => ("207 Multi-Status", String::new(), multistatus(&state)),
                 "PUT" => {
                     state.version += 1;
                     let etag = format!("\"v{}\"", state.version);
@@ -454,7 +451,7 @@ fn caldav_changes_the_server_refuses_are_sent_again_on_the_next_sync() {
         "{:?}",
         editor.message()
     );
-    assert!(dav.lock().unwrap().resources.is_empty());
+    assert_eq!(dav.lock().unwrap().resources, Vec::new());
     dav.lock().unwrap().refuse = false;
     run_command(&mut editor, &mut ox, "calendar-sync");
     assert_eq!(editor.message(), Some("Calendars synced"));
@@ -481,5 +478,5 @@ fn caldav_changes_the_server_refuses_are_sent_again_on_the_next_sync() {
     dav.lock().unwrap().refuse = false;
     run_command(&mut editor, &mut ox, "calendar-sync");
     assert_eq!(editor.message(), Some("Calendars synced"));
-    assert!(dav.lock().unwrap().resources.is_empty());
+    assert_eq!(dav.lock().unwrap().resources, Vec::new());
 }
