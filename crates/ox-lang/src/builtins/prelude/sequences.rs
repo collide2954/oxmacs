@@ -134,6 +134,36 @@ fn interleave(heap: &mut Heap, colls: &[Value]) -> Result<Value, Error> {
     make_vector(heap, &items)
 }
 
+fn index_of(heap: &mut Heap, coll: Value, wanted: Value) -> Result<Value, Error> {
+    let items = sequence(heap, "index-of", coll)?;
+    Ok(items
+        .iter()
+        .position(|item| equal(heap, *item, wanted))
+        .map_or(Value::Nil, int))
+}
+
+fn indexed(heap: &mut Heap, coll: Value) -> Result<Value, Error> {
+    let items = sequence(heap, "indexed", coll)?;
+    let pairs = items
+        .into_iter()
+        .enumerate()
+        .map(|(at, item)| make_vector(heap, &[int(at), item]))
+        .collect::<Result<Vec<_>, Error>>()?;
+    make_vector(heap, &pairs)
+}
+
+fn interpose(heap: &mut Heap, between: Value, coll: Value) -> Result<Value, Error> {
+    let items = sequence(heap, "interpose", coll)?;
+    let mut out = Vec::with_capacity(items.len() * 2);
+    for (at, item) in items.into_iter().enumerate() {
+        if at > 0 {
+            out.push(between);
+        }
+        out.push(item);
+    }
+    make_vector(heap, &out)
+}
+
 fn repeat(heap: &mut Heap, count: Value, item: Value) -> Result<Value, Error> {
     let range = collections::range(heap, &[count])?;
     let times = heap.vector_of(range).map_or(0, |range| range.count);
@@ -182,6 +212,7 @@ enum Mode {
     Some,
     Every,
     Find,
+    FindIndex,
     TakeWhile,
     DropWhile,
     GroupBy,
@@ -234,6 +265,7 @@ impl Each {
             Mode::Some if value.truthy() => return Ok(Some(value)),
             Mode::Every if !value.truthy() => return Ok(Some(Value::Bool(false))),
             Mode::Find if value.truthy() => return Ok(Some(item)),
+            Mode::FindIndex if value.truthy() => return Ok(Some(int(self.at - 1))),
             Mode::TakeWhile if !value.truthy() => return make_vector(heap, &self.out).map(Some),
             Mode::TakeWhile => self.out.push(item),
             Mode::DropWhile if !value.truthy() => {
@@ -253,6 +285,7 @@ impl Each {
             | Mode::Some
             | Mode::Every
             | Mode::Find
+            | Mode::FindIndex
             | Mode::DropWhile => {}
         }
         Ok(None)
@@ -270,7 +303,7 @@ impl Each {
                 }
                 make_vector(heap, &items)
             }
-            Mode::Some | Mode::Find => Ok(Value::Nil),
+            Mode::Some | Mode::Find | Mode::FindIndex => Ok(Value::Nil),
             Mode::Every => Ok(Value::Bool(true)),
             Mode::DropWhile => make_vector(heap, &[]),
             Mode::GroupBy => heap.map(self.groups).map_err(Error::from),
@@ -512,11 +545,26 @@ pub(super) fn install(isolate: &mut Isolate) {
         .native("ox", "repeat")
         .arity(2, Some(2))
         .function(|heap, arguments| repeat(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "index-of")
+        .arity(2, Some(2))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| index_of(heap, arguments[0], arguments[1]));
+    isolate
+        .native("ox", "indexed")
+        .arity(1, Some(1))
+        .drains(Drains::At(0))
+        .function(|heap, arguments| indexed(heap, arguments[0]));
+    isolate
+        .native("ox", "interpose")
+        .arity(2, Some(2))
+        .drains(Drains::At(1))
+        .function(|heap, arguments| interpose(heap, arguments[0], arguments[1]));
     install_callers(isolate);
 }
 
 fn install_callers(isolate: &mut Isolate) {
-    let each: [(&str, Mode, Option<usize>, Drains); 11] = [
+    let each: [(&str, Mode, Option<usize>, Drains); 12] = [
         ("map", Mode::Map, None, Drains::From(1)),
         ("mapcat", Mode::MapCat, None, Drains::From(1)),
         ("filter", Mode::Filter, Some(2), Drains::At(1)),
@@ -525,6 +573,7 @@ fn install_callers(isolate: &mut Isolate) {
         ("some", Mode::Some, Some(2), Drains::At(1)),
         ("every?", Mode::Every, Some(2), Drains::At(1)),
         ("find", Mode::Find, Some(2), Drains::At(1)),
+        ("find-index", Mode::FindIndex, Some(2), Drains::At(1)),
         ("drop-while", Mode::DropWhile, Some(2), Drains::At(1)),
         ("group-by", Mode::GroupBy, Some(2), Drains::At(1)),
         ("sort-by", Mode::SortBy, Some(2), Drains::At(1)),

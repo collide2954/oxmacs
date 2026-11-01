@@ -9,6 +9,14 @@
 [(partition 2 [1 2 3 4 5]) (chunk 2 [1 2 3 4 5])] ;=> [[[1 2] [3 4]] [[1 2] [3 4] [5]]]
 (flatten [1 [2 [3 (list 4)]] [] 5]) ;=> [1 2 3 4 5]
 [(find even? [1 3 4 6]) (find even? [1 3])] ;=> [4 nil]
+
+;; where items are, and items with their places
+[(index-of [:a :b :c :b] :b) (index-of [:a] :z) (index-of (list 1 2) 2) (index-of "abc" \c)] ;=> [1 nil 1 2]
+[(find-index even? [1 3 4 6]) (find-index even? [1 3]) (find-index (fn [x] (await (spawn (> x 1)))) [1 2])] ;=> [2 nil 1]
+[(indexed [:a :b]) (indexed []) (indexed "hi")] ;=> [[[0 :a] [1 :b]] [] [[0 \h] [1 \i]]]
+(each [[i x] (indexed [:a :b])] (print i x)) ;=> nil
+[(interpose ", " ["a" "b" "c"]) (interpose 0 [1]) (interpose 0 [])] ;=> [["a" ", " "b" ", " "c"] [1] []]
+(index-of 5 1) ;! index-of expects a collection, got 5
 (frequencies [:a :b :a]) ;=> {a: 2 b: 1}
 (group-by even? [1 2 3 4]) ;=> {false [1 3] true [2 4]}
 [(interleave [1 2 3] [:a :b]) (zip [1 2] [:a :b :c])] ;=> [[1 :a 2 :b] [[1 :a] [2 :b]]]
