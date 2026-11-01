@@ -29,6 +29,7 @@ serde_json.workspace = true
 tempfile = { workspace = true, optional = true }
 thiserror.workspace = true
 zip = { workspace = true, optional = true }
+workspace-hack.workspace = true
 
 [features]
 testing = ["dep:tempfile", "dep:zip", "oxmacs-core/testing"]

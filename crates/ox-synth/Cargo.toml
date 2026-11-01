@@ -11,6 +11,7 @@ license.workspace = true
 ox-lang.workspace = true
 oxmacs-files.workspace = true
 rodio = { version = "0.23.0", default-features = false, features = ["flac", "mp3", "vorbis", "wav"] }
+workspace-hack.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

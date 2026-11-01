@@ -12,6 +12,7 @@ dirs.workspace = true
 ox-lang.workspace = true
 ox-library.workspace = true
 oxmacs-files.workspace = true
+workspace-hack.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

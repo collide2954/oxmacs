@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 ox-lang.workspace = true
 oxmacs-api.workspace = true
+workspace-hack.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

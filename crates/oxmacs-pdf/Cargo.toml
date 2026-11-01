@@ -12,3 +12,4 @@ workspace = true
 
 [dependencies]
 pdfium-render.workspace = true
+workspace-hack.workspace = true

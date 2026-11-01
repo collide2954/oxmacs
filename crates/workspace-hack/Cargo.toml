@@ -1,0 +1,110 @@
+[package]
+name = "workspace-hack"
+version.workspace = true
+description = "Turns on the features every crate here asks of a shared dependency at once, so building any set of crates reuses one build of each dependency; cargo hakari writes it"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+### BEGIN HAKARI SECTION
+[dependencies]
+bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "derive", "extern_crate_alloc", "min_const_generics"] }
+chacha20 = { version = "0.10", features = ["rng", "xchacha"] }
+chrono = { version = "0.4", features = ["serde"] }
+cipher = { version = "0.5", default-features = false, features = ["alloc", "block-padding", "stream-wrapper"] }
+crc32fast = { version = "1" }
+crossbeam-utils = { version = "0.8" }
+digest = { version = "0.11", features = ["alloc", "mac", "oid"] }
+flate2 = { version = "1", features = ["zlib-rs"] }
+futures = { version = "0.3", default-features = false, features = ["async-await", "thread-pool"] }
+getrandom = { version = "0.4", default-features = false, features = ["std", "sys_rng"] }
+half = { version = "2", features = ["num-traits"] }
+iced_core = { version = "0.14", default-features = false, features = ["advanced", "crisp"] }
+iced_futures = { version = "0.14", default-features = false, features = ["thread-pool"] }
+iced_graphics = { version = "0.14", default-features = false, features = ["fira-sans", "geometry", "image", "web-colors"] }
+iced_renderer = { version = "0.14", default-features = false, features = ["fira-sans", "geometry", "image", "tiny-skia", "wayland", "web-colors", "wgpu", "wgpu-bare", "x11"] }
+image = { version = "0.25", default-features = false, features = ["gif", "ico", "jpeg", "qoi", "rayon", "tiff", "webp"] }
+indexmap = { version = "2", features = ["serde"] }
+inout = { version = "0.2", default-features = false, features = ["block-padding"] }
+itertools = { version = "0.14" }
+keepass = { version = "0.17", features = ["save_kdbx4"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+memchr = { version = "2" }
+num-traits = { version = "0.2", features = ["i128", "libm"] }
+once_cell = { version = "1" }
+read-fonts = { version = "0.41", default-features = false, features = ["experimental_font_api", "std"] }
+rodio = { version = "0.23", default-features = false, features = ["flac", "mp3", "playback", "vorbis", "wav"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+simd-adler32 = { version = "0.3" }
+smallvec = { version = "1", default-features = false, features = ["const_new", "union"] }
+strict-num = { version = "0.1" }
+tracing = { version = "0.1" }
+tracing-core = { version = "0.1", default-features = false, features = ["std"] }
+unicode-bidi = { version = "0.3" }
+zeroize = { version = "1", features = ["zeroize_derive"] }
+zlib-rs = { version = "0.6", default-features = false, features = ["std"] }
+
+[build-dependencies]
+indexmap = { version = "2", features = ["serde"] }
+memchr = { version = "2" }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
+serde_core = { version = "1", default-features = false, features = ["alloc", "rc", "result", "std"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
+syn-f595c2ba2a3f28df = { package = "syn", version = "2", features = ["extra-traits", "full", "visit", "visit-mut"] }
+
+[target.x86_64-unknown-linux-gnu.dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
+futures-channel = { version = "0.3", features = ["sink"] }
+futures-core = { version = "0.3" }
+futures-io = { version = "0.3" }
+libc = { version = "0.2" }
+linux-raw-sys = { version = "0.12", default-features = false, features = ["auxvec", "elf", "errno", "general", "if_ether", "ioctl", "net", "netlink", "no_std", "prctl", "system", "xdp"] }
+naga = { version = "27", features = ["glsl-out", "hlsl-out", "spv-out", "wgsl-in"] }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
+rustix = { version = "1", features = ["event", "mm", "net", "pipe", "process", "shm", "system", "time"] }
+scopeguard = { version = "1" }
+slab = { version = "0.4" }
+syn-7b89eefb6aaa9bf3 = { package = "syn", version = "3", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
+toml_datetime = { version = "1", features = ["serde"] }
+toml_parser = { version = "1" }
+tracing = { version = "0.1", default-features = false, features = ["log"] }
+ttf-parser = { version = "0.25", default-features = false, features = ["apple-layout", "glyph-names", "gvar-alloc", "no-std-float", "opentype-layout", "variable-fonts"] }
+wayland-backend = { version = "0.3", default-features = false, features = ["client_system", "dlopen"] }
+winnow = { version = "1" }
+x11rb = { version = "0.13", default-features = false, features = ["dl-libxcb", "randr", "resource_manager", "shm", "xinput", "xkb"] }
+x11rb-protocol = { version = "0.13", default-features = false, features = ["randr", "resource_manager", "shm", "xinput", "xkb"] }
+
+[target.x86_64-unknown-linux-gnu.build-dependencies]
+serde = { version = "1", features = ["derive", "rc"] }
+toml_datetime = { version = "1", features = ["serde"] }
+toml_parser = { version = "1" }
+winnow = { version = "1" }
+
+[target.aarch64-apple-darwin.dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
+block2 = { version = "0.6" }
+libc = { version = "0.2", features = ["extra_traits"] }
+naga = { version = "27", features = ["msl-out", "wgsl-in"] }
+objc2-core-foundation = { version = "0.3", features = ["CFBase"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["CGColor", "CGColorSpace", "CGContext", "CGDataProvider", "CGDirectDisplay", "CGEventTypes", "CGFont", "CGImage", "CGPath", "objc2", "std"] }
+objc2-foundation = { version = "0.3" }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["CADisplayLink", "CALayer", "CAMediaTiming", "CAMediaTimingFunction", "CAOpenGLLayer", "CATransaction", "objc2-core-foundation", "std"] }
+rustix = { version = "1", features = ["fs", "process"] }
+
+[target.x86_64-pc-windows-msvc.dependencies]
+naga = { version = "27", features = ["glsl-out", "hlsl-out", "spv-out", "wgsl-in"] }
+scopeguard = { version = "1" }
+windows = { version = "0.62", features = ["Foundation_Metadata", "UI_ViewManagement", "Wdk_System_SystemInformation", "Wdk_System_SystemServices", "Wdk_System_Threading", "Win32_Devices_Properties", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Media_Audio", "Win32_Media_KernelStreaming", "Win32_Media_Multimedia", "Win32_Security_Authorization", "Win32_Storage_EnhancedStorage", "Win32_System_Com_StructuredStorage", "Win32_System_Diagnostics_Debug", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Kernel", "Win32_System_Memory", "Win32_System_Performance", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_SystemServices", "Win32_System_Threading", "Win32_System_Variant", "Win32_UI_Accessibility", "Win32_UI_HiDpi", "Win32_UI_Shell_PropertiesSystem", "Win32_UI_WindowsAndMessaging"] }
+windows-core = { version = "0.62" }
+windows-sys = { version = "0.61", features = ["Win32_Globalization", "Win32_Graphics_Gdi", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_IO", "Win32_System_JobObjects", "Win32_System_Kernel", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[target.x86_64-pc-windows-msvc.build-dependencies]
+log = { version = "0.4", default-features = false, features = ["std"] }
+
+### END HAKARI SECTION

@@ -12,6 +12,7 @@ lsp-server.workspace = true
 ox-lang.workspace = true
 oxmacs-files.workspace = true
 serde_json.workspace = true
+workspace-hack.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
