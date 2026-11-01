@@ -180,13 +180,12 @@ fn program_inside(program: &OsStr, distro: &str) -> OsString {
     if let Some(path) = linux(&text, distro) {
         return path.into();
     }
-    let path = Path::new(&*text);
-    if path.is_absolute() || text.contains(['\\', '/']) {
-        return path
+    match text.rsplit_once(['\\', '/']) {
+        Some((_, name)) => Path::new(name)
             .file_stem()
-            .map_or_else(|| program.to_owned(), OsStr::to_owned);
+            .map_or_else(|| program.to_owned(), OsStr::to_owned),
+        None => program.to_owned(),
     }
-    program.to_owned()
 }
 
 fn arg_inside(arg: &OsStr, distro: &str) -> OsString {
