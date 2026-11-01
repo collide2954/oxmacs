@@ -1,7 +1,7 @@
 use ox_library::color::Color;
 use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
-use ox_rodeo::draw::raster::{Frame, render};
+use ox_rodeo::draw::raster::{Frame, Raster, render};
 use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Text};
 use ox_rodeo::texture::{TextureId, Textures};
 
@@ -201,4 +201,29 @@ fn layers_stack_and_fades_cover() {
     faded.fade = Some(Color::new(0.0, 0.0, 0.0, 0.5));
     let frame = render(&mut faded, &textures, 1, 1);
     assert_eq!(at(&frame, 0, 0), [128, 128, 128, 255]);
+}
+
+#[test]
+fn one_raster_draws_frame_after_frame_at_any_size() {
+    let textures = Textures::new();
+    let mut raster = Raster::default();
+    let mut drawn = list();
+    drawn.shape(
+        Shape::Rect {
+            rect: Rect::new(0.0, 0.0, 1.0, 1.0),
+            stroke: None,
+        },
+        Color::rgba8(255, 0, 0, 255),
+        0,
+    );
+    let first = raster.render(&mut drawn, &textures, 3, 2);
+    assert_eq!(first, render(&mut drawn, &textures, 3, 2));
+    assert_eq!(at(&first, 0, 0), RED);
+
+    let mut plain = list();
+    plain.background = Color::rgba8(0, 255, 0, 255);
+    let second = raster.render(&mut plain, &textures, 2, 3);
+    assert_eq!([second.width, second.height], [2, 3]);
+    assert_eq!(at(&second, 0, 0), GREEN);
+    assert_eq!(at(&second, 1, 2), GREEN);
 }

@@ -172,7 +172,7 @@
 (collide/query grid rect) "The ids whose rects overlap rect, in order."
 (collide/at grid point) "The ids whose rects hold point, in order."
 (collide/pairs grid) "Every pair of ids whose rects overlap, once each, as [a b] vectors in order."
-(tiled/load path) "The orthogonal Tiled map at path, with its external tilesets and templates, as plain data: a map of :width, :height, :tile-width, :tile-height, :background, :properties, :tilesets and :layers. Tile layers hold :data, a vector of tile ids row by row with Tiled's flip bits, and :tile-size; object layers hold :objects with their :x, :y, :width, :height, :rotation in radians, :shape and :properties; group layers hold :layers. Tile objects are moved to their top-left corner like every other object."
+(tiled/load path) "The orthogonal Tiled map at path, with its external tilesets and templates, as plain data: a map of :width, :height, :tile-width, :tile-height, :background, :properties, :tilesets and :layers. Tile layers hold :data, a vector of tile ids row by row with Tiled's flip bits, and :tile-size; object layers hold :objects with their :x, :y, :width, :height, :rotation in radians, :shape and :properties; group layers hold :layers. Tile objects are moved to their top-left corner like every other object. In oxmacs, while a game runs, a relative path is read from the game's folder, as rodeo/image does."
 (tiled/layer map name) "The layer called name in map, looking inside groups too, or nil."
 (tiled/object map name) "The first object called name in map's object layers, or nil."
 (tiled/objects map) "Every object in map's object layers, groups included, in order."

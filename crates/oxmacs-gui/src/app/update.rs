@@ -117,6 +117,8 @@ impl App {
         self.editor.set_focused(focused);
         if focused {
             self.editor.check_disk_changes();
+        } else {
+            games::release_all(&mut self.editor);
         }
     }
 

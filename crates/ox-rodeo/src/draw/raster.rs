@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::effects::{faded, outlined, shade};
 use super::{Command, DrawList, Shape, Sprite};
 use crate::spacetime::{self, Scene};
@@ -13,10 +15,26 @@ pub struct Frame {
     pub pixels: Vec<u8>,
 }
 
+#[derive(Default)]
 struct Canvas {
     width: i64,
     height: i64,
     colors: Vec<Color>,
+}
+
+#[derive(Default)]
+pub struct Raster {
+    canvas: Canvas,
+}
+
+impl fmt::Debug for Raster {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Raster")
+            .field("width", &self.canvas.width)
+            .field("height", &self.canvas.height)
+            .finish()
+    }
 }
 
 fn whole(value: f64) -> i64 {
@@ -42,19 +60,18 @@ fn center(x: i64, y: i64) -> Vec2 {
 }
 
 impl Canvas {
-    fn new(width: u32, height: u32, background: Color) -> Self {
+    fn reset(&mut self, width: u32, height: u32, background: Color) {
         let count = usize::try_from(u64::from(width) * u64::from(height)).unwrap_or(0);
-        Self {
-            width: i64::from(width),
-            height: i64::from(height),
-            colors: vec![
-                Color {
-                    a: 1.0,
-                    ..background
-                };
-                count
-            ],
-        }
+        self.width = i64::from(width);
+        self.height = i64::from(height);
+        self.colors.clear();
+        self.colors.resize(
+            count,
+            Color {
+                a: 1.0,
+                ..background
+            },
+        );
     }
 
     fn blend(&mut self, x: i64, y: i64, color: Color) {
@@ -90,16 +107,14 @@ impl Canvas {
     }
 
     fn fill(&mut self, bounds: Rect, color: Color, inside: impl Fn(Vec2) -> bool) {
-        let pixels: Vec<(i64, i64)> = self
-            .area(bounds.left(), bounds.top(), bounds.right(), bounds.bottom())
-            .filter(|(x, y)| inside(center(*x, *y)))
-            .collect();
-        for (x, y) in pixels {
-            self.blend(x, y, color);
+        for (x, y) in self.area(bounds.left(), bounds.top(), bounds.right(), bounds.bottom()) {
+            if inside(center(x, y)) {
+                self.blend(x, y, color);
+            }
         }
     }
 
-    fn frame(self) -> Frame {
+    fn frame(&self) -> Frame {
         Frame {
             width: u32::try_from(self.width).unwrap_or(0),
             height: u32::try_from(self.height).unwrap_or(0),
@@ -157,8 +172,7 @@ fn draw_sprite(canvas: &mut Canvas, list: &DrawList, textures: &Textures, sprite
             texel(textures, sprite, x, y).a
         }
     };
-    let pixels: Vec<(i64, i64)> = canvas.area(left, top, right, bottom).collect();
-    for (x, y) in pixels {
+    for (x, y) in canvas.area(left, top, right, bottom) {
         let turned = (center(x, y) - sprite.position).rotated(-sprite.rotation);
         let local = Vec2::new(turned.x / sprite.scale.x, turned.y / sprite.scale.y) + sprite.origin;
         let (mut column, mut row) = (whole(local.x.floor()), whole(local.y.floor()));
@@ -303,25 +317,38 @@ fn draw_black_hole(canvas: &mut Canvas, rect: Rect, scene: &Scene) {
     }
 }
 
-pub fn render(list: &mut DrawList, textures: &Textures, width: u32, height: u32) -> Frame {
-    let batches = list.finish();
-    let mut canvas = Canvas::new(width, height, list.background);
-    for batch in batches {
-        for command in &list.commands()[batch.range] {
-            match command {
-                Command::Sprite(sprite) => draw_sprite(&mut canvas, list, textures, sprite),
-                Command::Shape { shape, color, .. } => draw_shape(&mut canvas, shape, *color),
-                Command::Text { .. } => {}
-                Command::BlackHole { rect, scene, .. } => {
-                    draw_black_hole(&mut canvas, *rect, scene);
+impl Raster {
+    pub fn render(
+        &mut self,
+        list: &mut DrawList,
+        textures: &Textures,
+        width: u32,
+        height: u32,
+    ) -> Frame {
+        let batches = list.finish();
+        let canvas = &mut self.canvas;
+        canvas.reset(width, height, list.background);
+        for batch in batches {
+            for command in &list.commands()[batch.range] {
+                match command {
+                    Command::Sprite(sprite) => draw_sprite(canvas, list, textures, sprite),
+                    Command::Shape { shape, color, .. } => draw_shape(canvas, shape, *color),
+                    Command::Text { .. } => {}
+                    Command::BlackHole { rect, scene, .. } => {
+                        draw_black_hole(canvas, *rect, scene);
+                    }
                 }
             }
         }
-    }
-    if let Some(fade) = list.fade {
-        for color in &mut canvas.colors {
-            *color = faded(*color, fade);
+        if let Some(fade) = list.fade {
+            for color in &mut canvas.colors {
+                *color = faded(*color, fade);
+            }
         }
+        canvas.frame()
     }
-    canvas.frame()
+}
+
+pub fn render(list: &mut DrawList, textures: &Textures, width: u32, height: u32) -> Frame {
+    Raster::default().render(list, textures, width, height)
 }

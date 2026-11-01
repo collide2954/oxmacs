@@ -163,6 +163,10 @@ impl Ox {
         self.timed("frame", started);
     }
 
+    pub fn wants_frames(&self, editor: &Editor) -> bool {
+        oxmacs_core::view::takeover::current(editor).is_some() || api::games::wants_frames(editor)
+    }
+
     pub fn games_frame(&mut self, editor: &mut Editor, now: Instant) {
         let started = self.isolate.profiling().then(Instant::now);
         api::games::frame(&mut self.isolate, editor, now);

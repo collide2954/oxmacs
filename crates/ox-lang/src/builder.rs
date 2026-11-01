@@ -104,6 +104,16 @@ impl NativeBuilder<'_> {
         self.finish(function, None);
     }
 
+    pub fn maybe_host<T: Any>(
+        self,
+        function: impl Fn(&mut Heap, Option<&mut T>, &[Value]) -> Result<Value, Error> + 'static,
+    ) {
+        let function: Rc<NativeFn> = Rc::new(move |heap, host, arguments| {
+            function(heap, host.downcast_mut::<T>(), arguments)
+        });
+        self.finish(function, None);
+    }
+
     pub fn routine(
         self,
         start: impl Fn(&mut Runtime, Value, &[Value]) -> Result<Started, Error> + 'static,

@@ -6,6 +6,10 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ### Fixed
 
+- A rodeo game whose first load failed starts once you save the fix or resume it, instead of saying it reloaded and showing nothing.
+- Game keys are let go when oxmacs loses focus, so a player no longer keeps running after Alt-Tab.
+- A paused, failed or hidden game no longer keeps oxmacs redrawing at frame rate, and drawing a large game screen reuses its canvas instead of allocating hundreds of megabytes a frame.
+- `tiled/load` in a running game reads a relative path from the game's folder, as `rodeo/image` does, instead of from the editor's working folder.
 - The vault no longer wipes the clipboard when you copied something else after a password: `clipboard-set` takes `:clear-after`, a number of seconds after which the editor clears the clipboard only if it still holds what was copied, and any later copy cancels it.
 - A buffer whose file was deleted follows it again when it comes back: an unmodified buffer rereads it, and one with edits keeps them and says the file changed. A buffer for a new file that another program creates follows it the same way.
 - `ox fmt` and formatting through `ox lsp` keep a file's CRLF line ends instead of turning them into LF, and `ox fmt --check` no longer lists a CRLF file that is already formatted.

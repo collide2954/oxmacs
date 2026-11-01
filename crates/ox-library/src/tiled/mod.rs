@@ -12,6 +12,7 @@ use crate::geometry::Rect;
 use crate::geometry::Vec2;
 
 pub(crate) use natives::install;
+pub use natives::load;
 
 const FLIP_HORIZONTAL: u32 = 0x8000_0000;
 const FLIP_VERTICAL: u32 = 0x4000_0000;

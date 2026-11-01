@@ -15,7 +15,8 @@ use ox_library::geometry::Rect;
 use ox_library::geometry::Vec2;
 use ox_rodeo::atlas::Atlas;
 use ox_rodeo::clock::Clock;
-use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport, raster};
+use ox_rodeo::draw::raster::Raster;
+use ox_rodeo::draw::{DrawList, Outline, Shape, Sprite, Viewport};
 use ox_rodeo::spacetime::{Disk, Scene, Sky, Star};
 use ox_rodeo::texture::{TextureId, Textures};
 use oxmacs_core::editor::{Editor, EventKind};
@@ -62,6 +63,7 @@ struct Game {
     released: BTreeSet<String>,
     actions: BTreeMap<String, Vec<String>>,
     list: DrawList,
+    raster: Raster,
     captions: Vec<Caption>,
     textures: Textures,
     reloads: Vec<PathBuf>,
@@ -117,6 +119,31 @@ pub fn placement(screen: &Screen, width: f64, height: f64) -> Placement {
 
 pub fn active(editor: &Editor) -> bool {
     game(editor).is_some()
+}
+
+pub fn wants_frames(editor: &Editor) -> bool {
+    let Some(game) = game(editor) else {
+        return false;
+    };
+    let waiting = game.phase == Phase::Loading
+        || game.restart
+        || game.dirty
+        || !game.reloads.is_empty()
+        || game.clock.step_queued();
+    let running =
+        game.phase == Phase::Running && !game.clock.paused() && editor.buffer_shown(game.buffer);
+    waiting || running
+}
+
+pub fn release_all(editor: &mut Editor) {
+    if let Some(game) = game_mut(editor) {
+        let held = std::mem::take(&mut game.held);
+        game.released.extend(held);
+    }
+}
+
+fn asset(game: Option<&Game>, path: &Path) -> PathBuf {
+    game.map_or_else(|| path.to_owned(), |game| game.folder.join(path))
 }
 
 pub fn wants_keys(editor: &Editor) -> bool {
@@ -398,6 +425,7 @@ fn play(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
         released: BTreeSet::new(),
         actions: BTreeMap::new(),
         list: DrawList::new(),
+        raster: Raster::default(),
         captions: Vec::new(),
         textures: Textures::new(),
         reloads: Vec::new(),
@@ -547,7 +575,7 @@ fn image(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Va
         .map(PathBuf::from)
         .ok_or_else(|| wrong(heap, "image", "a path", arguments[0]))?;
     let game = playing(editor)?;
-    let path = game.folder.join(relative);
+    let path = asset(Some(game), &relative);
     let id = game
         .textures
         .load(&path)
@@ -885,6 +913,7 @@ pub fn install(isolate: &mut Isolate) {
             game.phase = Phase::Running;
             game.error = None;
         }
+        game.restart |= game.hooks.is_none();
         game.last = None;
         game.dirty = true;
     });
@@ -915,6 +944,14 @@ pub fn install(isolate: &mut Isolate) {
             Ok(Value::Bool(game(editor).is_some_and(|game| {
                 game.phase == Phase::Running && !game.clock.paused()
             })))
+        });
+    isolate
+        .native("ox/tiled", "load")
+        .arity(1, Some(1))
+        .outside()
+        .maybe_host::<Editor>(|heap, editor, arguments| {
+            let running = editor.as_deref().and_then(game);
+            ox_library::tiled::load(heap, arguments[0], |path| asset(running, path))
         });
     install_time_and_input(isolate);
     install_drawing(isolate);
@@ -1048,7 +1085,10 @@ fn present(editor: &mut Editor, render: bool) {
         return;
     };
     let (width, height) = game.size;
-    let frame = render.then(|| raster::render(&mut game.list, &game.textures, width, height));
+    let frame = render.then(|| {
+        game.raster
+            .render(&mut game.list, &game.textures, width, height)
+    });
     if render {
         game.generation += 1;
     }
@@ -1192,6 +1232,7 @@ fn reload_files(isolate: &mut Isolate, editor: &mut Editor) {
             game.error = None;
             game.last = None;
         }
+        game.restart |= game.hooks.is_none();
         game.dirty = true;
         editor.show_message("rodeo: reloaded the game");
     }
@@ -1221,6 +1262,7 @@ pub fn frame(isolate: &mut Isolate, editor: &mut Editor, now: Instant) {
     };
     if game.phase == Phase::Failed {
         game.last = Some(now);
+        game.dirty = false;
         return;
     }
     let elapsed = game
@@ -1495,6 +1537,105 @@ mod tests {
         let (mut editor, mut ox, _, _folder) = playing(COUNTER);
         ox.eval(&mut editor, "(stop-game)").unwrap();
         assert!(editor.buffer_named("*game*").is_none());
-        assert!(!super::active(&editor));
+        assert!(!super::wants_frames(&editor));
+    }
+
+    const BROKEN: &str = "(module (import (ox rodeo)))\n(oops)\n";
+
+    #[test]
+    fn a_game_whose_first_load_failed_starts_once_its_fix_is_saved() {
+        let (mut editor, mut ox, start, folder) = playing(BROKEN);
+        let path = folder.path().join("game.ox");
+        std::fs::write(&path, COUNTER).unwrap();
+        super::reload(&mut editor, &std::path::absolute(&path).unwrap());
+
+        ox.games_frame(&mut editor, start + sixtieths(1));
+        ox.games_frame(&mut editor, start + sixtieths(2));
+        ox.games_frame(&mut editor, start + sixtieths(4));
+
+        assert_eq!(ox.eval(&mut editor, "@ticks").unwrap(), "2");
+        assert_eq!(pixel(&editor, 0, 0), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn resuming_a_game_whose_first_load_failed_starts_it() {
+        let (mut editor, mut ox, start, folder) = playing(BROKEN);
+        std::fs::write(folder.path().join("game.ox"), COUNTER).unwrap();
+
+        ox.eval(&mut editor, "(resume-game)").unwrap();
+        ox.games_frame(&mut editor, start + sixtieths(1));
+        ox.games_frame(&mut editor, start + sixtieths(3));
+
+        assert_eq!(ox.eval(&mut editor, "@ticks").unwrap(), "2");
+    }
+
+    #[test]
+    fn losing_focus_lets_go_of_every_held_key() {
+        let (mut editor, mut ox, start, _folder) = playing(
+            r"(module (import (ox rodeo)))
+(defonce seen (atom []))
+(def (tick)
+  (swap! seen conj [(rodeo/held? :left) (rodeo/released? :left)]))
+",
+        );
+        super::key(&mut editor, "left", true);
+        ox.games_frame(&mut editor, start + sixtieths(1));
+
+        super::release_all(&mut editor);
+        ox.games_frame(&mut editor, start + sixtieths(2));
+
+        assert_eq!(
+            ox.eval(&mut editor, "@seen").unwrap(),
+            "[[true false] [false true]]"
+        );
+    }
+
+    #[test]
+    fn a_game_wants_frames_only_while_it_runs_in_view_or_has_work_waiting() {
+        let (mut editor, mut ox, start, _folder) = playing(COUNTER);
+        assert!(super::wants_frames(&editor));
+
+        ox.eval(&mut editor, "(pause-game)").unwrap();
+        assert!(super::wants_frames(&editor));
+        ox.games_frame(&mut editor, start + sixtieths(1));
+        assert!(!super::wants_frames(&editor));
+        ox.eval(&mut editor, "(step-game)").unwrap();
+        assert!(super::wants_frames(&editor));
+        ox.games_frame(&mut editor, start + sixtieths(2));
+        assert!(!super::wants_frames(&editor));
+
+        ox.eval(&mut editor, "(resume-game)").unwrap();
+        ox.games_frame(&mut editor, start + sixtieths(3));
+        assert!(super::wants_frames(&editor));
+        ox.eval(&mut editor, r#"(switch-to-buffer "*scratch*")"#)
+            .unwrap();
+        assert!(!super::wants_frames(&editor));
+        ox.eval(&mut editor, r#"(switch-to-buffer "*game*")"#)
+            .unwrap();
+        assert!(super::wants_frames(&editor));
+
+        ox.eval(&mut editor, "(def (tick) (/ 1 0))").unwrap();
+        ox.games_frame(&mut editor, start + sixtieths(5));
+        assert!(!super::wants_frames(&editor));
+    }
+
+    const LEVEL: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" orientation="orthogonal" width="3" height="1" tilewidth="8" tileheight="8">
+ <layer id="1" name="ground" width="3" height="1">
+  <data encoding="csv">1,0,1</data>
+ </layer>
+</map>"#;
+
+    #[test]
+    fn tiled_maps_load_from_the_game_folder_while_a_game_runs() {
+        let (mut editor, mut ox, _start, folder) = playing(COUNTER);
+        std::fs::write(folder.path().join("level.tmx"), LEVEL).unwrap();
+
+        let width = ox.eval(
+            &mut editor,
+            r#"(module (import (ox tiled))) (get (tiled/load "level.tmx") :width)"#,
+        );
+
+        assert_eq!(width.unwrap(), "3");
     }
 }

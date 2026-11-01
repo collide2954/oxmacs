@@ -93,6 +93,10 @@ impl Clock {
         self.queued = self.queued.saturating_add(1);
     }
 
+    pub fn step_queued(&self) -> bool {
+        self.queued > 0
+    }
+
     pub fn advance(&mut self, elapsed: Duration) -> u32 {
         let ran = if self.paused {
             std::mem::take(&mut self.queued)

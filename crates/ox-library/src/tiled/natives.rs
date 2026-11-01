@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ox_lang::Isolate;
 use ox_lang::build::{make_map, make_vector};
@@ -449,18 +449,26 @@ fn real(value: i64) -> f64 {
     real
 }
 
+pub fn load(
+    heap: &mut Heap,
+    argument: Value,
+    place: impl FnOnce(&Path) -> PathBuf,
+) -> Result<Value, Error> {
+    let wanted = heap
+        .text(argument)
+        .map(str::to_owned)
+        .ok_or_else(|| expected(heap, "tiled/load", "the path of a .tmx file", argument))?;
+    let loaded =
+        Map::load(place(Path::new(&wanted))).map_err(|error| Error::new(error.to_string()))?;
+    map(heap, &loaded)
+}
+
 pub(crate) fn install(isolate: &mut Isolate) {
     isolate
         .native(MODULE, "load")
         .arity(1, Some(1))
         .outside()
-        .function(|heap, arguments| {
-            let wanted = heap.text(arguments[0]).map(str::to_owned).ok_or_else(|| {
-                expected(heap, "tiled/load", "the path of a .tmx file", arguments[0])
-            })?;
-            let loaded = Map::load(&wanted).map_err(|error| Error::new(error.to_string()))?;
-            map(heap, &loaded)
-        });
+        .function(|heap, arguments| load(heap, arguments[0], Path::to_path_buf));
     isolate
         .native(MODULE, "layer")
         .arity(2, Some(2))

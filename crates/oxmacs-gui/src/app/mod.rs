@@ -21,8 +21,7 @@ use oxmacs_core::external::usage::Usage;
 use oxmacs_core::folders::Folders;
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Theme as Faces;
-use oxmacs_core::view::takeover;
-use oxmacs_script::{Ox, Pace, Wake, api::games};
+use oxmacs_script::{Ox, Pace, Wake};
 
 use crate::watcher::Watched;
 use crate::widgets::buffer_view::ViewEvent;
@@ -240,10 +239,7 @@ impl App {
             .theme_fade
             .as_ref()
             .is_some_and(|(_, fade)| fade.is_animating(self.now));
-        fading
-            || self.reveal.is_animating(self.now)
-            || takeover::current(&self.editor).is_some()
-            || games::active(&self.editor)
+        fading || self.reveal.is_animating(self.now) || self.ox.wants_frames(&self.editor)
     }
 
     fn rested_since(&self) -> Option<Instant> {
@@ -371,6 +367,7 @@ mod tests {
     use iced::keyboard::{Key, Location, Modifiers};
     use oxmacs_core::editor::{Cell, Clicks};
     use oxmacs_core::theme::{ADWAITA, ADWAITA_DARK};
+    use oxmacs_core::view::takeover;
     use serde_json::{Value, json};
 
     fn configured(settings: &Value) -> Config {
