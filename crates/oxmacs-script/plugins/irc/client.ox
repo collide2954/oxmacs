@@ -95,9 +95,9 @@
 (def (ensure-buffer! name target kind {show false})
   "The buffer for target on the network called name, made when it is missing, and shown when show is true."
   (let [buffer (or (if (= kind :server) (when (buffer-entry (server-buffer name)) (server-buffer name)) (buffer-of name target))
-                   (cond ((= kind :server) (server-buffer name))
-                     ((buffer-entry target) (str target "@" name))
-                     (else target)))]
+                   (cond [(= kind :server) (server-buffer name)]
+                     [(buffer-entry target) (str target "@" name)]
+                     [else target]))]
     (unless (buffer-entry buffer)
       (swap! state assoc-in [:buffers buffer]
              {buffer: buffer network: name target: target kind: kind messages: [] rows: []
@@ -258,7 +258,7 @@
 (def (on-cap! name line)
   (let [[_ sub & rest] line.params
         sub (string/upper (or sub ""))]
-    (cond ((= sub "LS")
+    (cond [(= sub "LS")
            (let [more (and (> (count rest) 1) (= (first rest) "*"))
                  offered (map (fn [cap] (first (string/split cap "=" 2))) (string/words (or (last rest) "")))]
              (change-network! name update :offered into offered)
@@ -268,26 +268,26 @@
                                     wanted-caps)]
                  (if (empty? wanted)
                    (cap-end! name)
-                   (send-command! name "CAP" ["REQ" (string/join " " wanted)]))))))
-      ((= sub "ACK")
+                   (send-command! name "CAP" ["REQ" (string/join " " wanted)])))))]
+      [(= sub "ACK")
        (let [acked (remove (fn [cap] (string/starts-with? cap "-")) (string/words (or (last rest) "")))]
          (change-network! name update :caps into acked)
          (if (and (some (fn [cap] (= cap "sasl")) acked) (get (network name) :sasl))
            (send-command! name "AUTHENTICATE" ["PLAIN"])
-           (cap-end! name))))
-      ((= sub "NAK") (cap-end! name))
-      ((= sub "NEW")
+           (cap-end! name)))]
+      [(= sub "NAK") (cap-end! name)]
+      [(= sub "NEW")
        (let [offered (map (fn [cap] (first (string/split cap "=" 2))) (string/words (or (last rest) "")))
              wanted (filter (fn [cap] (and (contains? (set offered) cap) (not= cap "sasl") (not (has-cap? name cap))))
                             wanted-caps)]
          (change-network! name update :offered into offered)
          (unless (empty? wanted)
-           (send-command! name "CAP" ["REQ" (string/join " " wanted)]))))
-      ((= sub "DEL")
+           (send-command! name "CAP" ["REQ" (string/join " " wanted)])))]
+      [(= sub "DEL")
        (let [gone (string/words (or (last rest) ""))]
          (change-network! name update :caps (fn [caps] (apply disj caps gone)))
-         (change-network! name update :offered (fn [offered] (apply disj offered gone)))))
-      (else nil))))
+         (change-network! name update :offered (fn [offered] (apply disj offered gone))))]
+      [else nil])))
 
 (def (on-authenticate! name line)
   (when (= (first line.params) "+")
@@ -383,10 +383,10 @@
         (event! buffer line :nick (str old " is now " fresh))))))
 
 (def (reply-ctcp! name nick [command argument])
-  (cond ((= command "VERSION") (send-command! name "NOTICE" [nick "\u{1}VERSION oxmacs\u{1}"]))
-    ((= command "PING") (send-command! name "NOTICE" [nick (str "\u{1}PING " argument "\u{1}")]))
-    ((= command "TIME") (send-command! name "NOTICE" [nick (str "\u{1}TIME " (time/format (time/now) "%c") "\u{1}")]))
-    (else nil)))
+  (cond [(= command "VERSION") (send-command! name "NOTICE" [nick "\u{1}VERSION oxmacs\u{1}"])]
+    [(= command "PING") (send-command! name "NOTICE" [nick (str "\u{1}PING " argument "\u{1}")])]
+    [(= command "TIME") (send-command! name "NOTICE" [nick (str "\u{1}TIME " (time/format (time/now) "%c") "\u{1}")])]
+    [else nil]))
 
 (def (message-of name line kind)
   (let [[_ text] line.params
@@ -407,16 +407,16 @@
         me (my-nick name)
         mine (protocol/same-nick? line.nick me)
         private (not (protocol/channel? target))
-        partner (cond ((not private) target)
-                  (mine target)
-                  (else line.nick))
+        partner (cond [(not private) target]
+                  [mine target]
+                  [else line.nick])
         ctcp (protocol/ctcp text)]
-    (cond ((and ctcp (not (protocol/action text)))
+    (cond [(and ctcp (not (protocol/action text)))
            (when (and (= kind :privmsg) (not mine))
-             (reply-ctcp! name line.nick ctcp)))
-      ((or (nil? line.user) (and (= kind :notice) private (not (buffer-of name partner))))
-       (add! (server-buffer name) (message-of name line kind)))
-      (else
+             (reply-ctcp! name line.nick ctcp))]
+      [(or (nil? line.user) (and (= kind :notice) private (not (buffer-of name partner))))
+       (add! (server-buffer name) (message-of name line kind))]
+      [else
        (let [buffer (ensure-buffer! name partner (if private :query :channel))
              message (message-of name line kind)
              quoted (message-by-id buffer message.reply-id)
@@ -424,7 +424,7 @@
          (swap! state update-in [:buffers buffer :typing] dissoc (fold line.nick))
          (add! buffer message)
          (alert! name buffer message (and private (not mine)))
-         (log! name partner message))))))
+         (log! name partner message))])))
 
 (def (react! buffer id nick emoji)
   "Adds nick's emoji reaction to the message with id in buffer and draws it again."
@@ -510,17 +510,17 @@
       (change-network! name assoc-in [:batches id] {kind: kind arguments: arguments tags: line.tags lines: []})
       (when-let [batch (get-in (network name) [:batches id])]
         (change-network! name update :batches dissoc id)
-        (cond ((or (= batch.kind "chathistory") (= batch.kind "draft/chathistory"))
-               (merge-history! name (first batch.arguments) batch.lines))
-          ((= batch.kind "draft/multiline")
+        (cond [(or (= batch.kind "chathistory") (= batch.kind "draft/chathistory"))
+               (merge-history! name (first batch.arguments) batch.lines)]
+          [(= batch.kind "draft/multiline")
            (when-let [first-line (first batch.lines)]
              (let [text (reduce (fn [text part]
                                   (str text (if (contains? part.tags "draft/multiline-concat") "" "\n") (or (last part.params) "")))
                                 (or (last first-line.params) "") (rest batch.lines))]
                (on-message! name (merge first-line {params: [(first batch.arguments) text]
                                                     tags: (merge first-line.tags batch.tags)})
-                            :privmsg))))
-          (else (each [inner batch.lines] (dispatch! name inner))))))))
+                            :privmsg)))]
+          [else (each [inner batch.lines] (dispatch! name inner))])))))
 
 (def (on-numeric! name line)
   (let [code (string/to-number line.command)
@@ -528,21 +528,21 @@
         about (when (> (count params) 2) (get params 1))
         target (when about (buffer-of name about))
         text (string/join " " (drop 1 params))]
-    (cond ((and code (>= code 400) (< code 600))
-           (cond (target (error! target (last params)))
-             (about (error! (here-on name) (str (string/join " " (drop 1 (take (dec (count params)) params))) ": " (last params))))
-             (else (error! (here-on name) (last params)))))
-      ((contains? (set ["002" "003" "004" "251" "252" "253" "254" "255" "265" "266" "375" "372"]) line.command)
-       (info! (server-buffer name) (last line.params)))
-      (else (info! (server-buffer name) text)))))
+    (cond [(and code (>= code 400) (< code 600))
+           (cond [target (error! target (last params))]
+             [about (error! (here-on name) (str (string/join " " (drop 1 (take (dec (count params)) params))) ": " (last params)))]
+             [else (error! (here-on name) (last params))])]
+      [(contains? (set ["002" "003" "004" "251" "252" "253" "254" "255" "265" "266" "375" "372"]) line.command)
+       (info! (server-buffer name) (last line.params))]
+      [else (info! (server-buffer name) text)])))
 
 (def (on-standard! name line)
   (let [kind line.command
         about (first line.params)
         text (or (last line.params) "")
-        said (cond ((or (nil? about) (= about "*")) text)
-               ((= kind "FAIL") (str about " failed: " text))
-               (else (str about ": " text)))]
+        said (cond [(or (nil? about) (= about "*")) text]
+               [(= kind "FAIL") (str about " failed: " text)]
+               [else (str about ": " text)])]
     (if (= kind "FAIL")
       (error! (here-on name) said)
       (info! (here-on name) said))))
@@ -582,34 +582,34 @@
     (send-command! name "WHOIS" [nick])))
 
 (def (span seconds)
-  (let [[size unit] (cond ((< seconds 60) [seconds "second"])
-                      ((< seconds 3600) [(// seconds 60) "minute"])
-                      ((< seconds 86400) [(// seconds 3600) "hour"])
-                      (else [(// seconds 86400) "day"]))]
+  (let [[size unit] (cond [(< seconds 60) [seconds "second"]]
+                      [(< seconds 3600) [(// seconds 60) "minute"]]
+                      [(< seconds 86400) [(// seconds 3600) "hour"]]
+                      [else [(// seconds 86400) "day"]])]
     (str size " " unit (if (= size 1) "" "s"))))
 
 (def (whois-text line)
   (let [[_ nick a b c _d] line.params
         said (last line.params)]
-    (cond ((= line.command "311") (str nick " is " a "@" b " (" said ")"))
-      ((= line.command "319") (str nick " is in " said))
-      ((= line.command "312") (str nick " is on " a " (" said ")"))
-      ((= line.command "330") (str nick " is logged in as " a))
-      ((= line.command "301") (str nick " is away: " said))
-      ((= line.command "317")
+    (cond [(= line.command "311") (str nick " is " a "@" b " (" said ")")]
+      [(= line.command "319") (str nick " is in " said)]
+      [(= line.command "312") (str nick " is on " a " (" said ")")]
+      [(= line.command "330") (str nick " is logged in as " a)]
+      [(= line.command "301") (str nick " is away: " said)]
+      [(= line.command "317")
        (let [idle (or (string/to-number a) 0)
              since (when (and c (string/to-number b)) (* 1000 (string/to-number b)))]
          (str nick " has been idle " (span idle)
-              (if since (str ", online since " (time/format since "%-d %B %H:%M")) ""))))
-      (else (str nick " " said)))))
+              (if since (str ", online since " (time/format since "%-d %B %H:%M")) "")))]
+      [else (str nick " " said)])))
 
 (def (on-whois! name line)
   (let [nick (get line.params 1)
         asked (get-in (network name) [:asking (fold nick)])
         buffer (or asked (when (= line.command "301") (or (buffer-of name nick) (here-on name))))]
-    (cond ((= line.command "318") (change-network! name update :asking (fn [asking] (dissoc (or asking {}) (fold nick)))))
-      (buffer (info! buffer (whois-text line)))
-      (else (on-numeric! name line)))))
+    (cond [(= line.command "318") (change-network! name update :asking (fn [asking] (dissoc (or asking {}) (fold nick))))]
+      [buffer (info! buffer (whois-text line))]
+      [else (on-numeric! name line)])))
 
 (def list-keys {"RET" 'irc-list-join "/" 'irc-list-filter "g" 'irc-list "q" 'quit-window})
 
@@ -659,43 +659,43 @@
 
 (def (dispatch! name line)
   (let [command line.command]
-    (cond ((= command "PING") (send-command! name "PONG" line.params))
-      ((= command "CAP") (on-cap! name line))
-      ((= command "AUTHENTICATE") (on-authenticate! name line))
-      ((= command "001") (on-welcome! name line))
-      ((= command "005") (on-isupport! name line))
-      ((= command "433") (on-nick-taken! name line))
-      ((= command "903") (do (info! (server-buffer name) "Logged in") (cap-end! name)))
-      ((contains? (set ["902" "904" "905" "906" "907"]) command)
-       (do (error! (server-buffer name) (str "SASL login failed: " (last line.params))) (cap-end! name)))
-      ((= command "JOIN") (on-join! name line))
-      ((= command "PART") (on-part! name line))
-      ((= command "KICK") (on-kick! name line))
-      ((= command "QUIT") (on-quit! name line))
-      ((= command "NICK") (on-nick! name line))
-      ((= command "PRIVMSG") (on-message! name line :privmsg))
-      ((= command "NOTICE") (on-message! name line :notice))
-      ((= command "TAGMSG") (on-tagmsg! name line))
-      ((= command "INVITE") (on-invite! name line))
-      ((contains? (set ["FAIL" "WARN" "NOTE"]) command) (on-standard! name line))
-      ((= command "TOPIC") (on-topic! name line))
-      ((= command "332") (on-topic-reply! name line))
-      ((= command "353") (on-names! name line))
-      ((contains? whois-replies command) (on-whois! name line))
-      ((or (= command "376") (= command "422")) (on-motd-end! name line))
-      ((= command "730") (on-monitor! name line true))
-      ((= command "731") (on-monitor! name line false))
-      ((contains? (set ["732" "733"]) command) nil)
-      ((= command "321") (change-network! name assoc :listing []))
-      ((= command "322") (on-list-item! name line))
-      ((= command "323") (on-list-end! name))
-      ((contains? (set ["333" "366" "MARKREAD" "PONG"]) command) nil)
-      ((= command "AWAY") (on-away! name line))
-      ((= command "BATCH") (on-batch! name line))
-      ((= command "MODE") (on-mode! name line))
-      ((= command "ERROR") (error! (server-buffer name) (or (last line.params) "The server closed the link")))
-      ((string/to-number command) (on-numeric! name line))
-      (else nil))))
+    (cond [(= command "PING") (send-command! name "PONG" line.params)]
+      [(= command "CAP") (on-cap! name line)]
+      [(= command "AUTHENTICATE") (on-authenticate! name line)]
+      [(= command "001") (on-welcome! name line)]
+      [(= command "005") (on-isupport! name line)]
+      [(= command "433") (on-nick-taken! name line)]
+      [(= command "903") (do (info! (server-buffer name) "Logged in") (cap-end! name))]
+      [(contains? (set ["902" "904" "905" "906" "907"]) command)
+       (do (error! (server-buffer name) (str "SASL login failed: " (last line.params))) (cap-end! name))]
+      [(= command "JOIN") (on-join! name line)]
+      [(= command "PART") (on-part! name line)]
+      [(= command "KICK") (on-kick! name line)]
+      [(= command "QUIT") (on-quit! name line)]
+      [(= command "NICK") (on-nick! name line)]
+      [(= command "PRIVMSG") (on-message! name line :privmsg)]
+      [(= command "NOTICE") (on-message! name line :notice)]
+      [(= command "TAGMSG") (on-tagmsg! name line)]
+      [(= command "INVITE") (on-invite! name line)]
+      [(contains? (set ["FAIL" "WARN" "NOTE"]) command) (on-standard! name line)]
+      [(= command "TOPIC") (on-topic! name line)]
+      [(= command "332") (on-topic-reply! name line)]
+      [(= command "353") (on-names! name line)]
+      [(contains? whois-replies command) (on-whois! name line)]
+      [(or (= command "376") (= command "422")) (on-motd-end! name line)]
+      [(= command "730") (on-monitor! name line true)]
+      [(= command "731") (on-monitor! name line false)]
+      [(contains? (set ["732" "733"]) command) nil]
+      [(= command "321") (change-network! name assoc :listing [])]
+      [(= command "322") (on-list-item! name line)]
+      [(= command "323") (on-list-end! name)]
+      [(contains? (set ["333" "366" "MARKREAD" "PONG"]) command) nil]
+      [(= command "AWAY") (on-away! name line)]
+      [(= command "BATCH") (on-batch! name line)]
+      [(= command "MODE") (on-mode! name line)]
+      [(= command "ERROR") (error! (server-buffer name) (or (last line.params) "The server closed the link"))]
+      [(string/to-number command) (on-numeric! name line)]
+      [else nil])))
 
 (def (handle! name line)
   (let [batch (get line.tags "batch")]
@@ -719,16 +719,16 @@
 (def (tick!)
   (each [[buffer entry] (entries (get @state :buffers))
          :let [shown (buffer-shown? buffer)]]
-    (cond ((and shown (not entry.shown))
+    (cond [(and shown (not entry.shown))
            (swap! state assoc-in [:buffers buffer :shown] true)
            (note-seen! buffer)
-           (mark-read! entry))
-      ((and (not shown) entry.shown)
+           (mark-read! entry)]
+      [(and (not shown) entry.shown)
        (swap! state update-in [:buffers buffer] merge {shown: false})
        (when entry.marker
          (swap! state assoc-in [:buffers buffer :marker] nil)
-         (render! buffer)))
-      (else nil)))
+         (render! buffer))]
+      [else nil]))
   (set-mode-line "irc-typing" (typing-text)))
 
 (def (watch!)

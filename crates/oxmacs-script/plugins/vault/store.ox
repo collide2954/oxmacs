@@ -83,9 +83,9 @@
 (def (create)
   (let [password (prompt "New vault password: " :secret true)
         again (prompt "Same password again: " :secret true)]
-    (cond ((string/blank? password) (raise (error "The vault needs a password")))
-      ((not= password again) (raise (error "The passwords differ; nothing was made")))
-      (else
+    (cond [(string/blank? password) (raise (error "The vault needs a password"))]
+      [(not= password again) (raise (error "The passwords differ; nothing was made"))]
+      [else
        (message "Making the vault key…")
        (let [header (merge {version: file-version salt: (crypto/random 16)} default-cost)
              key (crypto/derive-key password header.salt
@@ -93,7 +93,7 @@
                                     :parallelism header.parallelism)]
          (write! key header [])
          (swap! state assoc :entries [])
-         (opened key header))))))
+         (opened key header))])))
 
 (def (open-existing file)
   (let [stored (json/read (file/read file))

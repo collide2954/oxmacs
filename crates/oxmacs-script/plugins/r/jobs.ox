@@ -32,9 +32,9 @@
 (def (app-folder)
   (let [here (when-let [file (buffer-file)] (path/parent file))
         project (session/project-here)]
-    (cond ((and here (app? here)) here)
-      ((and project (app? project)) project)
-      (else nil))))
+    (cond [(and here (app? here)) here]
+      [(and project (app? project)) project]
+      [else nil])))
 
 (def (heard-app line)
   (when-let [hit (regex/find #"Listening on (https?://\S+)" line)]

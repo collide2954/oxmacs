@@ -17,9 +17,9 @@
 (def (unescape value)
   "An IRCv3 tag value with its escapes undone."
   (first (reduce (fn [[out pending] c]
-                   (cond (pending [(str out (or (get tag-escapes c) c)) false])
-                     ((= c "\\") [out true])
-                     (else [(str out c) false])))
+                   (cond [pending [(str out (or (get tag-escapes c) c)) false]]
+                     [(= c "\\") [out true]]
+                     [else [(str out c) false]]))
                  ["" false] (letters (or value "")))))
 
 (def (escape value)
@@ -36,21 +36,21 @@
 
 (def (parse-params text)
   (let [text (string/trim-start text)]
-    (cond ((= text "") [])
-      ((string/starts-with? text ":") [(string/slice text 1)])
-      (else (let [[param rest] (split-once text " ")]
-              (vec (cons param (parse-params rest))))))))
+    (cond [(= text "") []]
+      [(string/starts-with? text ":") [(string/slice text 1)]]
+      [else (let [[param rest] (split-once text " ")]
+              (vec (cons param (parse-params rest))))])))
 
 (def (source-parts source)
-  (cond ((nil? source) [nil nil nil])
-    ((string/includes? source "!")
+  (cond [(nil? source) [nil nil nil]]
+    [(string/includes? source "!")
      (let [[nick rest] (split-once source "!")
            [user host] (split-once rest "@")]
-       [nick user host]))
-    ((string/includes? source "@")
+       [nick user host])]
+    [(string/includes? source "@")
      (let [[nick host] (split-once source "@")]
-       [nick nil host]))
-    (else [source nil nil])))
+       [nick nil host])]
+    [else [source nil nil]]))
 
 (def (parse-line line)
   "A line from an IRC server as a map of :tags, :source, :nick, :user, :host, :command and :params."
@@ -88,9 +88,9 @@
         final (last params)]
     (str tagged command
          (apply str (map (fn [param] (str " " param)) middle))
-         (cond ((empty? params) "")
-           ((needs-colon? final) (str " :" final))
-           (else (str " " final))))))
+         (cond [(empty? params) ""]
+           [(needs-colon? final) (str " :" final)]
+           [else (str " " final)]))))
 
 (def (casefold text)
   "text in the rfc1459 case mapping IRC servers compare names with."
@@ -126,9 +126,9 @@
 (def (digits-at chars at)
   (let [first (get chars at)
         second (get chars (inc at))]
-    (cond ((not (and first (string/to-number first))) [nil at])
-      ((and second (string/to-number second)) [(string/to-number (str first second)) (+ at 2)])
-      (else [(string/to-number first) (inc at)]))))
+    (cond [(not (and first (string/to-number first))) [nil at]]
+      [(and second (string/to-number second)) [(string/to-number (str first second)) (+ at 2)]]
+      [else [(string/to-number first) (inc at)]])))
 
 (def (color-at chars at)
   (let [[fore after] (digits-at chars at)]
@@ -138,10 +138,10 @@
       [fore after])))
 
 (def (face-of state)
-  (cond ((get state :color) (get mirc-faces (mod (get state :color) 16)))
-    ((get state :bold) :heading)
-    ((get state :italic) :string)
-    (else nil)))
+  (cond [(get state :color) (get mirc-faces (mod (get state :color) 16))]
+    [(get state :bold) :heading]
+    [(get state :italic) :string]
+    [else nil]))
 
 (def (styled text)
   "text with its mIRC formatting codes turned into [text face] segments."
@@ -152,17 +152,17 @@
                  (conj out [current (face-of state)])
                  (let [c (get chars at)
                        code (get codes c)]
-                   (cond ((= c "\u{3}")
+                   (cond [(= c "\u{3}")
                           (let [[color after] (color-at chars (inc at))]
-                            (step after (assoc state :color color) "" (conj out [current (face-of state)]))))
-                     ((= code :reset) (step (inc at) {} "" (conj out [current (face-of state)])))
-                     (code (step (inc at) (update state code not) "" (conj out [current (face-of state)])))
-                     ((= c "\u{4}") (step (+ at 7) state current out))
-                     (else (step (inc at) state (str current c) out))))))]
+                            (step after (assoc state :color color) "" (conj out [current (face-of state)])))]
+                     [(= code :reset) (step (inc at) {} "" (conj out [current (face-of state)]))]
+                     [code (step (inc at) (update state code not) "" (conj out [current (face-of state)]))]
+                     [(= c "\u{4}") (step (+ at 7) state current out)]
+                     [else (step (inc at) state (str current c) out)]))))]
     (vec (keep (fn [[shown face]]
-                 (cond ((= shown "") nil)
-                   ((nil? face) shown)
-                   (else [shown face])))
+                 (cond [(= shown "") nil]
+                   [(nil? face) shown]
+                   [else [shown face]]))
                (step 0 {} "" [])))))
 
 (def (plain-text text)

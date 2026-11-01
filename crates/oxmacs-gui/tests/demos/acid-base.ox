@@ -80,9 +80,9 @@
       (let [ph (/ (+ low high) 2)
             h (math/pow 10 (- ph))
             excess (- (+ h cb) (/ kw h) cs (/ (* cw ka) (+ ka h)))]
-        (cond ((= n 40) ph)
-          ((> excess 0) (again ph high (inc n)))
-          (else (again low ph (inc n))))))))
+        (cond [(= n 40) ph]
+          [(> excess 0) (again ph high (inc n))]
+          [else (again low ph (inc n))])))))
 
 (def (composition state)
   (frequencies (map :kind state.particles)))
@@ -105,9 +105,9 @@
                 state.ghost)))
 
 (def (bounce at speed low high)
-  (cond ((< at low) [(+ low (- low at)) (abs speed)])
-    ((> at high) [(- high (- at high)) (- (abs speed))])
-    (else [at speed])))
+  (cond [(< at low) [(+ low (- low at)) (abs speed)]]
+    [(> at high) [(- high (- at high)) (- (abs speed))]]
+    [else [at speed]]))
 
 (def (flow x y time)
   "The stirred liquid's velocity at x y: cells of flow whose phase drifts, which mixes it."
@@ -190,9 +190,9 @@
               b (nth ps j)
               forward (get rules [a.kind b.kind])
               backward (get rules [b.kind a.kind])
-              [rule donor acceptor] (cond (forward [forward i j])
-                                      (backward [backward j i])
-                                      (else [nil nil nil]))]
+              [rule donor acceptor] (cond [forward [forward i j]]
+                                      [backward [backward j i]]
+                                      [else [nil nil nil]])]
           (if (and rule
                    (not (contains? used i))
                    (not (contains? used j))
@@ -211,9 +211,9 @@
 (def (drip state dt pressed held)
   (let [wait (- state.wait dt)
         room (< (+ state.drops (count state.falling)) most-drops)]
-    (cond ((and pressed room) (-> state (update :falling conj 0) (assoc :wait (* 2 drip-every))))
-      ((and held room (<= wait 0)) (-> state (update :falling conj 0) (assoc :wait drip-every)))
-      (else (assoc state :wait wait)))))
+    (cond [(and pressed room) (-> state (update :falling conj 0) (assoc :wait (* 2 drip-every)))]
+      [(and held room (<= wait 0)) (-> state (update :falling conj 0) (assoc :wait drip-every))]
+      [else (assoc state :wait wait)])))
 
 (def (land state)
   (let [[left top width _] liquid
@@ -253,11 +253,11 @@
   (let [stops (get indicators indicator)
         [low low-color] (first stops)
         [high high-color] (last stops)]
-    (cond ((<= ph low) low-color)
-      ((>= ph high) high-color)
-      (else (let [[[a ca] [b cb]] (find (fn [[below above]] (<= (first below) ph (first above))) (zip stops (rest stops)))
+    (cond [(<= ph low) low-color]
+      [(>= ph high) high-color]
+      [else (let [[[a ca] [b cb]] (find (fn [[below above]] (<= (first below) ph (first above))) (zip stops (rest stops)))
                   t (/ (- ph a) (- b a))]
-              (map (fn [x y] (round (math/lerp x y t))) ca cb))))))
+              (map (fn [x y] (round (math/lerp x y t))) ca cb))])))
 
 (def (fixed x digits)
   (let [n (round (* (abs x) (math/pow 10 digits)))
@@ -413,9 +413,9 @@
 
 (def (tick)
   (start)
-  (cond ((rodeo/pressed? :strong) (swap! world restart :hcl))
-    ((rodeo/pressed? :weak) (swap! world restart :ha))
-    ((rodeo/pressed? :reset) (swap! world (fn [state] (restart state state.acid)))))
+  (cond [(rodeo/pressed? :strong) (swap! world restart :hcl)]
+    [(rodeo/pressed? :weak) (swap! world restart :ha)]
+    [(rodeo/pressed? :reset) (swap! world (fn [state] (restart state state.acid)))])
   (swap! world step (rodeo/dt) (rodeo/pressed? :drop) (rodeo/held? :drop)))
 
 (def (draw)

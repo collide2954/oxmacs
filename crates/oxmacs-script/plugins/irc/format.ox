@@ -17,9 +17,9 @@
   {clock: nil nick: nil kind: nil time: 0 day: nil})
 
 (def (piece text face)
-  (cond ((= text "") nil)
-    (face [text face])
-    (else text)))
+  (cond [(= text "") nil]
+    [face [text face]]
+    [else text]))
 
 (def (linkify text face)
   "text as segments, with web addresses as links and the rest in face."
@@ -66,32 +66,32 @@
         step (fn [[lines line used pending] word]
                (let [size (count (first word))
                      gap (if pending (count (first pending)) 0)]
-                 (cond ((string/blank? (first word)) [lines line used (when (> used 0) word)])
-                   ((<= (+ used gap size) width)
-                    [lines (conj (if pending (conj line (shown pending)) line) (shown word)) (+ used gap size) nil])
-                   ((empty? line) [lines [(shown word)] size nil])
-                   (else [(conj lines line) [(shown word)] size nil]))))
+                 (cond [(string/blank? (first word)) [lines line used (when (> used 0) word)]]
+                   [(<= (+ used gap size) width)
+                    [lines (conj (if pending (conj line (shown pending)) line) (shown word)) (+ used gap size) nil]]
+                   [(empty? line) [lines [(shown word)] size nil]]
+                   [else [(conj lines line) [(shown word)] size nil]])))
         [lines line] (reduce step [[] [] 0 nil] words)]
     (conj lines line)))
 
 (def (gutter message)
   (let [kind message.kind
         nick (or message.nick "")]
-    (cond ((= kind :privmsg) [nick (protocol/nick-face nick)])
-      ((= kind :notice) [(str "-" nick "-") (protocol/nick-face nick)])
-      ((= kind :join) ["→" :success])
-      ((or (= kind :part) (= kind :quit) (= kind :kick)) ["←" :removed])
-      ((= kind :error) ["!" :error])
-      (else ["*" :comment]))))
+    (cond [(= kind :privmsg) [nick (protocol/nick-face nick)]]
+      [(= kind :notice) [(str "-" nick "-") (protocol/nick-face nick)]]
+      [(= kind :join) ["→" :success]]
+      [(or (= kind :part) (= kind :quit) (= kind :kick)) ["←" :removed]]
+      [(= kind :error) ["!" :error]]
+      [else ["*" :comment]])))
 
 (def (body message)
   (let [kind message.kind
         text (or message.text "")]
-    (cond ((= kind :privmsg) (segments-of text nil))
-      ((= kind :notice) (segments-of text :comment))
-      ((= kind :action) (vec (concat [[message.nick (protocol/nick-face message.nick)] " "] (segments-of text :string))))
-      ((= kind :error) (segments-of text :error))
-      (else (segments-of text :comment)))))
+    (cond [(= kind :privmsg) (segments-of text nil)]
+      [(= kind :notice) (segments-of text :comment)]
+      [(= kind :action) (vec (concat [[message.nick (protocol/nick-face message.nick)] " "] (segments-of text :string)))]
+      [(= kind :error) (segments-of text :error)]
+      [else (segments-of text :comment)])))
 
 (def (grouped? message context)
   (and (= message.kind :privmsg)

@@ -39,9 +39,9 @@
   (or (get (regex/find "^[a-zA-Z]+://[^/]+" url) :text) ""))
 
 (def (absolute url href)
-  (cond ((string/starts-with? href "http") href)
-    ((string/starts-with? href "/") (str (origin url) href))
-    (else (str url href))))
+  (cond [(string/starts-with? href "http") href]
+    [(string/starts-with? href "/") (str (origin url) href)]
+    [else (str url href)]))
 
 (def (folder-url url)
   (if (string/ends-with? url "/") url (str url "/")))
@@ -87,11 +87,11 @@
                                            :headers (merge {"Content-Type" "text/calendar; charset=utf-8"}
                                                            (if known.etag {"If-Match" known.etag} {"If-None-Match" "*"}))
                                            :body body)]
-                     (cond ((< response.status 300)
-                            [(remember sync href (get response.headers :etag) change.file) problems])
-                       ((= response.status 412)
-                        [sync (conj problems (str change.file " changed on the server too; kept the server's copy"))])
-                       (else [sync (conj problems (str "couldn't send " change.file " (" response.status ")"))]))))))]
+                     (cond [(< response.status 300)
+                            [(remember sync href (get response.headers :etag) change.file) problems]]
+                       [(= response.status 412)
+                        [sync (conj problems (str change.file " changed on the server too; kept the server's copy"))]]
+                       [else [sync (conj problems (str "couldn't send " change.file " (" response.status ")"))]])))))]
     (reduce step [(assoc sync :pending []) []] sync.pending)))
 
 (def (pull! calendar credentials sync)

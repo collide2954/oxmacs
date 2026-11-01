@@ -44,9 +44,9 @@
   {line: [[(string/pad-end entry.mode 11) :comment]
           [(string/pad-start (size-text entry.size) 6) :comment] " "
           [(string/pad-end (or entry.date "") 16) :comment] " "
-          (cond ((= entry.kind :dir) [(str entry.name "/") :link])
-            ((= entry.kind :link) [(str entry.name " -> " entry.target) :symlink])
-            (else entry.name))]
+          (cond [(= entry.kind :dir) [(str entry.name "/") :link]]
+            [(= entry.kind :link) [(str entry.name " -> " entry.target) :symlink]]
+            [else entry.name])]
    entry: entry})
 
 (def browser-keys

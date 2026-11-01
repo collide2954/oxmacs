@@ -95,36 +95,36 @@
         [command rest] (words-after (string/slice text 1))
         [word more] (first-word rest)
         here-target (when (not= entry.kind :server) entry.target)]
-    (cond ((= command "join") (client/join! name word))
-      ((= command "part") (if (protocol/channel? word)
+    (cond [(= command "join") (client/join! name word)]
+      [(= command "part") (if (protocol/channel? word)
                             (client/part! name word (when (not= more "") more))
-                            (client/part! name here-target (when (not= rest "") rest))))
-      ((= command "me") (client/act! buffer rest))
-      ((= command "msg") (let [target (client/ensure-buffer! name word (if (protocol/channel? word) :channel :query))]
-                           (client/say! target more)))
-      ((= command "query") (client/ensure-buffer! name word :query :show true))
-      ((= command "notice") (client/send-command! name "NOTICE" [word more]))
-      ((= command "nick") (client/send-command! name "NICK" [word]))
-      ((= command "quit") (client/quit! name (when (not= rest "") rest)))
-      ((= command "reconnect") (client/reconnect! name))
-      ((= command "list") (client/list! name rest))
-      ((= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest])))
-      ((= command "whois") (let [nick (if (and (= word "") (= entry.kind :query)) entry.target word)]
+                            (client/part! name here-target (when (not= rest "") rest)))]
+      [(= command "me") (client/act! buffer rest)]
+      [(= command "msg") (let [target (client/ensure-buffer! name word (if (protocol/channel? word) :channel :query))]
+                           (client/say! target more))]
+      [(= command "query") (client/ensure-buffer! name word :query :show true)]
+      [(= command "notice") (client/send-command! name "NOTICE" [word more])]
+      [(= command "nick") (client/send-command! name "NICK" [word])]
+      [(= command "quit") (client/quit! name (when (not= rest "") rest))]
+      [(= command "reconnect") (client/reconnect! name)]
+      [(= command "list") (client/list! name rest)]
+      [(= command "topic") (client/send-command! name "TOPIC" (if (= rest "") [here-target] [here-target rest]))]
+      [(= command "whois") (let [nick (if (and (= word "") (= entry.kind :query)) entry.target word)]
                              (if (= nick "")
                                (message "Whom? /whois takes a nick")
-                               (client/whois! buffer nick))))
-      ((= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
+                               (client/whois! buffer nick)))]
+      [(= command "names") (client/info! buffer (str (count (client/channel-nicks name here-target)) " people: "
                                                      (string/join " " (sort (map (fn [person] (str person.prefix person.nick))
-                                                                                 (client/channel-nicks name here-target)))))))
-      ((= command "away") (client/send-command! name "AWAY" [(if (= rest "") "Away" rest)]))
-      ((= command "back") (client/send-command! name "AWAY" []))
-      ((= command "invite") (client/send-command! name "INVITE" [word (if (= more "") here-target more)]))
-      ((= command "kick") (client/send-command! name "KICK" (if (= more "") [here-target word] [here-target word more])))
-      ((or (= command "quote") (= command "raw")) (client/send! name rest))
-      ((= command "clear") (client/clear-buffer! buffer))
-      ((= command "noise") (run-command 'irc-toggle-noise))
-      ((= command "help") (client/info! buffer (string/join " " (map (fn [known] (str "/" known)) slash-commands))))
-      (else (client/send! name (string/trim (str (string/upper command) " " rest)))))))
+                                                                                 (client/channel-nicks name here-target))))))]
+      [(= command "away") (client/send-command! name "AWAY" [(if (= rest "") "Away" rest)])]
+      [(= command "back") (client/send-command! name "AWAY" [])]
+      [(= command "invite") (client/send-command! name "INVITE" [word (if (= more "") here-target more)])]
+      [(= command "kick") (client/send-command! name "KICK" (if (= more "") [here-target word] [here-target word more]))]
+      [(or (= command "quote") (= command "raw")) (client/send! name rest)]
+      [(= command "clear") (client/clear-buffer! buffer)]
+      [(= command "noise") (run-command 'irc-toggle-noise)]
+      [(= command "help") (client/info! buffer (string/join " " (map (fn [known] (str "/" known)) slash-commands)))]
+      [else (client/send! name (string/trim (str (string/upper command) " " rest)))])))
 
 (defcommand irc-return "Send the input, or open the link at point"
   (let [buffer (buffer-name)]
@@ -134,16 +134,16 @@
         (run-command 'end-of-buffer))
       (let [entry (here-or-complain)
             text (take-input)]
-        (cond ((string/blank? text) nil)
-          ((contains? (set ["/quit" "/reconnect"]) (string/lower (first (string/words text))))
-           (run-slash! buffer text))
-          ((not (client/connected? entry.network))
-           (message (str "Not connected to " entry.network "; M-x irc connects")))
-          ((and (string/starts-with? text "/") (not (string/starts-with? text "//")))
-           (run-slash! buffer text))
-          ((= entry.kind :server)
-           (message "Messages go to channels and people: /join a channel or /msg someone"))
-          (else (send-text! buffer (if (string/starts-with? text "//") (string/slice text 1) text))))))))
+        (cond [(string/blank? text) nil]
+          [(contains? (set ["/quit" "/reconnect"]) (string/lower (first (string/words text))))
+           (run-slash! buffer text)]
+          [(not (client/connected? entry.network))
+           (message (str "Not connected to " entry.network "; M-x irc connects"))]
+          [(and (string/starts-with? text "/") (not (string/starts-with? text "//")))
+           (run-slash! buffer text)]
+          [(= entry.kind :server)
+           (message "Messages go to channels and people: /join a channel or /msg someone")]
+          [else (send-text! buffer (if (string/starts-with? text "//") (string/slice text 1) text))])))))
 
 (def (word-start text at)
   (let [before (string/slice text 0 at)
@@ -160,15 +160,15 @@
                  ordered))))
 
 (def (completions entry start prefix)
-  (cond ((and (= start 0) (string/starts-with? prefix "/"))
+  (cond [(and (= start 0) (string/starts-with? prefix "/"))
          {found: (vec (filter (fn [command] (string/starts-with? command (string/lower prefix)))
                               (map (fn [command] (str "/" command)) slash-commands)))
-          suffix: " " kind: "command"})
-    ((string/starts-with? prefix "#")
+          suffix: " " kind: "command"}]
+    [(string/starts-with? prefix "#")
      {found: (vec (filter (fn [channel] (string/starts-with? (protocol/casefold channel) (protocol/casefold prefix)))
                           (client/joined-channels entry.network)))
-      suffix: " " kind: "channel"})
-    (else {found: (candidates entry prefix) suffix: (if (= start 0) ": " " ") kind: "nick"})))
+      suffix: " " kind: "channel"}]
+    [else {found: (candidates entry prefix) suffix: (if (= start 0) ": " " ") kind: "nick"}]))
 
 (defcommand irc-complete "Complete the nick, channel or command before point; again for the next one"
   (let [entry (here)
@@ -311,10 +311,10 @@
     (message (str "Fetching " url "…"))
     (let [response (http/get url)
           kind (or (get response.headers :content-type) "")]
-      (cond ((>= response.status 400) (message (str url " answered " response.status)))
-        ((string/starts-with? kind "image/")
-         (message (str "An image, " kind ", " (// (count response.body) 1024) " KB: RET opens it")))
-        (else (message (or (title-of response.body) (str "A page of " kind))))))))
+      (cond [(>= response.status 400) (message (str url " answered " response.status))]
+        [(string/starts-with? kind "image/")
+         (message (str "An image, " kind ", " (// (count response.body) 1024) " KB: RET opens it"))]
+        [else (message (or (title-of response.body) (str "A page of " kind)))]))))
 
 (def (search-places results)
   (vec (map (fn [result]

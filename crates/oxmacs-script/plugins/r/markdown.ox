@@ -39,18 +39,18 @@
                  (let [line (nth lines at)
                        read (grammar/step state.fence line)
                        state (assoc state :fence read.state)]
-                   (cond ((= read.kind :fence-close)
+                   (cond [(= read.kind :fence-close)
                           (-> state
                               (update :blocks conj (assoc state.open :end at))
-                              (assoc :open nil)))
-                     ((= read.kind :fence-open)
+                              (assoc :open nil))]
+                     [(= read.kind :fence-open)
                       (let [hit (regex/find opening line)]
                         (assoc state :open {start: at
                                             language: (when hit (first hit.groups))
-                                            name: (when hit (second hit.groups))})))
-                     ((and (= read.kind :heading) (not (string/blank? read.title)))
-                      (update state :headings conj {line: at level: read.level title: read.title}))
-                     (else state)))))
+                                            name: (when hit (second hit.groups))}))]
+                     [(and (= read.kind :heading) (not (string/blank? read.title)))
+                      (update state :headings conj {line: at level: read.level title: read.title})]
+                     [else state]))))
         done (reduce step {fence: nil open: nil blocks: [] headings: []} (range total))
         blocks (if done.open (conj done.blocks (assoc done.open :end total)) done.blocks)]
     {lines: lines
@@ -61,18 +61,18 @@
   (let [width (string/length text)
         trimmed (string/trim-end text)
         whole (fn [face] (if (= width 0) [] [[0 width face]]))]
-    (cond ((and (= line 0) (= trimmed "---")) {spans: (whole :string) state: :front})
-      ((= state :front)
-       {spans: (whole :string) state: (if (contains? #{"---" "..."} trimmed) nil :front)})
-      (else
+    (cond [(and (= line 0) (= trimmed "---")) {spans: (whole :string) state: :front}]
+      [(= state :front)
+       {spans: (whole :string) state: (if (contains? #{"---" "..."} trimmed) nil :front)}]
+      [else
        (let [read (grammar/step state text)]
-         {spans: (cond ((contains? #{:fence-open :fence-close} read.kind) (whole :keyword))
-                   ((= read.kind :code)
-                    (cond ((regex/matches? option-line text) (whole :attribute))
-                      ((regex/matches? comment-line text) (whole :comment))
-                      (else [])))
-                   (else (style/prose text)))
-          state: read.state})))))
+         {spans: (cond [(contains? #{:fence-open :fence-close} read.kind) (whole :keyword)]
+                   [(= read.kind :code)
+                    (cond [(regex/matches? option-line text) (whole :attribute)]
+                      [(regex/matches? comment-line text) (whole :comment)]
+                      [else []])]
+                   [else (style/prose text)])
+          state: read.state})])))
 
 (def (here) (parse (buffer-text)))
 
@@ -99,9 +99,9 @@
 
 (def (runnable found line)
   (let [chunk (chunk-at found line)]
-    (cond ((not chunk) (message "Not in an R chunk") nil)
-      ((not (r-chunk? chunk)) (message $"This is a {chunk.language} chunk, so R does not run it") nil)
-      (else chunk))))
+    (cond [(not chunk) (message "Not in an R chunk") nil]
+      [(not (r-chunk? chunk)) (message $"This is a {chunk.language} chunk, so R does not run it") nil]
+      [else chunk])))
 
 (def (leading text)
   (- (string/length text) (string/length (string/trim-start text))))
@@ -153,22 +153,22 @@
         [top bottom] (chosen-lines)
         code (in-code? found top)
         kept (marker (point))]
-    (cond ((and (= top bottom) (not (region)) (string/blank? (line-text top)))
+    (cond [(and (= top bottom) (not (region)) (string/blank? (line-text top)))
            (do (set-point (line-end top))
              (if code
                (insert "# ")
-               (do (insert "<!--  -->") (set-point (- (point) 4))))))
-      ((and code (not (region)))
+               (do (insert "<!--  -->") (set-point (- (point) 4)))))]
+      [(and code (not (region)))
        (let [text (line-text top)]
          (if (string/starts-with? (string/trim-start text) "#")
            (set-point (+ (line-start top) (leading text) (if (string/starts-with? (string/trim-start text) "# ") 2 1)))
            (do (set-point (+ (line-start top) (string/length (string/trim-end text))))
              (delete (point) (line-end top))
-             (insert " # ")))))
-      (code
-       (do (toggle-hashes top bottom) (set-point (marker-position kept))))
-      (else
-       (do (toggle-html top bottom) (set-point (marker-position kept)))))))
+             (insert " # "))))]
+      [code
+       (do (toggle-hashes top bottom) (set-point (marker-position kept)))]
+      [else
+       (do (toggle-html top bottom) (set-point (marker-position kept)))])))
 (defcommand r-markdown-run-chunk "Run the R chunk at point"
   (let [found (here)]
     (when-let [chunk (runnable found (current-line))]
@@ -198,16 +198,16 @@
 
 (def (depth text)
   (get (reduce (fn [state character]
-                 (cond (state.comment (if (= character "\n") (assoc state :comment false) state))
-                   (state.escaped (assoc state :escaped false))
-                   (state.quote (cond ((= character "\\") (assoc state :escaped true))
-                                  ((= character state.quote) (assoc state :quote nil))
-                                  (else state)))
-                   ((contains? #{"\"" "'" "`"} character) (assoc state :quote character))
-                   ((= character "#") (assoc state :comment true))
-                   ((contains? #{"(" "[" "{"} character) (update state :depth inc))
-                   ((contains? #{")" "]" "}"} character) (update state :depth dec))
-                   (else state)))
+                 (cond [state.comment (if (= character "\n") (assoc state :comment false) state)]
+                   [state.escaped (assoc state :escaped false)]
+                   [state.quote (cond [(= character "\\") (assoc state :escaped true)]
+                                  [(= character state.quote) (assoc state :quote nil)]
+                                  [else state])]
+                   [(contains? #{"\"" "'" "`"} character) (assoc state :quote character)]
+                   [(= character "#") (assoc state :comment true)]
+                   [(contains? #{"(" "[" "{"} character) (update state :depth inc)]
+                   [(contains? #{")" "]" "}"} character) (update state :depth dec)]
+                   [else state]))
                {depth: 0 quote: nil escaped: false comment: false}
                (map str (string/chars text)))
        :depth))
@@ -306,14 +306,14 @@ cat("oxmacs-rendered\t", normalizePath(out, winslash = "/"), "\n", sep = "")
 
 (def (heard file line)
   (let [[tag value] (string/split (string/trim-end line) "\t" 2)]
-    (cond ((= tag "oxmacs-rendered")
+    (cond [(= tag "oxmacs-rendered")
            (do (swap! rendering disj file)
              (open-externally value)
-             (message $"Rendered {(path/name value)}")))
-      ((= tag "oxmacs-render-failed")
+             (message $"Rendered {(path/name value)}"))]
+      [(= tag "oxmacs-render-failed")
        (do (swap! rendering disj file)
-         (message $"Rendering failed: {value}")))
-      (else nil))))
+         (message $"Rendering failed: {value}"))]
+      [else nil])))
 
 (def (render-with file program args)
   "Renders file by running program with args as a background job, opening the file it reports it made."

@@ -16,10 +16,10 @@
   "message as one line of a log."
   (let [nick (or message.nick "")
         text (string/replace (or message.text "") "\n" " ")
-        said (cond ((= message.kind :privmsg) (str "<" nick "> " text))
-               ((= message.kind :action) (str "* " nick " " text))
-               ((= message.kind :notice) (str "-" nick "- " text))
-               (else (str "*** " text)))]
+        said (cond [(= message.kind :privmsg) (str "<" nick "> " text)]
+               [(= message.kind :action) (str "* " nick " " text)]
+               [(= message.kind :notice) (str "-" nick "- " text)]
+               [else (str "*** " text)])]
     (str (time/format message.time "%H:%M:%S") " " said)))
 
 (def (append! network target message)

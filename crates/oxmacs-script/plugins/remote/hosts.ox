@@ -17,14 +17,14 @@
                      key (string/lower (or (first words) ""))
                      value (second words)
                      set-field (fn [field] (vec (map (fn [host] (if (contains? (set current) host.name) (assoc host field value) host)) hosts)))]
-                 (cond ((= key "host")
+                 (cond [(= key "host")
                         (let [names (vec (remove wildcard? (rest words)))]
-                          [(into hosts (map (fn [found] {name: found protocol: :ssh from: "~/.ssh/config"}) names)) names]))
-                   ((= key "match") [hosts []])
-                   ((and value (= key "hostname")) [(set-field :address) current])
-                   ((and value (= key "user")) [(set-field :user) current])
-                   ((and value (= key "port")) [(set-field :port) current])
-                   (else [hosts current]))))]
+                          [(into hosts (map (fn [found] {name: found protocol: :ssh from: "~/.ssh/config"}) names)) names])]
+                   [(= key "match") [hosts []]]
+                   [(and value (= key "hostname")) [(set-field :address) current]]
+                   [(and value (= key "user")) [(set-field :user) current]]
+                   [(and value (= key "port")) [(set-field :port) current]]
+                   [else [hosts current]])))]
     (first (reduce step [[] []] (string/lines text)))))
 
 (def (ssh-hosts)

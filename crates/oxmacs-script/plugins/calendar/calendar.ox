@@ -37,11 +37,11 @@
 (def (span-text occurrence day)
   (let [starts (day-start day)
         ends (day-start (inc day))]
-    (cond (occurrence.all-day "all day    ")
-      ((and (< occurrence.start starts) (> occurrence.end ends)) "all day    ")
-      ((< occurrence.start starts) (str "…–" (clock occurrence.end) "    "))
-      ((> occurrence.end ends) (str (clock occurrence.start) "–…    "))
-      (else (str (clock occurrence.start) "–" (clock occurrence.end))))))
+    (cond [occurrence.all-day "all day    "]
+      [(and (< occurrence.start starts) (> occurrence.end ends)) "all day    "]
+      [(< occurrence.start starts) (str "…–" (clock occurrence.end) "    ")]
+      [(> occurrence.end ends) (str (clock occurrence.start) "–…    ")]
+      [else (str (clock occurrence.start) "–" (clock occurrence.end))])))
 
 (def (event-line occurrence day)
   {line: ["  " [(span-text occurrence day) :comment] "  "
@@ -99,9 +99,9 @@
   (when (buffer-exists? week-buffer) (draw-week!)))
 
 (def (occurrence-here)
-  (cond ((= (buffer-name) agenda-buffer) (get (line-item) :occurrence))
-    ((= (buffer-name) event-buffer) (get @view :shown))
-    (else nil)))
+  (cond [(= (buffer-name) agenda-buffer) (get (line-item) :occurrence)]
+    [(= (buffer-name) event-buffer) (get @view :shown)]
+    [else nil]))
 
 (defcommand calendar "Show the calendar's agenda"
   (store/load!)
@@ -154,9 +154,9 @@
                         (field "Calendar" [occurrence.calendar (calendar-face occurrence.calendar)])
                         (when occurrence.rrule (field "Repeats" (repeat-text occurrence.rrule)))
                         (field "Reminder" (let [alarm (first (or occurrence.alarms []))]
-                                            (cond ((nil? alarm) (str (reminders/default-minutes) " minutes before, by default"))
-                                              (alarm.before (str (// alarm.before 60000) " minutes before"))
-                                              (else (time/format alarm.at "%-d %B %H:%M")))))
+                                            (cond [(nil? alarm) (str (reminders/default-minutes) " minutes before, by default")]
+                                              [alarm.before (str (// alarm.before 60000) " minutes before")]
+                                              [else (time/format alarm.at "%-d %B %H:%M")])))
                         (when occurrence.organizer (field "Organizer" (or occurrence.organizer.name occurrence.organizer.email)))
                         (when (not (empty? (or occurrence.attendees []))) (field "Guests" ""))]
                        (map attendee-line (or occurrence.attendees []))
@@ -241,16 +241,16 @@
   (let [occurrence (target)
         master occurrence.event
         what (prompt "Change: " :choices ["title" "time" "date" "place" "repeats" "reminder" "notes"])
-        changed (cond ((= what "title") (assoc master :summary (string/trim (ask "Title: " :initial master.summary))))
-                  ((= what "place") (assoc master :location (let [place (string/trim (ask "Where: " :initial (or master.location "")))] (when (not= place "") place))))
-                  ((= what "notes") (assoc master :description (ask "Notes: " :initial (or master.description ""))))
-                  ((= what "repeats") (assoc master :rrule (get repeats (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"]))))
-                  ((= what "reminder") (assoc master :alarms [{before: (time/minutes (or (string/to-number (ask "Minutes before: " :initial (str (default-reminder)))) (default-reminder)))}]))
-                  ((= what "date")
+        changed (cond [(= what "title") (assoc master :summary (string/trim (ask "Title: " :initial master.summary)))]
+                  [(= what "place") (assoc master :location (let [place (string/trim (ask "Where: " :initial (or master.location "")))] (when (not= place "") place)))]
+                  [(= what "notes") (assoc master :description (ask "Notes: " :initial (or master.description "")))]
+                  [(= what "repeats") (assoc master :rrule (get repeats (prompt "Repeats: " :choices ["never" "daily" "weekdays" "weekly" "monthly" "yearly"])))]
+                  [(= what "reminder") (assoc master :alarms [{before: (time/minutes (or (string/to-number (ask "Minutes before: " :initial (str (default-reminder)))) (default-reminder)))}])]
+                  [(= what "date")
                    (let [day (ask-date "Date: " (day-of master.start))
                          moved (- (day-start day) (day-start (day-of master.start)))]
-                     (merge master {start: (+ master.start moved) end: (+ master.end moved)})))
-                  (else (merge master (timing (day-of master.start) master))))]
+                     (merge master {start: (+ master.start moved) end: (+ master.end moved)}))]
+                  [else (merge master (timing (day-of master.start) master))])]
     (store/save-event! changed)
     (redraw!)
     (when (= (buffer-name) event-buffer)
@@ -338,10 +338,10 @@
                      (let [days (range (+ start (* week 7)) (+ start (* week 7) 7))
                            numbers (vec (map (fn [day]
                                                (let [date (time/date-of day)
-                                                     face (cond ((= day selected) :keyword)
-                                                            ((= day (today)) :success)
-                                                            ((not= date.month shown.month) :comment)
-                                                            (else :heading))]
+                                                     face (cond [(= day selected) :keyword]
+                                                            [(= day (today)) :success]
+                                                            [(not= date.month shown.month) :comment]
+                                                            [else :heading])]
                                                  (if (= day selected)
                                                    [(string/pad-end (str "[" date.day "]") width) face :pill]
                                                    (cell (str " " date.day) face))))
@@ -349,12 +349,12 @@
                            entry (fn [row]
                                    (vec (map (fn [day]
                                                (let [here (vec (on-day day))]
-                                                 (cond ((and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment))
-                                                   ((< row (count here))
+                                                 (cond [(and (= row 2) (> (count here) 3)) (cell (str " +" (- (count here) 2) " more") :comment)]
+                                                   [(< row (count here))
                                                     (let [found (nth here row)]
                                                       (cell (str " " (if found.all-day "" (str (clock (max found.start (day-start day))) " ")) found.summary)
-                                                            (calendar-face found.calendar))))
-                                                   (else (cell "" nil)))))
+                                                            (calendar-face found.calendar)))]
+                                                   [else (cell "" nil)])))
                                              days)))]
                        (vec (concat [numbers] (map entry (range 3)) [""]))))]
     (set-lines month-buffer (vec (mapcat week-lines (range 6))))

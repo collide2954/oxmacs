@@ -16,9 +16,9 @@
   "The folder holding dir, which is itself for /."
   (let [trimmed (if (and (> (count dir) 1) (string/ends-with? dir "/")) (string/slice dir 0 (dec (count dir))) dir)
         back (string/index-of (string/reverse trimmed) "/")]
-    (cond ((nil? back) "/")
-      (else (let [at (- (count trimmed) 1 back)]
-              (if (= at 0) "/" (string/slice trimmed 0 at)))))))
+    (cond [(nil? back) "/"]
+      [else (let [at (- (count trimmed) 1 back)]
+              (if (= at 0) "/" (string/slice trimmed 0 at)))])))
 
 (def (entry-of line)
   (when-let [match (regex/find listing-pattern line)]
@@ -29,7 +29,7 @@
       (when (and (not= shown ".") (not= shown ".."))
         {name: shown
          dir: (= kind "d")
-         kind: (cond ((= kind "d") :dir) (link :link) (else :file))
+         kind: (cond [(= kind "d") :dir] [link :link] [else :file])
          mode: (str kind mode)
          size: (string/to-number size)
          date: date
@@ -91,25 +91,25 @@
 (def (home host)
   "The folder a host starts in."
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) "/")
-      ((= protocol :sftp)
+    (cond [(= protocol :ftp) "/"]
+      [(= protocol :sftp)
        (let [found (sftp host ["pwd"])]
          (or (some (fn [line] (when-let [match (regex/find "^Remote working directory: (.*)$" line)] (first match.groups)))
                    (string/lines found.stdout))
-             "/")))
-      (else (or (first (get (checked (shell/run! host "pwd") "pwd") :lines)) "/")))))
+             "/"))]
+      [else (or (first (get (checked (shell/run! host "pwd") "pwd") :lines)) "/")])))
 
 (def (list-dir host dir)
   "The entries of dir on host."
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp)
-           (parse-listing (string/lines (get (curl host (if (string/ends-with? dir "/") dir (str dir "/")) []) :stdout))))
-      ((= protocol :sftp)
-       (parse-listing (string/lines (get (sftp host [(str "ls -ln " (sftp-word dir))]) :stdout))))
-      (else
+    (cond [(= protocol :ftp)
+           (parse-listing (string/lines (get (curl host (if (string/ends-with? dir "/") dir (str dir "/")) []) :stdout)))]
+      [(= protocol :sftp)
+       (parse-listing (string/lines (get (sftp host [(str "ls -ln " (sftp-word dir))]) :stdout)))]
+      [else
        (parse-listing (get (checked (shell/run! host (str "cd -- " (shell/quoted dir) " && (ls -lAn --time-style=long-iso 2>/dev/null || ls -lAn)"))
                                     (str "Couldn't list " dir))
-                           :lines))))))
+                           :lines))])))
 
 (def (base64-of host remote on-line)
   (get (checked (shell/run! host (str "base64 < " (shell/quoted remote)) :on-line on-line) (str "Couldn't read " remote)) :lines))
@@ -117,23 +117,23 @@
 (def (read-text host remote)
   "The text of the file remote on host."
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) (get (curl host remote []) :stdout))
-      ((= protocol :sftp)
+    (cond [(= protocol :ftp) (get (curl host remote []) :stdout)]
+      [(= protocol :sftp)
        (let [local (transfer-file)]
          (file/make-dir (path/parent local))
          (try (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])
            (file/read local)
            (finally (when (file/exists? local)
-                      (file/remove local))))))
-      (else (crypto/from-base64 (string/join "" (base64-of host remote nil)))))))
+                      (file/remove local)))))]
+      [else (crypto/from-base64 (string/join "" (base64-of host remote nil)))])))
 
 (def (download! host remote local {size nil on-progress nil})
   "Copies the file remote on host to local, calling on-progress with the share copied so far."
   (let [protocol (hosts/protocol-of host)]
     (file/make-dir (path/parent local))
-    (cond ((= protocol :ftp) (curl host remote ["-o" local]))
-      ((= protocol :sftp) (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))]))
-      (else
+    (cond [(= protocol :ftp) (curl host remote ["-o" local])]
+      [(= protocol :sftp) (sftp host [(str "get " (sftp-word remote) " " (sftp-word local))])]
+      [else
        (let [expected (max 1 (* 4 (/ (or size 0) 3)))
              seen (atom 0)
              lines (base64-of host remote
@@ -143,7 +143,7 @@
                                   (when (and on-progress size (> size 65536)
                                              (not= (// (* 10 before) expected) (// (* 10 now) expected)))
                                     (on-progress (min 1 (/ now expected)))))))]
-         (file/write-base64 local (string/join "" lines)))))
+         (file/write-base64 local (string/join "" lines)))])
     local))
 
 (def (chunks text size)
@@ -154,34 +154,34 @@
 (def (upload! host local remote)
   "Copies the file local to remote on host."
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) (curl host remote ["-T" local]))
-      ((= protocol :sftp) (sftp host [(str "put " (sftp-word local) " " (sftp-word remote))]))
-      (else
+    (cond [(= protocol :ftp) (curl host remote ["-T" local])]
+      [(= protocol :sftp) (sftp host [(str "put " (sftp-word local) " " (sftp-word remote))])]
+      [else
        (let [encoded (file/read-base64 local)
              end (str "__OX_END_" (crypto/random 4) "__")]
          (checked (shell/run! host (str "if printf '' | base64 -d >/dev/null 2>&1; then D='base64 -d'; else D='base64 -D'; fi; $D > "
                                         (shell/quoted remote) " <<'" end "'\n" (string/join "\n" (chunks encoded 76)) "\n" end))
-                  (str "Couldn't write " remote)))))
+                  (str "Couldn't write " remote)))])
     remote))
 
 (def (remove! host remote folder)
   "Deletes remote on host, and what is in it when it is a folder."
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) (curl host "/" ["-Q" (str (if folder "RMD " "DELE ") remote)]))
-      ((= protocol :sftp) (sftp host [(str (if folder "rmdir " "rm ") (sftp-word remote))]))
-      (else (checked (shell/run! host (str "rm -r -- " (shell/quoted remote))) (str "Couldn't delete " remote))))))
+    (cond [(= protocol :ftp) (curl host "/" ["-Q" (str (if folder "RMD " "DELE ") remote)])]
+      [(= protocol :sftp) (sftp host [(str (if folder "rmdir " "rm ") (sftp-word remote))])]
+      [else (checked (shell/run! host (str "rm -r -- " (shell/quoted remote))) (str "Couldn't delete " remote))])))
 
 (def (rename! host from to)
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) (curl host "/" ["-Q" (str "RNFR " from) "-Q" (str "RNTO " to)]))
-      ((= protocol :sftp) (sftp host [(str "rename " (sftp-word from) " " (sftp-word to))]))
-      (else (checked (shell/run! host (str "mv -- " (shell/quoted from) " " (shell/quoted to))) (str "Couldn't rename " from))))))
+    (cond [(= protocol :ftp) (curl host "/" ["-Q" (str "RNFR " from) "-Q" (str "RNTO " to)])]
+      [(= protocol :sftp) (sftp host [(str "rename " (sftp-word from) " " (sftp-word to))])]
+      [else (checked (shell/run! host (str "mv -- " (shell/quoted from) " " (shell/quoted to))) (str "Couldn't rename " from))])))
 
 (def (make-dir! host remote)
   (let [protocol (hosts/protocol-of host)]
-    (cond ((= protocol :ftp) (curl host "/" ["-Q" (str "MKD " remote)]))
-      ((= protocol :sftp) (sftp host [(str "mkdir " (sftp-word remote))]))
-      (else (checked (shell/run! host (str "mkdir -p -- " (shell/quoted remote))) (str "Couldn't make " remote))))))
+    (cond [(= protocol :ftp) (curl host "/" ["-Q" (str "MKD " remote)])]
+      [(= protocol :sftp) (sftp host [(str "mkdir " (sftp-word remote))])]
+      [else (checked (shell/run! host (str "mkdir -p -- " (shell/quoted remote))) (str "Couldn't make " remote))])))
 
 (def (run host dir command)
   "Runs command in dir on host in a shell of its own, returning its :status and :lines."

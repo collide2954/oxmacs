@@ -75,9 +75,9 @@
     ["--no-save" "--no-restore" "--quiet" "--interactive" "--no-readline"]))
 
 (def (first-existing paths)
-  (cond ((empty? paths) nil)
-    ((file/exists? (first paths)) (first paths))
-    (else (first-existing (rest paths)))))
+  (cond [(empty? paths) nil]
+    [(file/exists? (first paths)) (first paths)]
+    [else (first-existing (rest paths))]))
 
 (def (binary home)
   (let [bin (path/join home "bin")]
@@ -117,10 +117,10 @@
             (if (= (process/os) :macos) ["/Library/Frameworks/R.framework/Resources"] []))))
 
 (def (locate configured sources)
-  (cond (configured (if (file/exists? configured) configured ((get sources :which) configured)))
-    (else (or ((get sources :which) (if (windows?) "Rterm" "R"))
+  (cond [configured (if (file/exists? configured) configured ((get sources :which) configured))]
+    [else (or ((get sources :which) (if (windows?) "Rterm" "R"))
               (when-let [home ((get sources :home))] (binary home))
-              (newest ((get sources :installs)))))))
+              (newest ((get sources :installs))))]))
 
 (def (find-r)
   (locate (setting :program)

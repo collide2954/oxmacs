@@ -33,10 +33,10 @@
     (every (setting :speed)
            (fn []
              (let [now @world]
-               (cond ((not= now.run run) :stop)
-                 ((not (buffer-shown? buffer)) (do (swap! world assoc :running false) :stop))
-                 (now.running (do (advance!) nil))
-                 (else nil)))))))
+               (cond [(not= now.run run) :stop]
+                 [(not (buffer-shown? buffer)) (do (swap! world assoc :running false) :stop)]
+                 [now.running (do (advance!) nil)]
+                 [else nil]))))))
 
 (defcommand life "Watch Conway's Game of Life"
   (restart!)

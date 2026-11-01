@@ -70,12 +70,12 @@
         answer (prompt $"{key}: " :initial (if (nil? now) "" (str now)))
         trimmed (string/trim answer)
         whole (= entry.kind :integer)]
-    (cond ((and (= trimmed "") (or entry.unset entry.owner)) (change entry nil))
-      ((= entry.kind :text) (change entry answer))
-      (else
+    (cond [(and (= trimmed "") (or entry.unset entry.owner)) (change entry nil)]
+      [(= entry.kind :text) (change entry answer)]
+      [else
        (if-let [number (string/to-number trimmed)]
          (change entry number)
-         (message (str key " needs " (if whole "a whole number" "a number"))))))))
+         (message (str key " needs " (if whole "a whole number" "a number"))))])))
 
 (defcommand customize "Change settings in a form"
   (let [fresh (not (buffer-exists? buffer))]
@@ -93,23 +93,23 @@
 (defcommand customize-change "Change the setting on this line"
   (if-let [row (row-here)]
     (let [entry (entry-of row)]
-      (cond ((= entry.kind :toggle) (change entry (not (form/effective entry))))
-        ((= entry.kind :choice) (change entry (next-choice entry)))
-        ((= entry.kind :theme) (run-command 'load-theme))
-        ((form/structured? entry) (message $"Change {(name entry.key)} in init.ox with settings"))
-        (else (ask entry))))
+      (cond [(= entry.kind :toggle) (change entry (not (form/effective entry)))]
+        [(= entry.kind :choice) (change entry (next-choice entry))]
+        [(= entry.kind :theme) (run-command 'load-theme)]
+        [(form/structured? entry) (message $"Change {(name entry.key)} in init.ox with settings")]
+        [else (ask entry)]))
     (message "No setting here")))
 
 (defcommand customize-save "Write the changed settings to custom.ox"
   (let [all (current-entries)
         file (custom-file)]
-    (cond ((nil? file) (message "There is no oxmacs home folder to save custom.ox in"))
-      ((not (some :changed all)) (message "(No changes need to be saved)"))
-      (else
+    (cond [(nil? file) (message "There is no oxmacs home folder to save custom.ox in")]
+      [(not (some :changed all)) (message "(No changes need to be saved)")]
+      [else
        (file/make-dir (path/parent file))
        (file/write file (written/text all))
        (reload-init)
-       (message $"Wrote {(path/abbreviate file)}")))))
+       (message $"Wrote {(path/abbreviate file)}")])))
 
 (defcommand customize-revert "Put back the settings custom.ox and init.ox give"
   (reload-init))

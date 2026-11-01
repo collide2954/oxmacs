@@ -13,12 +13,12 @@
 
 (def (assigns? text name equals)
   (let [trimmed (string/trim-start text)
-        after (cond ((string/starts-with? trimmed $"`{name}`")
-                     (string/slice trimmed (+ (string/length name) 2)))
-                ((and (string/starts-with? trimmed name)
+        after (cond [(string/starts-with? trimmed $"`{name}`")
+                     (string/slice trimmed (+ (string/length name) 2))]
+                [(and (string/starts-with? trimmed name)
                       (not (regex/matches? #"^[\p{L}\p{N}._]" (string/slice trimmed (string/length name)))))
-                 (string/slice trimmed (string/length name)))
-                (else nil))]
+                 (string/slice trimmed (string/length name))]
+                [else nil])]
     (when after
       (let [after (string/trim-start after)]
         (or (string/starts-with? after "<-")
@@ -45,14 +45,14 @@
   (if (or (>= at (count entries)) (>= (count found) most-files))
     found
     (let [entry (nth entries at)
-          found (cond (entry.dir
+          found (cond [entry.dir
                        (if (and (< depth deepest)
                                 (not (string/starts-with? entry.name "."))
                                 (not (contains? skipped entry.name)))
                          (walk (listing entry.path) 0 (+ depth 1) found)
-                         found))
-                  ((r-file? entry.name) (conj found entry.path))
-                  (else found))]
+                         found)]
+                  [(r-file? entry.name) (conj found entry.path)]
+                  [else found])]
       (walk entries (+ at 1) depth found))))
 
 (def (first-definition files name at)
@@ -88,16 +88,16 @@
   (if-let [name (help/symbol-in (or (line-text (current-line)) "") (current-column))]
     (let [origin [(buffer-name) (point)]
           running (session/current-session)]
-      (cond ((in-buffers name origin) true)
-        ((in-project name origin) true)
-        ((and (session/running? running) (console-waiting? running))
+      (cond [(in-buffers name origin) true]
+        [(in-project name origin) true]
+        [(and (session/running? running) (console-waiting? running))
          (reset! asked {name: name origin: origin})
          (session/request running $"getOption(\"oxmacs\")$definition({(session/r-string name)})")
-         true)
-        ((language/ready?) nil)
-        (else (message $"No definition of {name} in open R buffers or the project") true)))
-    (cond ((language/ready?) nil)
-      (else (message "No symbol at point") true))))
+         true]
+        [(language/ready?) nil]
+        [else (message $"No definition of {name} in open R buffers or the project") true]))
+    (cond [(language/ready?) nil]
+      [else (message "No symbol at point") true])))
 
 (def (answered _ payload)
   (when-let [question @asked]
@@ -107,13 +107,13 @@
           kind (get fields 1)
           place (or (get fields 2) "")]
       (when (= name question.name)
-        (cond ((= kind "file")
+        (cond [(= kind "file")
                (let [pieces (string/split place "\t")
                      path (if (> (count pieces) 1) (string/join "\t" (pop pieces)) place)
                      at (if (> (count pieces) 1) (or (string/to-number (last pieces)) 1) 1)]
                  (unless (visit path (- at 1) question.origin)
-                   (message $"Cannot open {path}"))))
-          ((= kind "source")
+                   (message $"Cannot open {path}")))]
+          [(= kind "source")
            (apply remember-location question.origin)
-           (show-text $"*R source: {name}*" place :mode "R" :read-only true))
-          (else (message $"No definition of {name} found")))))))
+           (show-text $"*R source: {name}*" place :mode "R" :read-only true)]
+          [else (message $"No definition of {name} found")])))))

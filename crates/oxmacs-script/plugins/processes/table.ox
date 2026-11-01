@@ -25,9 +25,9 @@
         hours (// seconds 3600)
         minutes (mod (// seconds 60) 60)
         left (mod seconds 60)]
-    (cond ((> hours 0) (str hours "h " (two minutes) "m"))
-      ((> minutes 0) (str minutes "m " (two left) "s"))
-      (else (str left "s")))))
+    (cond [(> hours 0) (str hours "h " (two minutes) "m")]
+      [(> minutes 0) (str minutes "m " (two left) "s")]
+      [else (str left "s")])))
 
 (def (recent samples n) (drop (max 0 (- (count samples) n)) samples))
 
@@ -39,14 +39,14 @@
 (def (live? p) (not (contains? #{:exited :failed} p.status)))
 
 (def (status-text p)
-  (cond ((= p.status :exited) (if (and p.exit (not= p.exit 0)) (str "exit " p.exit) "exited"))
-    (else (name p.status))))
+  (cond [(= p.status :exited) (if (and p.exit (not= p.exit 0)) (str "exit " p.exit) "exited")]
+    [else (name p.status)]))
 
 (def (status-face p)
-  (cond ((= p.status :running) :success)
-    ((contains? #{:starting :stopping} p.status) :warning)
-    ((= (status-text p) "exited") :comment)
-    (else :error)))
+  (cond [(= p.status :running) :success]
+    [(contains? #{:starting :stopping} p.status) :warning]
+    [(= (status-text p) "exited") :comment]
+    [else :error]))
 
 (def (command-line p) (string/join " " (concat [p.program] p.args)))
 
@@ -81,12 +81,12 @@
    columns (get widths :details) dropped))
 
 (def (sort-key p now sorting)
-  (cond ((= sorting :time) (- (or p.ended now) p.started))
-    ((= sorting :cpu) (or (last p.cpu) 0))
-    ((= sorting :memory) (or (last p.memory) 0))
-    ((= sorting :pid) (or p.pid 0))
-    ((= sorting :status) (status-text p))
-    (else (get p sorting))))
+  (cond [(= sorting :time) (- (or p.ended now) p.started)]
+    [(= sorting :cpu) (or (last p.cpu) 0)]
+    [(= sorting :memory) (or (last p.memory) 0)]
+    [(= sorting :pid) (or p.pid 0)]
+    [(= sorting :status) (status-text p)]
+    [else (get p sorting)]))
 
 (def (matching processes query)
   (if (string/blank? query)
@@ -102,17 +102,17 @@
     (if options.descending (reverse sorted) sorted)))
 
 (def (aligned column text width)
-  (cond ((= column :details) (string/truncate text width))
-    ((contains? right column) (string/pad-start text width))
-    (else (string/pad-end text width))))
+  (cond [(= column :details) (string/truncate text width)]
+    [(contains? right column) (string/pad-start text width)]
+    [else (string/pad-end text width)]))
 
 (def (face-of column p)
-  (cond ((not (live? p)) (if (= column :status) (status-face p) :comment))
-    ((= column :name) :link)
-    ((= column :status) (status-face p))
-    ((= column :history) :constant)
-    ((= column :details) :comment)
-    (else nil)))
+  (cond [(not (live? p)) (if (= column :status) (status-face p) :comment)]
+    [(= column :name) :link]
+    [(= column :status) (status-face p)]
+    [(= column :history) :constant]
+    [(= column :details) :comment]
+    [else nil]))
 
 (def (laid-out shown widths details texts faces)
   (vec (map (fn [i]

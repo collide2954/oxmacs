@@ -271,9 +271,9 @@
     (if-let [column (column-here view)]
       (let [name (get view.table.names column)
             now (current-view view)
-            next (cond ((not= now.sort name) (assoc now :sort name :decreasing false))
-                   ((not now.decreasing) (assoc now :decreasing true))
-                   (else (assoc now :sort "" :decreasing false)))]
+            next (cond [(not= now.sort name) (assoc now :sort name :decreasing false)]
+                   [(not now.decreasing) (assoc now :decreasing true)]
+                   [else (assoc now :sort "" :decreasing false)])]
         (ask-table view.session view.object (assoc next :offset 0)))
       (message "No column here"))))
 
@@ -286,9 +286,9 @@
   (when-let [view (table-here)]
     (let [offset view.table.offset
           next (if forward (+ offset view-rows) (- offset view-rows))]
-      (cond ((< next 0) (message "This is the first page"))
-        ((>= next view.table.rows) (message "This is the last page"))
-        (else (ask-table view.session view.object (assoc (current-view view) :offset next)))))))
+      (cond [(< next 0) (message "This is the first page")]
+        [(>= next view.table.rows) (message "This is the last page")]
+        [else (ask-table view.session view.object (assoc (current-view view) :offset next))]))))
 
 (defcommand r-table-next-page "Show the next thousand rows of the table" (turn-page true))
 
@@ -314,9 +314,9 @@
 (defcommand r-peek "Show the structure of the R object at point in the echo area"
   (let [running (session/current-session)
         name (help/symbol-at-point)]
-    (cond ((not (session/running? running)) (message "Start R with C-c C-z to look at its objects"))
-      ((not name) (message "No R name at point"))
-      (else (session/request running $"getOption(\"oxmacs\")$peek({(session/r-string name)})")))))
+    (cond [(not (session/running? running)) (message "Start R with C-c C-z to look at its objects")]
+      [(not name) (message "No R name at point")]
+      [else (session/request running $"getOption(\"oxmacs\")$peek({(session/r-string name)})")])))
 
 (def (peeked _ payload)
   (let [[name text] (string/split payload "\n" 2)]

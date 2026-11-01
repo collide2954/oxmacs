@@ -41,9 +41,9 @@
 
 (def (gpg-files folder)
   (mapcat (fn [entry]
-            (cond (entry.dir (if (string/starts-with? entry.name ".") [] (gpg-files entry.path)))
-              ((string/ends-with? entry.name ".gpg") [entry.path])
-              (else [])))
+            (cond [entry.dir (if (string/starts-with? entry.name ".") [] (gpg-files entry.path))]
+              [(string/ends-with? entry.name ".gpg") [entry.path]]
+              [else []]))
           (file/list folder)))
 
 (def (labeled lines prefixes)

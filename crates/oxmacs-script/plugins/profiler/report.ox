@@ -14,9 +14,9 @@
   (if row.file (str (path/name row.file) ":" row.line) ""))
 
 (def (face kind)
-  (cond ((= kind :plugin) :heading)
-    ((= kind :native) :constant)
-    (else :function)))
+  (cond [(= kind :plugin) :heading]
+    [(= kind :native) :constant]
+    [else :function]))
 
 (def (columns label kind first second calls row)
   [[(string/pad-end label 44) (face kind)]
@@ -50,7 +50,7 @@
    (fn [branch]
      (let [here (conj path branch.name)
            open (not (contains? folded here))
-           marker (cond ((empty? branch.children) "  ") (open "▾ ") (else "▸ "))
+           marker (cond [(empty? branch.children) "  "] [open "▾ "] [else "▸ "])
            calls (if (= branch.kind :plugin) "" (str branch.calls))
            line (columns (str (string/repeat "  " depth) marker branch.name) branch.kind
                          (percent branch.total-share) (percent branch.self-share) calls branch)]

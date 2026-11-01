@@ -91,15 +91,15 @@
 
 (def (render name)
   (let [plots (plots-of name)]
-    (cond ((not plots) (ui/text ""))
-      (plots.gallery (grid name plots))
-      (plots.shown
+    (cond [(not plots) (ui/text "")]
+      [plots.gallery (grid name plots)]
+      [plots.shown
        (let [picture (shown-image plots)
              counter (ui/row (ui/space) (ui/text $"{plots.shown.index} / {plots.shown.count}" :face :comment))]
          (if picture
            (ui/column counter (ui/image picture :width plots.shown.width :height plots.shown.height))
-           counter)))
-      (else (ui/text (if plots.gone "This plot is no longer in R's history" "No plots") :face :comment)))))
+           counter))]
+      [else (ui/text (if plots.gone "This plot is no longer in R's history" "No plots") :face :comment)])))
 
 (def plot-keys
   {"n" 'r-plot-next "<right>" 'r-plot-next "p" 'r-plot-previous "<left>" 'r-plot-previous
@@ -129,9 +129,9 @@
       (let [pinned (find (fn [other] (let [plots (plots-of other)]
                                        (and (= plots.session session) plots.pinned (buffer-shown? other))))
                          (alive))]
-        (cond (pinned (display-buffer name :right-of pinned))
-          ((buffer-shown? session) (display-buffer name :below session))
-          (else (display-buffer name)))))
+        (cond [pinned (display-buffer name :right-of pinned)]
+          [(buffer-shown? session) (display-buffer name :below session)]
+          [else (display-buffer name)])))
     name))
 
 (def (parse payload)
@@ -164,14 +164,14 @@
     (change! name assoc :shown nil :asked nil :gone true)))
 
 (def (arrived session payload)
-  (cond ((= payload "none") (emptied session))
-    ((string/starts-with? payload "gone\t")
-     (gone session (string/to-number (string/slice payload 5))))
-    (else
+  (cond [(= payload "none") (emptied session)]
+    [(string/starts-with? payload "gone\t")
+     (gone session (string/to-number (string/slice payload 5)))]
+    [else
      (when-let [arrival (parse payload)]
        (if (= arrival.why "pinned")
          (when-let [name (pinned-of session arrival.id)] (settle name arrival))
-         (settle (place session) arrival))))))
+         (settle (place session) arrival)))]))
 
 (def (thumbnails session payload)
   (when-let [name (unpinned-of session)]
@@ -274,9 +274,9 @@
   (when-let [name (here)]
     (unless (refused name)
       (let [plots (plots-of name)]
-        (cond (plots.gallery (change! name dissoc :gallery))
-          ((not plots.shown) (message "No plots"))
-          (else
+        (cond [plots.gallery (change! name dissoc :gallery)]
+          [(not plots.shown) (message "No plots")]
+          [else
            (let [total plots.shown.count
                  across (columns total)
                  down (// (+ total across -1) across)
@@ -284,7 +284,7 @@
                  tile [(// width (max across 1)) (// height (max down 1))]]
              (change! name assoc :tile tile)
              (session/request plots.session
-                              $"getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))))))))
+                              $"getOption(\"oxmacs\")$plot_gallery({(first tile)}L, {(second tile)}L)"))])))))
 
 (defcommand r-plot-pin "Keep the shown R plot in its own window"
   (when-let [name (here)]

@@ -43,39 +43,39 @@
   (let [first-day (time/day-number {year: year month: month day: 1})
         total (time/days-in-month year month)
         all (range first-day (+ first-day total))]
-    (cond (spec.byday
+    (cond [spec.byday
            (vec (sort (mapcat (fn [wanted]
                                 (let [matching (vec (filter (fn [days] (= (time/weekday-number days) wanted.weekday)) all))]
-                                  (cond ((nil? wanted.nth) matching)
-                                    ((> wanted.nth 0) (if (<= wanted.nth (count matching)) [(nth matching (dec wanted.nth))] []))
-                                    (else (let [at (+ (count matching) wanted.nth)]
-                                            (if (>= at 0) [(nth matching at)] []))))))
-                              spec.byday))))
-      (spec.bymonthday
+                                  (cond [(nil? wanted.nth) matching]
+                                    [(> wanted.nth 0) (if (<= wanted.nth (count matching)) [(nth matching (dec wanted.nth))] [])]
+                                    [else (let [at (+ (count matching) wanted.nth)]
+                                            (if (>= at 0) [(nth matching at)] []))])))
+                              spec.byday)))]
+      [spec.bymonthday
        (vec (sort (keep (fn [day]
                           (let [day (if (< day 0) (+ total day 1) day)]
                             (when (and (>= day 1) (<= day total)) (+ first-day (dec day)))))
-                        spec.bymonthday))))
-      ((<= spec.day total) [(+ first-day (dec spec.day))])
-      (else []))))
+                        spec.bymonthday)))]
+      [(<= spec.day total) [(+ first-day (dec spec.day))]]
+      [else []])))
 
 (def (period spec base k)
   (let [step (* k spec.interval)
         start-date (time/date-of base)]
-    (cond ((= spec.freq "DAILY") [(+ base step)])
-      ((= spec.freq "WEEKLY")
+    (cond [(= spec.freq "DAILY") [(+ base step)]]
+      [(= spec.freq "WEEKLY")
        (let [week (+ (- base (time/weekday-number base)) (* 7 step))]
          (if spec.byday
            (vec (sort (map (fn [wanted] (+ week wanted.weekday)) spec.byday)))
-           [(+ base (* 7 step))])))
-      ((= spec.freq "MONTHLY")
+           [(+ base (* 7 step))]))]
+      [(= spec.freq "MONTHLY")
        (let [months (+ (* start-date.year 12) (dec start-date.month) step)]
-         (month-days (// months 12) (inc (mod months 12)) (assoc spec :day start-date.day))))
-      ((= spec.freq "YEARLY")
+         (month-days (// months 12) (inc (mod months 12)) (assoc spec :day start-date.day)))]
+      [(= spec.freq "YEARLY")
        (let [year (+ start-date.year step)]
          (vec (mapcat (fn [month] (month-days year month (assoc spec :day start-date.day)))
-                      (or spec.bymonth [start-date.month])))))
-      (else []))))
+                      (or spec.bymonth [start-date.month]))))]
+      [else []])))
 
 (def (allowed? spec days)
   (let [date (time/date-of days)]
@@ -104,13 +104,13 @@
                      (let [days (filter (fn [days] (and (>= days base) (allowed? spec days))) (period spec base k))
                            starts (map (fn [days] (at-civil (merge (time/date-of days) clock) event.zone)) days)
                            step (fn [[made found stopped] start]
-                                  (cond (stopped [made found stopped])
-                                    ((or (>= start limit) (and spec.count (>= made spec.count))) [made found true])
-                                    (else [(inc made)
+                                  (cond [stopped [made found stopped]]
+                                    [(or (>= start limit) (and spec.count (>= made spec.count))) [made found true]]
+                                    [else [(inc made)
                                            (if (and (overlaps start) (not (contains? excluded start)))
                                              (conj found {start: start end: (+ start length)})
                                              found)
-                                           false])))
+                                           false]]))
                            [made found stopped] (reduce step [made found false] starts)]
                        (if stopped found (walk (inc k) made found)))))]
         (walk first-k 0 [])))))

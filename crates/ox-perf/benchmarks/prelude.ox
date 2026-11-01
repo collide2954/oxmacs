@@ -30,7 +30,7 @@
  comp: [n (let [twice (comp inc inc)] (repeated (fn [] (twice 1))))]
  partial: [n (let [add (partial + 1)] (repeated (fn [] (add 1))))]
  thread: [n (repeated (fn [] (-> 1 inc (+ 2) (* 3))))]
- cond: [n (repeated (fn [] (cond ((= 1 2) :a) ((= 1 3) :b) (else :c))))]
+ cond: [n (repeated (fn [] (cond [(= 1 2) :a] [(= 1 3) :b] [else :c])))]
  and-or: [n (repeated (fn [] (or (and 1 nil) (and 2 3))))]
  small-map: [n (repeated (fn [] (map inc small)))]
  rest-loop: [n (fn [] (loop [v numbers total 0] (if (empty? v) total (again (rest v) (+ total (first v))))))]

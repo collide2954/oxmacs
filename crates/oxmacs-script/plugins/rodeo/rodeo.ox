@@ -19,7 +19,7 @@
 (def (tick)
   (let [p @player
         dt (rodeo/dt)
-        across (cond ((rodeo/held? :left) (- speed)) ((rodeo/held? :right) speed) (else 0))
+        across (cond [(rodeo/held? :left) (- speed)] [(rodeo/held? :right) speed] [else 0])
         standing (>= p.y ground)
         vy (if (and standing (rodeo/pressed? :jump)) jump (+ p.vy (* gravity dt)))
         y (min ground (+ p.y (* vy dt)))]

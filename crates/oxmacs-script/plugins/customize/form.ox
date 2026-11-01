@@ -21,20 +21,20 @@
 (def (shown entry)
   (let [value (effective entry)
         unset (or entry.unset "unset")]
-    (cond ((and (nil? value) (chosen? entry)) (str "[" unset "]"))
-      ((nil? value) (str "(" unset ")"))
-      ((= value true) "[x]")
-      ((= value false) "[ ]")
-      ((structured? entry) (str "(" (count value) " in init.ox)"))
-      ((chosen? entry) (str "[" (name value) "]"))
-      (else (str value)))))
+    (cond [(and (nil? value) (chosen? entry)) (str "[" unset "]")]
+      [(nil? value) (str "(" unset ")")]
+      [(= value true) "[x]"]
+      [(= value false) "[ ]"]
+      [(structured? entry) (str "(" (count value) " in init.ox)")]
+      [(chosen? entry) (str "[" (name value) "]")]
+      [else (str value)])))
 
 (def (hint-of entry)
   "The line under entry: its choices, or what it does."
-  (cond ((= entry.kind :choice)
-         (string/join " | " (concat (if entry.unset [entry.unset] []) (map name entry.choices))))
-    ((= entry.kind :theme) (str (or entry.unset "") " | RET picks a theme with a live preview"))
-    (else entry.doc)))
+  (cond [(= entry.kind :choice)
+         (string/join " | " (concat (if entry.unset [entry.unset] []) (map name entry.choices)))]
+    [(= entry.kind :theme) (str (or entry.unset "") " | RET picks a theme with a live preview")]
+    [else entry.doc]))
 
 (def (set-in-init? entry)
   (and (not entry.changed) (not= entry.custom entry.saved)))

@@ -117,12 +117,12 @@
                  :stop))))))
 
 (def (entry-here)
-  (cond ((store/locked?) nil)
-    ((= (buffer-name) list-buffer)
+  (cond [(store/locked?) nil]
+    [(= (buffer-name) list-buffer)
      (when-let [id (get (line-item) :id)]
-       (by-id id)))
-    ((= (buffer-name) entry-buffer) (by-id (get @view :shown)))
-    (else nil)))
+       (by-id id))]
+    [(= (buffer-name) entry-buffer) (by-id (get @view :shown))]
+    [else nil]))
 
 (def (choose question)
   (let [found (store/unlock)]
@@ -235,19 +235,19 @@
   (let [kind (prompt "Make: " :choices {"password" "20 letters, digits and symbols"
                                         "passphrase" "7 random words"
                                         "pin" "6 digits"})
-        made (cond ((= kind "passphrase") (store/passphrase))
-               ((= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6))))
-               (else (store/generate)))]
+        made (cond [(= kind "passphrase") (store/passphrase)]
+               [(= kind "pin") (apply str (map (fn [_] (crypto/random-below 10)) (range 6)))]
+               [else (store/generate)])]
     (copy! made $"new {kind}" true)))
 
 (def (imported kind)
-  (cond ((= kind "keepass")
+  (cond [(= kind "keepass")
          (let [file (prompt-path "KeePass database: ")]
-           (import/keepass file (prompt "Its password: " :secret true))))
-    ((= kind "bitwarden") (import/bitwarden (file/read (prompt-path "Bitwarden CSV: "))))
-    ((= kind "1password") (import/one-password (file/read (prompt-path "1Password CSV: "))))
-    ((= kind "pass") (import/pass))
-    (else (raise (error $"oxmacs can't import from {kind}")))))
+           (import/keepass file (prompt "Its password: " :secret true)))]
+    [(= kind "bitwarden") (import/bitwarden (file/read (prompt-path "Bitwarden CSV: ")))]
+    [(= kind "1password") (import/one-password (file/read (prompt-path "1Password CSV: ")))]
+    [(= kind "pass") (import/pass)]
+    [else (raise (error $"oxmacs can't import from {kind}"))]))
 
 (defcommand vault-import "Import passwords from KeePass, Bitwarden, 1Password or pass"
   (store/unlock)

@@ -138,7 +138,7 @@
   (ready!)
   (let [distro (target)
         place (here)
-        start (cond ((nil? place) "~/") ((not= place.distro distro) "~/") ((string/ends-with? place.path "/") place.path) (else (str place.path "/")))
+        start (cond [(nil? place) "~/"] [(not= place.distro distro) "~/"] [(string/ends-with? place.path "/") place.path] [else (str place.path "/")])
         path (prompt $"Find file in {distro}: " :initial start)
         home (when (string/starts-with? path "~") (distros/home-of distro))
         linux (if home (str home (string/slice path 1 (count path))) path)]

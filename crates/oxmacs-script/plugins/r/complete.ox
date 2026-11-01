@@ -18,19 +18,19 @@
 
 (def (complete explicit)
   (let [running (session/current-session)
-        refusal (cond ((not (session/running? running)) "Start R with C-c C-z to complete from its session")
-                  ((not (console-waiting? running)) "R is busy")
-                  (else nil))]
+        refusal (cond [(not (session/running? running)) "Start R with C-c C-z to complete from its session"]
+                  [(not (console-waiting? running)) "R is busy"]
+                  [else nil])]
     (cond
-      ((and (not explicit) (or refusal @asked (language/ready?))) nil)
-      ((and refusal (language/ready?)) nil)
-      (refusal (message refusal) true)
-      (else
+      [(and (not explicit) (or refusal @asked (language/ready?))) nil]
+      [(and refusal (language/ready?)) nil]
+      [refusal (message refusal) true]
+      [else
        (let [start (max (line-start) (or (console-input-start) 0))
              line (text-between start (point))]
          (when (session/request running $"getOption(\"oxmacs\")$complete({(session/r-string line)}, {(count line)}L)")
            (reset! asked {buffer: (buffer-name) start: start explicit: explicit}))
-         true)))))
+         true)])))
 
 (def (answered _ payload)
   (when-let [question @asked]
@@ -61,16 +61,16 @@
                   (if (>= at total)
                     (when (and (not quote) (not comment)) open)
                     (let [character (nth characters at)]
-                      (cond (comment (scan (+ at 1) open quote false (not= character \newline)))
-                        (quote (cond (escaped (scan (+ at 1) open quote false false))
-                                 ((= character \\) (scan (+ at 1) open quote true false))
-                                 ((= character quote) (scan (+ at 1) open nil false false))
-                                 (else (scan (+ at 1) open quote false false))))
-                        ((contains? #{\" \' \`} character) (scan (+ at 1) open character false false))
-                        ((= character \#) (scan (+ at 1) open nil false true))
-                        ((contains? #{\( \[ \{} character) (scan (+ at 1) (conj open [character at]) nil false false))
-                        ((contains? #{\) \] \}} character) (scan (+ at 1) (if (empty? open) open (pop open)) nil false false))
-                        (else (scan (+ at 1) open nil false false))))))
+                      (cond [comment (scan (+ at 1) open quote false (not= character \newline))]
+                        [quote (cond [escaped (scan (+ at 1) open quote false false)]
+                                 [(= character \\) (scan (+ at 1) open quote true false)]
+                                 [(= character quote) (scan (+ at 1) open nil false false)]
+                                 [else (scan (+ at 1) open quote false false)])]
+                        [(contains? #{\" \' \`} character) (scan (+ at 1) open character false false)]
+                        [(= character \#) (scan (+ at 1) open nil false true)]
+                        [(contains? #{\( \[ \{} character) (scan (+ at 1) (conj open [character at]) nil false false)]
+                        [(contains? #{\) \] \}} character) (scan (+ at 1) (if (empty? open) open (pop open)) nil false false)]
+                        [else (scan (+ at 1) open nil false false)]))))
                 0 [] nil false false)]
     (when-let [[bracket at] (when (not (empty? opened)) (last opened))]
       (when (= bracket \()
@@ -99,16 +99,16 @@
   (let [running (session/current-session)
         spot (call-at-point)
         name (when spot (nth spot 2))]
-    (cond ((or (not spot) (language/ready?)) nil)
-      ((contains? (get @signatures :known) name)
+    (cond [(or (not spot) (language/ready?)) nil]
+      [(contains? (get @signatures :known) name)
        (let [known (get-in @signatures [:known name])]
-         (if (string/blank? known) nil known)))
-      ((= spot (get @signatures :shown)) true)
-      ((and (session/running? running) (console-waiting? running) (not @asked))
+         (if (string/blank? known) nil known))]
+      [(= spot (get @signatures :shown)) true]
+      [(and (session/running? running) (console-waiting? running) (not @asked))
        (swap! signatures assoc :shown spot)
        (session/request running $"getOption(\"oxmacs\")$signature({(session/r-string name)})")
-       true)
-      (else nil))))
+       true]
+      [else nil])))
 
 (def (signed _ payload)
   (let [[name text] (string/split payload "\t" 2)

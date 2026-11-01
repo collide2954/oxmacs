@@ -5,10 +5,10 @@
 
 (def (unfold text)
   (reduce (fn [out line]
-            (cond ((and (not (empty? out)) (or (string/starts-with? line " ") (string/starts-with? line "\t")))
-                   (conj (pop out) (str (peek out) (string/slice line 1))))
-              ((string/blank? line) out)
-              (else (conj out line))))
+            (cond [(and (not (empty? out)) (or (string/starts-with? line " ") (string/starts-with? line "\t")))
+                   (conj (pop out) (str (peek out) (string/slice line 1)))]
+              [(string/blank? line) out]
+              [else (conj out line)]))
           [] (string/lines (string/replace text "\r" ""))))
 
 (def (content-line line)
@@ -25,15 +25,15 @@
   "iCalendar text as nested components, each a map of :type, :properties and :children; properties are maps of :name, :params and :value."
   (let [step (fn [stack line]
                (let [content (content-line line)]
-                 (cond ((= content.name "BEGIN")
-                        (conj stack {type: (string/upper content.value) properties: [] children: []}))
-                   ((= content.name "END")
+                 (cond [(= content.name "BEGIN")
+                        (conj stack {type: (string/upper content.value) properties: [] children: []})]
+                   [(= content.name "END")
                     (if (> (count stack) 1)
                       (let [done (peek stack)
                             below (pop stack)]
                         (conj (pop below) (update (peek below) :children conj done)))
-                      stack))
-                   (else (conj (pop stack) (update (peek stack) :properties conj content))))))]
+                      stack)]
+                   [else (conj (pop stack) (update (peek stack) :properties conj content))])))]
     (first (reduce step [{type: "ROOT" properties: [] children: []}] (unfold text)))))
 
 (def (property component name)
@@ -83,9 +83,9 @@
       {time: (time/instant date) all-day: true date: date zone: nil}
       (let [fields (merge date {hour: (number-in value 9 11) minute: (number-in value 11 13) second: (number-in value 13 15)})
             zone (get content.params "TZID")
-            time (cond ((string/ends-with? value "Z") (time/instant fields :zone "UTC"))
-                   (zone (try (time/instant fields :zone zone) (catch error _ (time/instant fields))))
-                   (else (time/instant fields)))]
+            time (cond [(string/ends-with? value "Z") (time/instant fields :zone "UTC")]
+                   [zone (try (time/instant fields :zone zone) (catch error _ (time/instant fields)))]
+                   [else (time/instant fields)])]
         {time: time all-day: false date: nil zone: (when (and zone (not (string/ends-with? value "Z"))) zone)}))))
 
 (def (duration text)
@@ -120,10 +120,10 @@
   (let [start (moment (or (property component "DTSTART") {value: "19700101" params: {}}))
         ending (property component "DTEND")
         length (when-let [given (property component "DURATION")] (duration given.value))
-        end-time (cond (ending (get (moment ending) :time))
-                   (length (+ start.time length))
-                   (start.all-day (time/add start.time {days: 1}))
-                   (else start.time))
+        end-time (cond [ending (get (moment ending) :time)]
+                   [length (+ start.time length)]
+                   [start.all-day (time/add start.time {days: 1})]
+                   [else start.time])
         text (fn [name] (when-let [found (property component name)] (unescape found.value)))]
     {uid: (text "UID")
      summary: (or (text "SUMMARY") "(no title)")
@@ -152,9 +152,9 @@
     (str (string/slice line 0 74) "\r\n " (fold-line (string/slice line 74)))))
 
 (def (when-line name event at)
-  (cond (event.all-day (str name ";VALUE=DATE:" (date-stamp (time/local at))))
-    (event.zone (str name ";TZID=" event.zone ":" (time/format at "%Y%m%dT%H%M%S" :zone event.zone)))
-    (else (str name ":" (stamp at)))))
+  (cond [event.all-day (str name ";VALUE=DATE:" (date-stamp (time/local at)))]
+    [event.zone (str name ";TZID=" event.zone ":" (time/format at "%Y%m%dT%H%M%S" :zone event.zone))]
+    [else (str name ":" (stamp at))]))
 
 (def (attendee-line kind person)
   (str kind (if person.name (str ";CN=" person.name) "") (if (= kind "ATTENDEE") (str ";PARTSTAT=" person.status) "")
