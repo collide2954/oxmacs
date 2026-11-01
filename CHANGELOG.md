@@ -4,6 +4,8 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-01
+
 ### Removed
 
 - `ox check` no longer warns about plain strings holding what looks like a hole from Ox 0.14, such as `"Hi {name}"`; `ox migrate --strings` still rewrites files written for 0.14.
