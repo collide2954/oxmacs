@@ -1,4 +1,4 @@
-use oxmacs_core::display::LineStyle;
+use oxmacs_core::display::{GraphEdge, GraphNode, LineStyle};
 use oxmacs_core::editor::Editor;
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::theme::Highlight;
@@ -17,6 +17,65 @@ fn opened(source: &str) -> (Editor, Ox) {
 }
 
 const SHAPES: &str = r#"[{line: ["see " ["docs" :link :link "manual"] " or " ["main" :type :pill] " " ["C-x" nil :keycap]] background: :region name: "first"}]"#;
+
+#[test]
+fn lines_carry_graphs_of_lanes_into_the_buffer() {
+    let (mut editor, mut ox) = opened(
+        r#"(open-buffer "*log*" [{line: "    a1b2 Fix" graph: {node: 1 face: :nick-2 edges: [{from: 0 to: 0 face: :nick-0} {from: 1 face: :nick-2} {to: 1 face: :nick-2} {to: 2 face: :nick-3}]} id: "a1b2"} "    plain"])"#,
+    );
+
+    let pane = editor.pane();
+    let graph = pane.line_graph(0).unwrap();
+    assert_eq!(
+        graph.node,
+        Some(GraphNode {
+            lane: 1,
+            face: Highlight::Nick(2)
+        })
+    );
+    assert_eq!(
+        graph.edges,
+        [
+            GraphEdge {
+                from: Some(0),
+                to: Some(0),
+                face: Highlight::Nick(0)
+            },
+            GraphEdge {
+                from: Some(1),
+                to: None,
+                face: Highlight::Nick(2)
+            },
+            GraphEdge {
+                from: None,
+                to: Some(1),
+                face: Highlight::Nick(2)
+            },
+            GraphEdge {
+                from: None,
+                to: Some(2),
+                face: Highlight::Nick(3)
+            },
+        ]
+    );
+    assert_eq!(pane.line_graph(1), None);
+    assert_eq!(
+        ox.eval(&mut editor, "(get (line-item 0) :id)").unwrap(),
+        "\"a1b2\""
+    );
+
+    let refused = ox
+        .eval(
+            &mut editor,
+            r#"(open-buffer "*bad*" [{line: "x" graph: {node: -1}}])"#,
+        )
+        .unwrap_err();
+    assert!(
+        refused.message.contains("a lane from 0"),
+        "{}",
+        refused.message
+    );
+}
 
 #[test]
 fn lines_buffers_headers_and_overlays_read_the_same_pieces() {

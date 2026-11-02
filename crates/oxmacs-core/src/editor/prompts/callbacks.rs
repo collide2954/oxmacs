@@ -122,6 +122,10 @@ impl Editor {
         done: impl FnOnce(&mut Editor, String) + Send + 'static,
     ) {
         self.prompt(prompt, done);
+        self.fill_prompt(text);
+    }
+
+    pub fn fill_prompt(&mut self, text: &str) {
         if self
             .prompts
             .minibuffer()

@@ -83,6 +83,7 @@ pub enum Message {
     ViewSized(BufferId, iced::Size),
     TakeoverSized(iced::Size),
     EndTakeover,
+    ModeLineClicked(String),
     Tab(TabMessage),
     SideDragged(f32),
     WindowModeBefore(window::Id, window::Mode),
@@ -468,11 +469,32 @@ mod tests {
     fn plugin_segments_show_in_the_mode_line() {
         let (mut app, _) = App::boot(&[], None);
         app.editor
-            .add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
+            .add_mode_line_segment(|_| vec!["☂ bring one".to_owned().into()]);
 
         let mut ui = iced_test::simulator(app.view());
 
         assert!(ui.find("☂ bring one").is_ok());
+    }
+
+    #[test]
+    fn clicking_mode_line_text_runs_its_ox_function() {
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(
+            home.path().join("init.ox"),
+            r#"(set-mode-line :git "main ↑2" :on-click (fn [] (message "Clicked")))"#,
+        )
+        .unwrap();
+        let mut app = App::default();
+        let _ = app.start_ox(Some(home.path()));
+
+        let mut ui = iced_test::simulator(app.view());
+        ui.click("main ↑2").unwrap();
+        let messages: Vec<Message> = ui.into_messages().collect();
+        for message in messages {
+            let _ = app.update(message);
+        }
+
+        assert_eq!(app.editor.message(), Some("Clicked"));
     }
 
     #[test]
@@ -704,7 +726,7 @@ mod tests {
             .unwrap();
         app.ox.tick(&mut app.editor);
         app.editor
-            .add_mode_line_segment(|_| Some("☂ bring one".to_owned()));
+            .add_mode_line_segment(|_| vec!["☂ bring one".to_owned().into()]);
         app.editor.show_message("still here");
 
         let mut ui = iced_test::simulator(app.view());

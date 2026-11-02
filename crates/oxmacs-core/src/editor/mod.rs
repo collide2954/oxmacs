@@ -40,6 +40,7 @@ pub use editing::format::{FormatRequest, Formatter};
 pub use editing::suggestion::Ghost;
 pub use effect::{Effect, FetchId};
 pub use events::{Event, EventKind, Service, Source};
+pub use host::ModeLinePart;
 pub use job::{Job, JobEvent, JobId, JobSpec, Outcome};
 pub use keystrokes::Keystroke;
 pub use languages::registry::{LineHighlighter, LineIndenter};

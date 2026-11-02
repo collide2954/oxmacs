@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::mem;
 use std::ops::Range;
 
+use iced::advanced::graphics::geometry;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::mouse::{self, Click, ScrollDelta, click};
 use iced::advanced::overlay;
@@ -11,6 +12,7 @@ use iced::advanced::widget::tree::{self, Tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::alignment::Vertical;
 use iced::time::{Duration, Instant};
+use iced::widget::canvas::Frame;
 use iced::{
     Border, Color, Element, Event, Font, Length, Pixels, Point, Rectangle, Size, Theme, Vector,
     keyboard, window,
@@ -24,6 +26,7 @@ use oxmacs_core::theme::{Highlight, Theme as Faces};
 use crate::animation::{self, Glide, Scroll};
 use crate::style;
 use crate::units::{floor_to_isize, floor_to_usize, signed_to_f32, to_f32, trunc_to_isize};
+use crate::widgets::lanes;
 use crate::widgets::popup::Popup;
 
 const WIDE_SAMPLE: &str = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
@@ -268,6 +271,51 @@ impl<'a, Message> BufferView<'a, Message> {
             },
             style::color(self.faces.mode_line_border),
         );
+    }
+
+    fn draw_graphs<Renderer>(
+        &self,
+        renderer: &mut Renderer,
+        rows: &[(ScreenRow, Rectangle)],
+        bounds: Rectangle,
+        cell: Size,
+    ) where
+        Renderer: geometry::Renderer,
+    {
+        let mut shapes = Vec::new();
+        for (index, (row, rectangle)) in rows.iter().enumerate() {
+            if row.column != 0 {
+                continue;
+            }
+            let Some(graph) = self.pane.line_graph(row.line) else {
+                continue;
+            };
+            let bottom = rows[index..]
+                .iter()
+                .take_while(|(next, _)| next.line == row.line)
+                .last()
+                .map_or(rectangle.y + rectangle.height, |(_, last)| {
+                    last.y + last.height
+                });
+            let area = lanes::Area {
+                left: bounds.x,
+                top: rectangle.y,
+                middle: rectangle.y + rectangle.height / 2.0,
+                bottom,
+                cell_width: cell.width,
+            };
+            shapes.extend(lanes::shapes(&graph, area));
+        }
+        if shapes.is_empty() {
+            return;
+        }
+        let origin = Vector::new(bounds.x, bounds.y);
+        let mut frame = Frame::new(renderer, bounds.size());
+        lanes::draw(&mut frame, &shapes, origin, cell.height, |face| {
+            style::color(self.faces.highlight(face))
+        });
+        let geometry = frame.into_geometry();
+        renderer.with_translation(origin, |renderer| renderer.draw_geometry(geometry));
     }
 
     fn cursor_cell(&self) -> (usize, usize) {
@@ -526,7 +574,7 @@ struct CursorBlock {
 
 impl<Message, Renderer> Widget<Message, Theme, Renderer> for BufferView<'_, Message>
 where
-    Renderer: text::Renderer<Font = Font>,
+    Renderer: text::Renderer<Font = Font> + geometry::Renderer,
 {
     fn tag(&self) -> tree::Tag {
         tree::Tag::of::<State>()
@@ -686,6 +734,7 @@ where
                     }
                 }
             }
+            self.draw_graphs(renderer, &rows, text_bounds, cell);
             if let Some(cursor) = cursor.as_ref().filter(|cursor| cursor.gliding && behind) {
                 renderer.fill_quad(
                     Quad {
@@ -1074,7 +1123,7 @@ impl<'a, Message> BufferView<'a, Message> {
 impl<'a, Message, Renderer> From<BufferView<'a, Message>> for Element<'a, Message, Theme, Renderer>
 where
     Message: 'a,
-    Renderer: text::Renderer<Font = Font> + 'a,
+    Renderer: text::Renderer<Font = Font> + geometry::Renderer + 'a,
 {
     fn from(view: BufferView<'a, Message>) -> Self {
         Element::new(view)

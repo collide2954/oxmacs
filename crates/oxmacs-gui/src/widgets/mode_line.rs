@@ -1,7 +1,7 @@
 use iced::alignment::Vertical;
 use iced::font::Weight;
-use iced::widget::{Row, Text, column, container, row, space, text};
-use iced::{Border, Element, Font, Length, Padding};
+use iced::widget::{Row, Text, column, container, mouse_area, row, space, text};
+use iced::{Border, Element, Font, Length, Padding, mouse};
 use oxmacs_core::config::ModeLineStyle;
 use oxmacs_core::editor::{BufferState, Status};
 use oxmacs_core::theme::{Color, Theme as Faces};
@@ -21,6 +21,31 @@ const SECONDARY: f32 = 0.9;
 const TINT: f32 = 0.12;
 const BLOCK_TINT: f32 = 0.25;
 const FADE: f32 = 0.55;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Extra<Message> {
+    pub text: String,
+    pub click: Option<Message>,
+}
+
+impl<Message> Extra<Message> {
+    pub fn plain(text: String) -> Self {
+        Self { text, click: None }
+    }
+}
+
+fn clickable<'a, Message: Clone + 'a>(
+    content: impl Into<Element<'a, Message>>,
+    extra: &Extra<Message>,
+) -> Element<'a, Message> {
+    match &extra.click {
+        Some(message) => mouse_area(content)
+            .on_press(message.clone())
+            .interaction(mouse::Interaction::Pointer)
+            .into(),
+        None => content.into(),
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
@@ -119,9 +144,9 @@ pub fn height(size: f32) -> f32 {
     EDGE + size * LINE_HEIGHT + 2.0 * BREATH
 }
 
-pub fn view<'a, Message: 'a>(
+pub fn view<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     style: ModeLineStyle,
     look: Look,
 ) -> Element<'a, Message> {
@@ -138,9 +163,9 @@ pub fn view<'a, Message: 'a>(
     }
 }
 
-fn classic<'a, Message: 'a>(
+fn classic<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     look: Look,
 ) -> Element<'a, Message> {
     let line = |content: String| {
@@ -149,7 +174,9 @@ fn classic<'a, Message: 'a>(
             .size(look.size)
             .wrapping(text::Wrapping::None)
     };
-    let right = extras.iter().map(|extra| line(extra.clone()).into());
+    let right = extras
+        .iter()
+        .map(|extra| clickable(line(extra.text.clone()), extra));
     let Look { faces, active, .. } = look;
     container(
         row![
@@ -255,9 +282,9 @@ fn name<'a, Message: 'a>(status: &Status, paint: &Paint) -> Element<'a, Message>
     titled(status, paint, paint.colors.text, paint.colors.accent)
 }
 
-fn extras_after<'a, Message: 'a>(
+fn extras_after<'a, Message: Clone + 'a>(
     mut items: Vec<Element<'a, Message>>,
-    extras: &[String],
+    extras: &[Extra<Message>],
     paint: &Paint,
 ) -> Element<'a, Message> {
     if !extras.is_empty() {
@@ -265,15 +292,15 @@ fn extras_after<'a, Message: 'a>(
         items.extend(
             extras
                 .iter()
-                .map(|extra| paint.digits(extra.clone(), paint.colors.text).into()),
+                .map(|extra| clickable(paint.digits(extra.text.clone(), paint.colors.text), extra)),
         );
     }
     spaced(items, GAP)
 }
 
-fn modern<'a, Message: 'a>(
+fn modern<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
     let colors = paint.colors;
@@ -293,9 +320,9 @@ fn modern<'a, Message: 'a>(
     (name(status, paint), extras_after(details, extras, paint))
 }
 
-fn minimal<'a, Message: 'a>(
+fn minimal<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
     let details = vec![paint.digits(position(status), paint.colors.dim).into()];
@@ -320,9 +347,9 @@ fn pill<'a, Message: 'a>(
         .into()
 }
 
-fn boxed<'a, Message: 'a>(
+fn boxed<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
     let colors = paint.colors;
@@ -338,15 +365,18 @@ fn boxed<'a, Message: 'a>(
         .chain(status.lint.clone())
         .chain(status.crlf.then(|| "CRLF".to_owned()));
     left.extend(words.map(|word| pill(paint.small(word, colors.text), paint)));
-    let right = extras
-        .iter()
-        .map(|extra| pill(paint.digits(extra.clone(), colors.text), paint));
+    let right = extras.iter().map(|extra| {
+        clickable(
+            pill(paint.digits(extra.text.clone(), colors.text), paint),
+            extra,
+        )
+    });
     (spaced(left, PILL_GAP), spaced(right, PILL_GAP))
 }
 
-fn powerline<'a, Message: 'a>(
+fn powerline<'a, Message: Clone + 'a>(
     status: &Status,
-    extras: &[String],
+    extras: &[Extra<Message>],
     paint: &Paint,
 ) -> (Element<'a, Message>, Element<'a, Message>) {
     let colors = paint.colors;
@@ -390,7 +420,7 @@ fn powerline<'a, Message: 'a>(
             spaced(
                 extras
                     .iter()
-                    .map(|extra| paint.small(extra.clone(), colors.text).into()),
+                    .map(|extra| clickable(paint.small(extra.text.clone(), colors.text), extra)),
                 GAP,
             ),
             style::color(colors.block),
@@ -432,7 +462,43 @@ mod tests {
             font: Font::MONOSPACE,
             size: 14.0,
         };
-        iced_test::simulator(view(&status(state), &["14:05".to_owned()], style, look))
+        iced_test::simulator(view(
+            &status(state),
+            &[Extra::plain("14:05".to_owned())],
+            style,
+            look,
+        ))
+    }
+
+    #[test]
+    fn every_style_reports_clicks_on_clickable_extras() {
+        let look = Look {
+            faces: ADWAITA,
+            active: true,
+            font: Font::MONOSPACE,
+            size: 14.0,
+        };
+        let extras = [
+            Extra {
+                text: "main ↑2".to_owned(),
+                click: Some("git"),
+            },
+            Extra::plain("14:05".to_owned()),
+        ];
+        for style in [
+            ModeLineStyle::Classic,
+            ModeLineStyle::Modern,
+            ModeLineStyle::Minimal,
+            ModeLineStyle::Boxed,
+            ModeLineStyle::Powerline,
+        ] {
+            let mut ui =
+                iced_test::simulator(view(&status(BufferState::Modified), &extras, style, look));
+            ui.click("main ↑2").unwrap();
+            ui.click("14:05").unwrap();
+
+            assert_eq!(ui.into_messages().collect::<Vec<_>>(), ["git"], "{style:?}");
+        }
     }
 
     #[test]

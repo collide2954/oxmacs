@@ -4,7 +4,7 @@ use std::ops::Range;
 use ox_lang::heap::{Heap, Hold};
 use ox_lang::value::{Value, equal, print};
 use ox_lang::{Error, Isolate};
-use oxmacs_core::display::LineStyle;
+use oxmacs_core::display::{GraphEdge, GraphNode, LineGraph, LineStyle};
 use oxmacs_core::editor::{Editor, EventKind};
 use oxmacs_core::text::BufferId;
 use oxmacs_core::theme::Highlight;
@@ -36,6 +36,7 @@ pub(crate) struct Line {
     pub(crate) pieces: Vec<Piece>,
     pub(crate) background: Option<Highlight>,
     pub(crate) opacity: f32,
+    pub(crate) graph: Option<LineGraph>,
     pub(crate) item: Option<Value>,
 }
 
@@ -168,11 +169,94 @@ fn number(value: Value) -> Option<f32> {
     }
 }
 
+const GRAPH: &str = "{node: lane face: face edges: [{from: lane to: lane face: face} ...]}";
+
+fn lane(heap: &Heap, native: &str, value: Value) -> Result<Option<usize>, Error> {
+    match value {
+        Value::Nil => Ok(None),
+        Value::Int(number) if number >= 0 => Ok(usize::try_from(number).ok()),
+        _ => Err(Error::new(format!(
+            "{native} expects a lane from 0 in a graph, got {}",
+            print::brief(heap, value)
+        ))),
+    }
+}
+
+fn fields_of(heap: &Heap, native: &str, value: Value) -> Result<Vec<(String, Value)>, Error> {
+    let entries = heap.entries(value).ok_or_else(|| {
+        Error::new(format!(
+            "{native} expects {GRAPH} as a graph, got {}",
+            print::brief(heap, value)
+        ))
+    })?;
+    Ok(entries
+        .into_iter()
+        .map(|(key, given)| match key {
+            Value::Keyword(name) => (name.name().to_owned(), given),
+            _ => (print::display(heap, key), given),
+        })
+        .collect())
+}
+
+fn edge(heap: &Heap, native: &str, value: Value) -> Result<GraphEdge, Error> {
+    let mut edge = GraphEdge {
+        from: None,
+        to: None,
+        face: Highlight::Nick(0),
+    };
+    for (key, given) in fields_of(heap, native, value)? {
+        match key.as_str() {
+            "from" => edge.from = lane(heap, native, given)?,
+            "to" => edge.to = lane(heap, native, given)?,
+            "face" => edge.face = face(heap, native, given)?.unwrap_or(edge.face),
+            _ => {
+                return Err(Error::new(format!(
+                    "{native} doesn't know :{key} in a graph edge; it takes :from, :to and :face"
+                )));
+            }
+        }
+    }
+    Ok(edge)
+}
+
+fn graph(heap: &Heap, native: &str, value: Value) -> Result<Option<LineGraph>, Error> {
+    if value == Value::Nil {
+        return Ok(None);
+    }
+    let mut graph = LineGraph::default();
+    let mut node = None;
+    let mut node_face = Highlight::Nick(0);
+    for (key, given) in fields_of(heap, native, value)? {
+        match key.as_str() {
+            "node" => node = lane(heap, native, given)?,
+            "face" => node_face = face(heap, native, given)?.unwrap_or(node_face),
+            "edges" => {
+                graph.edges = parts(heap, given)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|given| edge(heap, native, given))
+                    .collect::<Result<_, _>>()?;
+            }
+            _ => {
+                return Err(Error::new(format!(
+                    "{native} doesn't know :{key} in a graph; it takes :node, :face and :edges"
+                )));
+            }
+        }
+    }
+    graph.node = node.map(|lane| GraphNode {
+        lane,
+        face: node_face,
+    });
+    Ok(Some(graph))
+}
+
 pub(crate) fn line(heap: &Heap, native: &str, value: Value) -> Result<Line, Error> {
     let mut line = Line {
         pieces: Vec::new(),
         background: None,
         opacity: 1.0,
+        graph: None,
         item: None,
     };
     let mut shown = value;
@@ -186,6 +270,7 @@ pub(crate) fn line(heap: &Heap, native: &str, value: Value) -> Result<Line, Erro
             match key.name() {
                 "line" => shown = given,
                 "background" => line.background = face(heap, native, given)?,
+                "graph" => line.graph = graph(heap, native, given)?,
                 "opacity" if given != Value::Nil => {
                     line.opacity = number(given)
                         .ok_or_else(|| {

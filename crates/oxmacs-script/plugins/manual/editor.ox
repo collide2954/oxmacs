@@ -79,8 +79,11 @@ Three hooks follow the buffers people type in, leaving plugin buffers out. `on-b
 
 ```
 (set-mode-line :status "Ready")
+(set-mode-line :status "Ready" :on-click (fn [] (message "Still ready")))
 (set-mode-line :status nil)
 ```
+
+`:on-click` runs its function when the text is clicked, as the git plugin's branch opens the status.
 
 `set-overlay` floats rows over the windows, at the bottom right or larger at the bottom center, each row a line as `open-buffer` takes it, where a piece `[text face :keycap]` draws a key. `nil` takes them away.
 

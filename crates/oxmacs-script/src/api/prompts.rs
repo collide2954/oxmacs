@@ -106,7 +106,10 @@ fn prompt(
     let done = move |_: &mut Editor, text| reply.send(Answer::Text(text));
     match choices {
         _ if secret => editor.prompt_secret(&question, done),
-        Some(offered) => editor.prompt_with(&question, move |_| offered.clone(), done),
+        Some(offered) => {
+            editor.prompt_with(&question, move |_| offered.clone(), done);
+            editor.fill_prompt(&initial);
+        }
         None => editor.prompt_with_text(&question, &initial, done),
     }
     Ok(promise)
@@ -203,6 +206,23 @@ mod tests {
         press(&mut editor, &mut ox, "x RET");
 
         assert_eq!(editor.message(), Some("to oldx"));
+    }
+
+    #[test]
+    fn choices_start_from_the_initial_text() {
+        let mut editor = Editor::new();
+        let mut ox = Ox::new();
+
+        run(
+            &mut editor,
+            &mut ox,
+            r#"(defcommand pick "Pick" (message (str "picked " (await (prompt "Branch: " :initial "main" :choices ["feature" "main" "topic"])))))"#,
+            "pick",
+        );
+        assert_eq!(editor.minibuffer().unwrap().input().contents(), "main");
+        press(&mut editor, &mut ox, "RET");
+
+        assert_eq!(editor.message(), Some("picked main"));
     }
 
     #[test]

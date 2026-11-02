@@ -2,9 +2,9 @@ use iced::advanced::graphics::geometry::Renderer as _;
 use iced::advanced::layout::{self, Layout};
 use iced::advanced::renderer::{self, Renderer as _};
 use iced::advanced::widget::{Operation, Tree};
-use iced::advanced::{Widget, mouse};
+use iced::advanced::{Clipboard, Shell, Widget, mouse};
 use iced::widget::canvas::{Frame, Path};
-use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Theme, Vector};
+use iced::{Color, Element, Event, Length, Point, Rectangle, Renderer, Size, Theme, Vector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -135,6 +135,50 @@ impl<Message> Widget<Message, Theme, Renderer> for Powerline<'_, Message> {
             .collect();
         let size = limits.resolve(Length::Shrink, self.height, Size::new(total, self.height));
         layout::Node::with_children(size, children)
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        for ((content, state), layout) in self
+            .contents
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
+            content.as_widget_mut().update(
+                state, event, layout, cursor, renderer, clipboard, shell, viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.contents
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+            .map(|((content, state), layout)| {
+                content
+                    .as_widget()
+                    .mouse_interaction(state, layout, cursor, viewport, renderer)
+            })
+            .max()
+            .unwrap_or_default()
     }
 
     fn operate(

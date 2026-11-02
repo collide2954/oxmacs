@@ -4,7 +4,7 @@ use std::ops::Range;
 use std::path::Path;
 
 use crate::command::ScopeId;
-use crate::display::LineStyle;
+use crate::display::{LineGraph, LineStyle};
 use crate::editor::InputLine;
 use crate::theme::Highlight;
 
@@ -45,6 +45,10 @@ pub trait SpecialBuffer: Any + Send + fmt::Debug {
 
     fn links(&self, _line: usize) -> Vec<Range<usize>> {
         Vec::new()
+    }
+
+    fn graph(&self, _line: usize) -> Option<LineGraph> {
+        None
     }
 
     fn hears_clicks(&self) -> bool {

@@ -45,12 +45,12 @@ struct Session {
 }
 
 fn session(directory: &Path, init_ox: &str) -> Session {
+    started(directory, &format!("(use-plugin git)\n{init_ox}"))
+}
+
+fn started(directory: &Path, init: &str) -> Session {
     let home = tempfile::tempdir().unwrap();
-    fs::write(
-        home.path().join("init.ox"),
-        format!("(use-plugin git)\n{init_ox}"),
-    )
-    .unwrap();
+    fs::write(home.path().join("init.ox"), init).unwrap();
     let mut editor = Editor::new();
     editor.set_home_directory(None);
     editor.set_working_directory(directory.to_path_buf());
@@ -1193,5 +1193,301 @@ fn commit_messages_opened_elsewhere_get_their_mode() {
     assert_eq!(
         session.editor.line_style(0).spans,
         [(0..50, Highlight::Heading), (50..55, Highlight::Warning)]
+    );
+}
+
+fn branched() -> tempfile::TempDir {
+    let dir = repository();
+    git(dir.path(), &["switch", "-q", "-c", "topic"]);
+    fs::write(dir.path().join("t.txt"), "topic\n").unwrap();
+    git(dir.path(), &["add", "t.txt"]);
+    git(dir.path(), &["commit", "-q", "-m", "Topic work"]);
+    git(dir.path(), &["switch", "-q", "main"]);
+    fs::write(dir.path().join("b.txt"), "bee\nmore\n").unwrap();
+    git(dir.path(), &["commit", "-q", "-am", "Main work"]);
+    git(
+        dir.path(),
+        &[
+            "merge",
+            "-q",
+            "--no-ff",
+            "--no-edit",
+            "-m",
+            "Merge topic",
+            "topic",
+        ],
+    );
+    dir
+}
+
+impl Session {
+    fn contents(&self, name: &str) -> String {
+        let id = self
+            .editor
+            .buffer_named(name)
+            .unwrap_or_else(|| panic!("no {name} in {:?}", self.editor.buffer_names()));
+        self.editor.buffer_by_id(id).unwrap().contents()
+    }
+
+    fn line_with(&self, part: &str) -> usize {
+        self.lines()
+            .iter()
+            .position(|line| line.contains(part))
+            .unwrap_or_else(|| panic!("{part:?} is not in {:?}", self.lines()))
+    }
+
+    fn select(&mut self, part: &str) {
+        let line = self.line_with(part);
+        let point = self.editor.buffer().line_start(line);
+        self.editor.buffer_mut().set_point(point);
+        settle(&mut self.editor, &mut self.ox);
+    }
+
+    fn current_branch(dir: &Path) -> String {
+        git(dir, &["branch", "--show-current"]).trim().to_owned()
+    }
+}
+
+#[test]
+fn l_l_shows_the_history_with_lanes_and_the_commit_beside() {
+    let dir = branched();
+    let mut session = opened(dir.path());
+
+    session.press("C-x g l l");
+
+    let name = folder_name(dir.path());
+    assert_eq!(session.editor.buffer().name(), format!("git log: {name}"));
+    assert_eq!(session.lines().len(), 4, "{:?}", session.lines());
+    let merge = session.line_with("Merge topic");
+    assert_eq!(merge, 0);
+    assert!(
+        session.lines()[0].contains("main ● Merge topic"),
+        "{:?}",
+        session.lines()
+    );
+    let graph = session.editor.pane().line_graph(merge).unwrap();
+    assert_eq!(graph.node.map(|node| node.lane), Some(0));
+    assert_eq!(
+        graph
+            .edges
+            .iter()
+            .map(|edge| (edge.from, edge.to))
+            .collect::<Vec<_>>(),
+        [(None, Some(0)), (None, Some(1))]
+    );
+    let topic = session.line_with("Topic work");
+    let graph = session.editor.pane().line_graph(topic).unwrap();
+    assert_eq!(graph.node.map(|node| node.lane), Some(1));
+    assert!(session.lines()[topic].contains("topic"));
+    let pane = session.contents(&format!("git commit: {name}"));
+    assert!(pane.contains("Merge topic"), "{pane}");
+    assert!(
+        pane.contains("Author: Ada Lovelace <ada@example.com>"),
+        "{pane}"
+    );
+}
+
+#[test]
+fn moving_through_the_log_shows_each_commit_with_its_files_and_diff() {
+    let dir = branched();
+    let mut session = opened(dir.path());
+    session.press("C-x g l l");
+
+    session.select("Topic work");
+
+    let pane = session.contents(&format!("git commit: {}", folder_name(dir.path())));
+    assert!(pane.contains("Topic work"), "{pane}");
+    assert!(pane.contains("Changed files (1)"), "{pane}");
+    assert!(pane.contains("  A  t.txt  +1"), "{pane}");
+    assert!(pane.contains("Added  t.txt  +1"), "{pane}");
+    assert!(pane.contains("@@ -0,0 +1,1 @@"), "{pane}");
+    assert!(pane.contains("+topic"), "{pane}");
+}
+
+#[test]
+fn ret_in_the_log_goes_to_the_commit_and_the_file_is_one_key_away() {
+    let dir = branched();
+    let mut session = opened(dir.path());
+    session.press("C-x g l l");
+    session.select("Topic work");
+
+    session.press("RET");
+    assert!(session.editor.buffer().name().starts_with("git commit: "));
+    session.select("+topic");
+    session.press("RET");
+
+    assert!(session.editor.buffer().name().ends_with("t.txt"));
+}
+
+fn branchy() -> tempfile::TempDir {
+    let dir = repository();
+    git(dir.path(), &["branch", "topic"]);
+    git(dir.path(), &["branch", "feature/x"]);
+    git(dir.path(), &["tag", "v1"]);
+    dir
+}
+
+#[test]
+fn y_lists_branches_and_tags_and_typing_filters_them() {
+    let dir = branchy();
+    let mut session = opened(dir.path());
+
+    session.press("C-x g y");
+
+    assert_eq!(
+        session.editor.buffer().name(),
+        format!("git branches: {}", folder_name(dir.path()))
+    );
+    assert!(session.shows("Local branches (3)"), "{:?}", session.lines());
+    assert!(session.shows("Tags (1)"), "{:?}", session.lines());
+    assert!(
+        session.at_point().contains("● main"),
+        "{}",
+        session.at_point()
+    );
+
+    session.typed("to");
+
+    assert!(
+        session.lines()[0].starts_with("Filter: to  1 found"),
+        "{:?}",
+        session.lines()
+    );
+    assert!(
+        !session
+            .lines()
+            .iter()
+            .any(|line| line.contains("feature/x"))
+    );
+    assert!(session.at_point().contains("topic"));
+
+    session.press("DEL DEL");
+
+    assert!(
+        session
+            .lines()
+            .iter()
+            .any(|line| line.contains("feature/x"))
+    );
+}
+
+#[test]
+fn ret_checks_out_the_branch_at_point() {
+    let dir = branchy();
+    let mut session = opened(dir.path());
+    session.press("C-x g y");
+    session.typed("topic");
+
+    session.press("RET");
+
+    assert_eq!(Session::current_branch(dir.path()), "topic");
+    assert_eq!(session.editor.message(), Some("Switched to topic"));
+    assert!(
+        session.at_point().contains("● topic"),
+        "{}",
+        session.at_point()
+    );
+}
+
+#[test]
+fn c_c_c_branches_from_the_one_at_point_and_c_c_k_deletes_after_asking() {
+    let dir = branchy();
+    let mut session = opened(dir.path());
+    session.press("C-x g y");
+    session.typed("topic");
+
+    session.press("C-c c");
+    session.typed("spike");
+    session.press("RET");
+
+    assert_eq!(Session::current_branch(dir.path()), "spike");
+    session.press("C-c k");
+    assert_eq!(
+        question(&session.editor),
+        Some("Delete branch topic? (y or n) ".to_owned())
+    );
+    session.press("y");
+
+    assert_eq!(git(dir.path(), &["branch", "--list", "topic"]), "");
+    assert_eq!(session.editor.message(), Some("Deleted branch topic"));
+}
+
+#[test]
+fn the_b_menu_renames_the_current_branch() {
+    let dir = branchy();
+    let mut session = opened(dir.path());
+
+    session.press("C-x g b m RET");
+    session.typed("-old");
+    session.press("RET");
+
+    assert_eq!(Session::current_branch(dir.path()), "main-old");
+    assert_eq!(session.editor.message(), Some("Renamed main to main-old"));
+}
+
+#[test]
+fn dollar_lists_the_commands_that_changed_the_repository() {
+    let (dir, mut session) = edited("");
+    session.press("C-x g s");
+    session.press("b k");
+    session.typed("nope");
+    session.press("RET y");
+
+    session.press("$");
+
+    assert_eq!(
+        session.editor.buffer().name(),
+        format!("git process: {}", folder_name(dir.path()))
+    );
+    assert!(
+        session.shows("ok  git add -- c.txt  just now"),
+        "{:?}",
+        session.lines()
+    );
+    let failed = session.line_with("git branch -d nope");
+    assert!(session.lines()[failed].starts_with("exit 1"));
+    assert!(session.lines()[failed + 1].starts_with("    error:"));
+    assert!(
+        !session
+            .lines()
+            .iter()
+            .any(|line| line.contains("status --porcelain"))
+    );
+
+    let entry = session.lines()[failed].clone();
+    session.go_to(&entry);
+    session.press("TAB");
+
+    assert!(
+        !session
+            .lines()
+            .iter()
+            .any(|line| line.starts_with("    error:"))
+    );
+}
+
+#[test]
+fn the_mode_line_shows_the_branch_and_clicking_it_opens_the_status() {
+    let dir = repository();
+    fs::write(dir.path().join("new.txt"), "x\n").unwrap();
+    let mut session = started(dir.path(), "(use-plugin git :config {mode-line: true})");
+
+    session.editor.open_file(&dir.path().join("a.txt"));
+    settle(&mut session.editor, &mut session.ox);
+
+    assert!(
+        session
+            .editor
+            .mode_line_segments()
+            .contains(&"main ●".to_owned()),
+        "{:?}",
+        session.editor.mode_line_segments()
+    );
+    session.editor.click_mode_line("git");
+    settle(&mut session.editor, &mut session.ox);
+
+    assert_eq!(
+        session.editor.buffer().name(),
+        format!("git: {}", folder_name(dir.path()))
     );
 }

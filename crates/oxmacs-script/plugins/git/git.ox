@@ -4,17 +4,21 @@
           (git status)
           (git pane)
           (git diff)
-          (git commit)))
+          (git commit)
+          (git log)
+          (git branches)
+          (git process)))
 
 (def status-keys
   {"n" 'git-next-section "p" 'git-previous-section "TAB" 'git-toggle "RET" 'git-visit
    "g" 'git-refresh "s" 'git-stage "u" 'git-unstage "k" 'git-discard "c" 'git-commit-popup
+   "l" 'git-log-popup "b" 'git-branch-popup "y" 'git-branches "$" 'git-process
    "q" 'quit-window})
 
 (def pane-keys
   {"n" 'git-next-hunk "p" 'git-previous-hunk "t" 'git-toggle-layout "RET" 'git-visit
    "g" 'git-refresh "s" 'git-stage "u" 'git-unstage "k" 'git-discard "c" 'git-commit-popup
-   "q" 'quit-window})
+   "$" 'git-process "q" 'quit-window})
 
 (def (here)
   (if-let [git (buffer-value :git)]
@@ -153,13 +157,12 @@
     (show found)
     (message "Not inside a Git repository")))
 (def (step kinds forward)
-  (when (here)
-    (let [line (current-line)
-          lines (if forward
-                  (range (+ line 1) (inc (last-line)))
-                  (reverse (range 0 line)))
-          at (first (filter (fn [i] (some (fn [kind] (= (get (line-item i) :kind) kind)) kinds)) lines))]
-      (when (some? at) (goto-line at)))))
+  (let [line (current-line)
+        lines (if forward
+                (range (+ line 1) (inc (last-line)))
+                (reverse (range 0 line)))
+        at (first (filter (fn [i] (some (fn [kind] (= (get (line-item i) :kind) kind)) kinds)) lines))]
+    (when (some? at) (goto-line at))))
 
 (def items [:section :file :hunk :stash :commit])
 
@@ -203,15 +206,16 @@
 (def (row-line row)
   (if (= row.kind :pair) (or row.right row.left) row.at))
 
+(def (hunk-line hunk at)
+  (let [before (if (some? at)
+                 (count (filter (fn [i] (not (= (get (nth hunk.lines i) :kind) :removed)))
+                                (range at)))
+                 0)]
+    (+ (max 1 hunk.new-start) before)))
+
 (def (line-number state row)
   (when (some? row.hunk)
-    (let [hunk (nth (get state.diffs [row.section row.path]) row.hunk)
-          at (row-line row)
-          before (if (some? at)
-                   (count (filter (fn [i] (not (= (get (nth hunk.lines i) :kind) :removed)))
-                                  (range at)))
-                   0)]
-      (+ (max 1 hunk.new-start) before))))
+    (hunk-line (nth (get state.diffs [row.section row.path]) row.hunk) (row-line row))))
 
 (defcommand git-visit "Visit the file at point"
   (when-let [found (here)]
@@ -280,14 +284,14 @@
 
 (def (change git args)
   (deactivate-mark)
-  (repo/git (get @git :root) args)
+  (repo/act (get @git :root) args)
   (refresh git))
 
 (def (apply-hunk git chosen reverse args)
   (let [state @git
         hunk (nth (get state.diffs [chosen.section chosen.path]) chosen.hunk)]
     (deactivate-mark)
-    (repo/git-with state.root args (diff/patch chosen.path hunk chosen.lines reverse))
+    (repo/act-with state.root args (diff/patch chosen.path hunk chosen.lines reverse))
     (refresh git)))
 
 (def (stage git chosen)
@@ -298,7 +302,7 @@
       [(= chosen.kind :hunk)
        (do
          (when (= section :untracked)
-           (repo/git state.root ["add" "--intent-to-add" "--" chosen.path]))
+           (repo/act state.root ["add" "--intent-to-add" "--" chosen.path]))
          (apply-hunk git chosen false ["apply" "--cached" "-"]))]
       [(and (= chosen.kind :section) (= section :untracked))
        (change git (concat ["add" "--"] state.snapshot.untracked))]
@@ -421,7 +425,7 @@
     (if (not state.snapshot.born)
       (message "There is no commit to change yet")
       (do
-        (repo/git state.root (concat ["commit" "--amend" "--no-edit"] flags))
+        (repo/act state.root (concat ["commit" "--amend" "--no-edit"] flags))
         (refresh git)
         (report-commit state.root)))))
 
@@ -448,7 +452,7 @@
       (if (= (commit/message-text text) "")
         (message "Write a commit message first")
         (do (message "Committing…")
-          (repo/git-with found.root found.args text)
+          (repo/act-with found.root found.args text)
           (close-buffer buffer)
           (back-to-status found.git)
           (refresh found.git)
@@ -488,5 +492,420 @@
 (defmode git-commit "Git commit"
   :highlight commit/highlight)
 
-(on-disk-change :git (fn [_folders] (refresh-all)))
-(on-saved :git (fn [_path] (refresh-all)))
+(def (root-here)
+  (or (when-let [found (here)] found.state.root)
+      (when-let [log (buffer-value :git-log)] (get @log :root))
+      (buffer-value :git-root)
+      (when-let [found (repo/locate (default-directory))] found.root)))
+
+(def process-keys {"TAB" 'git-process-toggle "n" 'git-process-next "p" 'git-process-previous
+                   "g" 'git-process-refresh "q" 'quit-window})
+
+(defonce process-folds (atom {}))
+
+(def (process-name root)
+  $"git process: {(path/name root)}")
+
+(def (draw-process root reveal)
+  (let [name (process-name root)
+        entries (filter (fn [entry] (= entry.root root)) @repo/history)
+        out (process/render entries @process-folds (now))]
+    (cond
+      [reveal
+       (with-buffer (open-buffer name out.lines :keys process-keys :directory root :label "git process")
+         (set-buffer-value! :git-root root)
+         (goto-line (last-line)))]
+      [(buffer-live? name) (set-lines name out.lines)]
+      [else nil])))
+
+(def (redraw-processes)
+  (each [name (buffer-list)]
+    (when (string/starts-with? name "git process: ")
+      (when-let [root (with-buffer name (buffer-value :git-root))]
+        (draw-process root false)))))
+
+(defcommand git-process "Show the Git commands run in this repository and their output"
+  (if-let [root (root-here)]
+    (draw-process root true)
+    (message "Not inside a Git repository")))
+
+(defcommand git-process-toggle "Show or hide the output of the command at point"
+  (when-let [row (line-item)]
+    (when-let [root (buffer-value :git-root)]
+      (let [entry (find (fn [entry] (= entry.at row.at)) @repo/history)]
+        (when entry
+          (swap! process-folds assoc row.at (not (process/open? entry @process-folds)))
+          (draw-process root false)
+          (goto-item {kind: :entry at: row.at}))))))
+
+(defcommand git-process-next "Move to the next command" (step [:entry] true))
+(defcommand git-process-previous "Move to the previous command" (step [:entry] false))
+(defcommand git-process-refresh "Show the latest commands"
+  (when-let [root (buffer-value :git-root)]
+    (draw-process root false)))
+
+(defonce heads (atom {}))
+(defonce rooted (atom {}))
+(defonce showing (atom nil))
+
+(def (root-of directory)
+  (let [known (get @rooted directory)]
+    (if (some? known)
+      (when known known)
+      (let [found (repo/locate directory)
+            root (when found found.root)]
+        (swap! rooted assoc directory (or root false))
+        root))))
+
+(def (head-text head)
+  (str (or head.branch head.id "HEAD")
+       (if head.upstream $" ↑{head.upstream.ahead} ↓{head.upstream.behind}" "")
+       (if head.dirty " ●" "")))
+
+(def (open-status root)
+  (when-let [found (repo/locate root)]
+    (show found)))
+
+(def (show-head)
+  (let [root @showing
+        head (when root (get @heads root))]
+    (set-mode-line :git (when (and (setting :mode-line) head) (head-text head))
+                   :on-click (fn [] (open-status root)))))
+
+(def (look-head root)
+  (when-let [head (repo/read-head root)]
+    (swap! heads assoc root head))
+  (show-head))
+
+(def (follow-head)
+  (if (setting :mode-line)
+    (let [root (root-of (default-directory))]
+      (reset! showing root)
+      (if (and root (nil? (get @heads root)))
+        (look-head root)
+        (show-head)))
+    (set-mode-line :git nil)))
+
+(def (heads-changed)
+  (reset! heads {})
+  (when (and (setting :mode-line) @showing)
+    (look-head @showing)))
+
+(def log-keys
+  {"n" 'git-next-commit "p" 'git-previous-commit "RET" 'git-log-show "+" 'git-log-more
+   "g" 'git-log-refresh "l" 'git-log-popup "b" 'git-branch-popup "$" 'git-process "q" 'quit-window})
+
+(def commit-keys
+  {"n" 'git-next-hunk "p" 'git-previous-hunk "t" 'git-log-toggle-layout "RET" 'git-log-visit
+   "$" 'git-process "q" 'quit-window})
+
+(def (draw-log log)
+  (let [state @log
+        out (log/render state.commits state.more (or (buffer-width state.name) 120) (now))]
+    (set-lines state.name out.lines)))
+
+(def (read-log log)
+  (let [state @log
+        found (repo/read-log state.root (+ state.limit 1) state.all)]
+    (swap! log assoc :commits (take state.limit found) :more (> (count found) state.limit))))
+
+(def (draw-commit log reveal)
+  (let [state @log
+        pane-name state.pane]
+    (when (and state.commit (or reveal (buffer-live? pane-name)))
+      (let [out (log/detail state.commit state.layout (or (buffer-width pane-name) 100) (now))]
+        (if reveal
+          (with-buffer (open-buffer pane-name out.lines :keys commit-keys :directory state.root
+                                    :beside true :label "git commit" :line 0 :select (= reveal :select)
+                                    :on-resize (fn [_width] (draw-commit log false)))
+            (set-buffer-value! :git-log log))
+          (set-lines pane-name out.lines :line 0))))))
+
+(def (show-commit log id reveal)
+  (let [state @log]
+    (when (or reveal (not (= id state.shown)))
+      (swap! log assoc :shown id :commit (repo/read-commit state.root id))
+      (draw-commit log (or reveal (not (buffer-shown? state.pane)))))))
+
+(def (follow-log log line)
+  (when-let [row (line-item line)]
+    (when (= row.kind :commit)
+      (show-commit log row.id false))))
+
+(def (show-log found all)
+  (let [name $"git log: {(path/name found.root)}"
+        known (when (buffer-live? name) (with-buffer name (buffer-value :git-log)))
+        log (or known (atom {root: found.root name: name pane: $"git commit: {(path/name found.root)}"
+                             limit: 200 all: all commits: [] more: false layout: :unified
+                             shown: nil commit: nil}))]
+    (swap! log assoc :all all)
+    (read-log log)
+    (let [state @log
+          out (log/render state.commits state.more (or (buffer-width name) 120) (now))]
+      (with-buffer (open-buffer name out.lines :keys log-keys :directory state.root :label "git log"
+                                :cursor :line
+                                :on-move (fn [line] (follow-log log line))
+                                :on-resize (fn [_width] (draw-log log)))
+        (set-buffer-value! :git-log log))
+      (when (goto-item {kind: :commit})
+        (show-commit log (get (line-item) :id) true)))))
+
+(def (logged)
+  (or (buffer-value :git-log) (message "Not in a Git log")))
+
+(defcommand git-log "Show the history of the current branch with its graph"
+  (if-let [found (repo/locate (default-directory))]
+    (show-log found false)
+    (message "Not inside a Git repository")))
+
+(defcommand git-log-popup "Show the history of this branch or of all branches"
+  (if-let [found (repo/locate (default-directory))]
+    (transient "Log"
+               [{title: "Log"
+                 actions: [["l" "Current branch" (fn [_flags] (show-log found false))]
+                           ["a" "All branches" (fn [_flags] (show-log found true))]]}])
+    (message "Not inside a Git repository")))
+
+(defcommand git-next-commit "Move to the next commit" (step [:commit] true))
+(defcommand git-previous-commit "Move to the previous commit" (step [:commit] false))
+
+(defcommand git-log-show "Show the commit at point beside the log and go to it"
+  (when-let [log (logged)]
+    (when-let [row (line-item)]
+      (when (= row.kind :commit)
+        (show-commit log row.id :select)))))
+
+(defcommand git-log-more "Show more of the history"
+  (when-let [log (logged)]
+    (swap! log update :limit (fn [limit] (* limit 2)))
+    (read-log log)
+    (draw-log log)))
+
+(defcommand git-log-refresh "Read the history again"
+  (when-let [log (logged)]
+    (read-log log)
+    (draw-log log)))
+
+(defcommand git-log-toggle-layout "Switch the commit's diff between unified and side by side"
+  (when-let [log (logged)]
+    (swap! log update :layout (fn [layout] (if (= layout :split) :unified :split)))
+    (draw-commit log false)))
+
+(defcommand git-log-visit "Visit the file at point as it is in the working tree"
+  (when-let [log (logged)]
+    (let [state @log
+          row (line-item)
+          file (when (and row (some? row.path) state.commit)
+                 (find (fn [file] (= file.path row.path)) state.commit.files))]
+      (if (nil? file)
+        (message "Nothing to visit here")
+        (let [target (path/join state.root file.path)]
+          (if (file/exists? target)
+            (do
+              (open-file target)
+              (when (some? row.hunk)
+                (goto-line (- (hunk-line (nth file.hunks row.hunk) (row-line row)) 1))))
+            (message $"{file.path} is not in the working tree")))))))
+
+(def branch-keys
+  {"RET" 'git-branch-checkout-here "TAB" 'git-branch-toggle "DEL" 'git-branch-filter-delete
+   "C-g" 'git-branch-quit "C-c c" 'git-branch-new-here "C-c m" 'git-branch-rename-here
+   "C-c k" 'git-branch-delete-here "C-c b" 'git-branch-popup "C-c g" 'git-branches-refresh
+   "C-c $" 'git-process})
+
+(defonce branch-views (atom {}))
+
+(def (branches-name root)
+  $"git branches: {(path/name root)}")
+
+(def (draw-branches root reveal)
+  (let [name (branches-name root)
+        view (or (get @branch-views root) {branches: [] typed: "" closed: {}})
+        out (branches/render view.branches view.typed view.closed (now) (or (buffer-width name) 100))]
+    (cond
+      [reveal
+       (with-buffer (open-buffer name out.lines :keys branch-keys :directory root :label "git branches"
+                                 :cursor :line :on-type (fn [text] (branch-typed root text))
+                                 :on-resize (fn [_width] (draw-branches root false)))
+         (set-buffer-value! :git-root root)
+         (or (goto-item {kind: :branch head: true}) (goto-item {kind: :branch})))]
+      [(buffer-live? name)
+       (set-lines name out.lines)
+       (with-buffer name
+         (unless (= (get (line-item) :kind) :branch)
+           (goto-item {kind: :branch})))]
+      [else nil])))
+
+(def (read-branches root)
+  (swap! branch-views update root
+         (fn [view] (assoc (or view {typed: "" closed: {}}) :branches (repo/read-branches root)))))
+
+(def (branches-changed root)
+  (read-branches root)
+  (draw-branches root false)
+  (heads-changed)
+  (refresh-all)
+  (redraw-processes))
+
+(def (branch-typed root text)
+  (swap! branch-views update-in [root :typed] (fn [typed] (str (or typed "") text)))
+  (draw-branches root false))
+
+(defcommand git-branches "List the branches and tags, filtering as you type"
+  (if-let [root (root-here)]
+    (do (read-branches root) (draw-branches root true))
+    (message "Not inside a Git repository")))
+
+(defcommand git-branches-refresh "Read the branches again"
+  (when-let [root (buffer-value :git-root)]
+    (read-branches root)
+    (draw-branches root false)))
+
+(defcommand git-branch-filter-delete "Take back the last character of the filter"
+  (when-let [root (buffer-value :git-root)]
+    (swap! branch-views update-in [root :typed]
+           (fn [typed] (if (string/blank? typed) "" (string/slice typed 0 (- (count typed) 1)))))
+    (draw-branches root false)))
+
+(defcommand git-branch-quit "Clear the filter, or leave the branches"
+  (when-let [root (buffer-value :git-root)]
+    (if (string/blank? (get-in @branch-views [root :typed]))
+      (run-command 'quit-window)
+      (do (swap! branch-views assoc-in [root :typed] "")
+        (draw-branches root false)))))
+
+(defcommand git-branch-toggle "Fold or unfold the group at point"
+  (when-let [root (buffer-value :git-root)]
+    (when-let [row (line-item)]
+      (when (= row.kind :group)
+        (swap! branch-views update-in [root :closed]
+               (fn [closed] (if (get closed row.group) (dissoc closed row.group) (assoc closed row.group true))))
+        (draw-branches root false)
+        (goto-item {kind: :group group: row.group})))))
+
+(def (branch-names root)
+  (map (fn [branch] branch.name) (repo/read-branches root)))
+
+(def (local-names root)
+  (map (fn [branch] branch.name) (filter (fn [branch] (= branch.kind :local)) (repo/read-branches root))))
+
+(def (current-branch root)
+  (get (repo/read-head root) :branch))
+
+(def (checkout root name)
+  (let [branches (repo/read-branches root)
+        chosen (or (find (fn [branch] (and (= branch.name name) (= branch.kind :local))) branches)
+                   (find (fn [branch] (= branch.name name)) branches))
+        local (fn [wanted] (find (fn [branch] (and (= branch.kind :local) (= branch.name wanted))) branches))]
+    (cond
+      [(nil? chosen) (repo/act root ["switch" name])]
+      [(= chosen.kind :local) (repo/act root ["switch" name])]
+      [(= chosen.kind :tag) (repo/act root ["switch" "--detach" name])]
+      [else
+       (let [short (string/slice name (+ 1 (or (string/index-of name "/") -1)))]
+         (if (local short)
+           (repo/act root ["switch" short])
+           (repo/act root ["switch" "--track" name])))])
+    (branches-changed root)
+    (message $"Switched to {(or (current-branch root) name)}")))
+
+(def (create root name start switch)
+  (if (string/blank? name)
+    (message "A branch needs a name")
+    (do
+      (repo/act root (if switch
+                       (concat ["switch" "-c" name] (if (string/blank? start) [] [start]))
+                       (concat ["branch" name] (if (string/blank? start) [] [start]))))
+      (branches-changed root)
+      (message (if switch $"Switched to a new branch {name}" $"Made branch {name}")))))
+
+(def (rename root old)
+  (let [new (prompt $"Rename {old} to: " :initial old)]
+    (if (or (string/blank? new) (= new old))
+      (message "Kept the name")
+      (do (repo/act root ["branch" "-m" old new])
+        (branches-changed root)
+        (message $"Renamed {old} to {new}")))))
+
+(def (deleted? root name)
+  (try
+    (do (repo/act root ["branch" "-d" name]) true)
+    (catch error e
+      (if (string/includes? e.message "not fully merged")
+        (when (yes-or-no $"{name} isn't merged; delete it anyway?")
+          (repo/act root ["branch" "-D" name])
+          true)
+        (raise e)))))
+
+(def (delete-branch root name)
+  (when (yes-or-no $"Delete branch {name}?")
+    (let [gone (deleted? root name)]
+      (branches-changed root)
+      (message (if gone $"Deleted branch {name}" $"Kept branch {name}")))))
+
+(def (asked-branch root question)
+  (prompt question :choices (branch-names root)))
+
+(defcommand git-branch-popup "Check out, make, rename, delete or list branches"
+  (if-let [root (root-here)]
+    (transient "Branch"
+               [{title: "Check out"
+                 actions: [["b" "Branch or tag" (fn [_flags] (checkout root (asked-branch root "Check out: ")))]
+                           ["c" "New branch" (fn [_flags]
+                                               (let [name (prompt "New branch: ")]
+                                                 (create root name (prompt $"Start {name} at: " :initial (or (current-branch root) "")
+                                                                           :choices (branch-names root))
+                                                         true)))]]}
+                {title: "Change"
+                 actions: [["n" "Make a branch" (fn [_flags]
+                                                  (let [name (prompt "Make branch: ")]
+                                                    (create root name (prompt $"Start {name} at: " :initial (or (current-branch root) "")
+                                                                              :choices (branch-names root))
+                                                            false)))]
+                           ["m" "Rename" (fn [_flags]
+                                           (rename root (prompt "Rename branch: " :initial (or (current-branch root) "")
+                                                                :choices (local-names root))))]
+                           ["k" "Delete" (fn [_flags]
+                                           (delete-branch root (prompt "Delete branch: " :choices (local-names root))))]]}
+                {title: "List"
+                 actions: [["l" "Branches and tags" (fn [_flags] (read-branches root) (draw-branches root true))]]}])
+    (message "Not inside a Git repository")))
+
+(def (branch-here)
+  (let [row (line-item)]
+    (when (and row (= row.kind :branch)) row)))
+
+(defcommand git-branch-checkout-here "Check out the branch or tag at point"
+  (when-let [root (buffer-value :git-root)]
+    (if-let [row (branch-here)]
+      (checkout root row.name)
+      (message "No branch here"))))
+
+(defcommand git-branch-new-here "Make a branch from the one at point and switch to it"
+  (when-let [root (buffer-value :git-root)]
+    (let [row (branch-here)
+          name (prompt (if row $"New branch from {row.name}: " "New branch: "))]
+      (create root name (if row row.name "") true))))
+
+(defcommand git-branch-rename-here "Rename the branch at point"
+  (when-let [root (buffer-value :git-root)]
+    (let [row (branch-here)]
+      (if (and row (= row.group :local))
+        (rename root row.name)
+        (message "Only local branches can be renamed here")))))
+
+(defcommand git-branch-delete-here "Delete the branch at point"
+  (when-let [root (buffer-value :git-root)]
+    (let [row (branch-here)]
+      (if (and row (= row.group :local))
+        (if row.head
+          (message "Switch to another branch before deleting this one")
+          (delete-branch root row.name))
+        (message "Only local branches can be deleted here")))))
+
+(on-disk-change :git (fn [_folders] (refresh-all) (heads-changed)))
+(on-saved :git (fn [_path] (refresh-all) (heads-changed)))
+(on-window-change :git (fn [] (follow-head)))
+(on-settings-change :git (fn [] (follow-head)))
+
+(follow-head)

@@ -1,11 +1,23 @@
 (module
-  (import (ox process) (ox string) (ox path) (ox file)
+  (import (ox process) (ox string) (ox path) (ox file) (ox time)
           (git diff))
-  (export run git git-with locate read-status files-of find-change located diffs))
+  (export run git git-with act act-with history locate read-status read-head files-of find-change
+          located diffs read-log read-commit read-branches))
 
 (def base ["--no-pager" "--no-optional-locks" "-c" "color.ui=false" "-c" "core.quotepath=false"])
 
 (def field "\u{1f}")
+
+(def kept 200)
+
+(defonce history (atom []))
+
+(def (record! root args ran)
+  (swap! history
+         (fn [entries]
+           (let [all (conj entries {root: root args: args status: ran.status at: (time/now)
+                                    output: (string/trim-end (str ran.stdout ran.stderr))})]
+             (if (> (count all) kept) (drop (- (count all) kept) all) all)))))
 
 (def (native path)
   (if (= (path/separator) "\\") (string/replace path "/" "\\") path))
@@ -26,6 +38,16 @@
 
 (def (git-with root args input)
   (output (process/run "git" (concat base args) :cwd root :input input)))
+
+(def (act root args)
+  (let [ran (await (run root args))]
+    (record! root args ran)
+    (output ran)))
+
+(def (act-with root args input)
+  (let [ran (process/run "git" (concat base args) :cwd root :input input)]
+    (record! root args ran)
+    (output ran)))
 
 (def (climb directory cdup)
   (reduce (fn [dir part] (if (= part "..") (path/parent dir) dir))
@@ -57,7 +79,7 @@
         key (nth parts 1)
         value (if (> (count parts) 2) (nth parts 2) "")]
     (cond
-      [(= key "branch.oid") (assoc found :born (not (= value "(initial)")))]
+      [(= key "branch.oid") (assoc found :born (not (= value "(initial)")) :oid value)]
       [(= key "branch.head") (assoc found :branch (if (= value "(detached)") nil value))]
       [(= key "branch.upstream") (assoc found :upstream {name: value ahead: 0 behind: 0})]
       [(and (= key "branch.ab") found.upstream)
@@ -172,6 +194,98 @@
            :counts (merged (parse-numstat :unstaged (quietly-read (await unstaged)))
                            (parse-numstat :staged (quietly-read (await staged)))
                            (untracked-counts root found.untracked)))))
+
+(def (read-head root)
+  (let [ran (await (run root ["status" "--porcelain=v2" "--branch" "-z"]))]
+    (when (= ran.status 0)
+      (let [found (parse-status ran.stdout)]
+        {branch: found.branch upstream: found.upstream
+         id: (when (and found.born found.oid) (string/slice found.oid 0 7))
+         dirty: (not (and (empty? found.staged) (empty? found.unstaged) (empty? found.untracked)))}))))
+
+(def (ref-of text)
+  (let [given (string/trim text)
+        head (string/starts-with? given "HEAD -> ")
+        part (if head (string/slice given 8) given)]
+    (cond
+      [(= part "") nil]
+      [(= part "HEAD") {name: "HEAD" kind: :detached head: true}]
+      [(string/starts-with? part "tag: refs/tags/") {name: (string/slice part 15) kind: :tag head: false}]
+      [(string/starts-with? part "refs/heads/") {name: (string/slice part 11) kind: :local head: head}]
+      [(and (string/starts-with? part "refs/remotes/") (not (string/ends-with? part "/HEAD")))
+       {name: (string/slice part 13) kind: :remote head: false}]
+      [else nil])))
+
+(def (parse-refs text)
+  (keep ref-of (string/split text ", ")))
+
+(def (numbers-in text)
+  (filter (fn [part] (not (= part ""))) (string/split text " ")))
+
+(def log-format "--format=%H%x1f%h%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s")
+
+(def (parse-commits text)
+  (map (fn [record]
+         (let [parts (string/split record field 7)]
+           {id: (nth parts 0) short: (nth parts 1) parents: (numbers-in (nth parts 2))
+            author: (nth parts 3) time: (string/to-number (nth parts 4))
+            refs: (parse-refs (nth parts 5)) summary: (nth parts 6)}))
+       (records text)))
+
+(def (read-log root limit all)
+  (let [ran (await (run root (concat ["log" "-z" "--topo-order" "--decorate=full" log-format
+                                      "-n" (str limit)]
+                                     (if all ["--all"] []))))]
+    (if (= ran.status 0) (parse-commits ran.stdout) [])))
+
+(def show-format "--format=%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ce%x1f%D%x1f%B")
+
+(def (read-commit root id)
+  (let [head (spawn (run root ["show" "-s" "--decorate=full" show-format id]))
+        patch (spawn (run root ["show" "--format=" "-M" "--no-ext-diff" "--diff-merges=first-parent" id]))
+        parts (string/split (string/trim-end (output (await head))) field 9)]
+    {id: (nth parts 0) parents: (numbers-in (nth parts 1))
+     author: (nth parts 2) email: (nth parts 3) time: (string/to-number (nth parts 4))
+     committer: (nth parts 5) committer-email: (nth parts 6)
+     refs: (parse-refs (nth parts 7)) message: (string/trim (nth parts 8))
+     files: (diff/files (quietly-read (await patch)))}))
+
+(def branch-format
+  "--format=%(refname)%1f%(refname:short)%1f%(objectname:short)%1f%(upstream:short)%1f%(upstream:track,nobracket)%1f%(HEAD)%1f%(committerdate:unix)%1f%(contents:subject)")
+
+(def (tracked text)
+  (reduce (fn [found part]
+            (let [words (string/split (string/trim part) " ")]
+              (cond
+                [(= (nth words 0) "ahead") (assoc found :ahead (string/to-number (nth words 1)))]
+                [(= (nth words 0) "behind") (assoc found :behind (string/to-number (nth words 1)))]
+                [(= (nth words 0) "gone") (assoc found :gone true)]
+                [else found])))
+          {ahead: 0 behind: 0 gone: false}
+          (filter (fn [part] (not (string/blank? part))) (string/split text ","))))
+
+(def (branch-of line)
+  (let [parts (string/split line field 8)
+        ref (nth parts 0)
+        kind (cond
+               [(string/starts-with? ref "refs/heads/") :local]
+               [(and (string/starts-with? ref "refs/remotes/") (not (string/ends-with? ref "/HEAD"))) :remote]
+               [(string/starts-with? ref "refs/tags/") :tag]
+               [else nil])]
+    (when (and kind (= (count parts) 8))
+      (merge {kind: kind ref: ref
+              name: (string/slice ref (cond [(= kind :local) 11] [(= kind :remote) 13] [else 10]))
+              id: (nth parts 2) upstream: (when (not (= (nth parts 3) "")) (nth parts 3))
+              head: (= (nth parts 5) "*") time: (or (string/to-number (nth parts 6)) 0)
+              summary: (nth parts 7)}
+             (tracked (nth parts 4))))))
+
+(def (read-branches root)
+  (let [ran (await (run root ["for-each-ref" "--sort=-committerdate" branch-format
+                              "refs/heads" "refs/remotes" "refs/tags"]))]
+    (if (= ran.status 0)
+      (keep branch-of (filter (fn [line] (not (string/blank? line))) (string/lines ran.stdout)))
+      [])))
 
 (def (files-of snapshot section)
   (if (= section :untracked)

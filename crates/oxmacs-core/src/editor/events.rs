@@ -58,6 +58,7 @@ pub enum Event {
         buffer: BufferId,
         index: usize,
     },
+    ModeLineClicked(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

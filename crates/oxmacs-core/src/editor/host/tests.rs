@@ -7,7 +7,7 @@ use serde_json::json;
 use crate::command::{CommandSpec, Scope, ScopeId};
 use crate::config::Config;
 use crate::display::LineStyle;
-use crate::editor::{Editor, Event, EventKind, InputLine, Offer, Page, Question};
+use crate::editor::{Editor, Event, EventKind, InputLine, ModeLinePart, Offer, Page, Question};
 use crate::plugin_state::States;
 use crate::special_buffer::SpecialBuffer;
 use crate::testing::press;
@@ -369,12 +369,44 @@ fn plugins_fetch_urls_and_get_the_answer_once() {
 fn plugins_add_mode_line_segments_in_order() {
     let mut editor = Editor::new();
 
-    let counted = |editor: &Editor| Some(format!("{} buffers", editor.buffer_names().len()));
+    let counted = |editor: &Editor| vec![format!("{} buffers", editor.buffer_names().len()).into()];
     editor.add_mode_line_segment(counted);
-    editor.add_mode_line_segment(|_| None);
+    editor.add_mode_line_segment(|_| Vec::new());
     editor.add_mode_line_segment(counted);
 
     assert_eq!(editor.mode_line_segments(), ["1 buffers", "1 buffers"]);
+}
+
+#[test]
+fn clicking_a_mode_line_part_reports_its_key() {
+    let mut editor = Editor::new();
+    editor.add_mode_line_segment(|_| {
+        vec![
+            "plain".to_owned().into(),
+            ModeLinePart::clickable("main ↑2", "git"),
+        ]
+    });
+    editor.subscribe(EventKind::ModeLineClicked);
+
+    assert_eq!(
+        editor.mode_line_parts(),
+        [
+            ModeLinePart {
+                text: "plain".to_owned(),
+                click: None
+            },
+            ModeLinePart {
+                text: "main ↑2".to_owned(),
+                click: Some("git".to_owned())
+            }
+        ]
+    );
+    editor.click_mode_line("git");
+
+    assert_eq!(
+        editor.take_events(),
+        [Event::ModeLineClicked("git".to_owned())]
+    );
 }
 
 #[test]

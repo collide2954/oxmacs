@@ -7,7 +7,7 @@ use oxmacs_core::editor::{Editor, Event, EventKind};
 use oxmacs_core::text::{Buffer, Splice};
 
 use crate::api::handlers::{self, Hook};
-use crate::api::{buffers, games, handles, lines, provided};
+use crate::api::{buffers, games, handles, lines, natives, provided};
 use crate::ide::{log, repl};
 use crate::{PATIENT, runtime::plugins};
 
@@ -117,7 +117,8 @@ fn holds(editor: &Editor, event: &Event) -> Vec<Hold> {
         | Event::Typed { .. }
         | Event::Link { .. }
         | Event::Asked { .. }
-        | Event::ItemChosen { .. } => return Vec::new(),
+        | Event::ItemChosen { .. }
+        | Event::ModeLineClicked(_) => return Vec::new(),
     };
     handlers::held(editor, hook)
 }
@@ -188,6 +189,8 @@ pub fn run(isolate: &mut Isolate, editor: &mut Editor) {
             buffers::hear(isolate, editor, event);
         } else if matches!(event, Event::Asked { .. } | Event::ItemChosen { .. }) {
             provided::hear(isolate, editor, &event);
+        } else if let Event::ModeLineClicked(key) = &event {
+            natives::clicked(isolate, editor, key);
         } else if let Err(error) = dispatch(isolate, editor, event) {
             log::report(editor, &error, None);
         }

@@ -2,7 +2,7 @@ use std::any::Any;
 use std::ops::Range;
 use std::time::Instant;
 
-use crate::display::{self, Layout, LineStyle, Row, ScreenLine, Viewport};
+use crate::display::{self, Layout, LineGraph, LineStyle, Row, ScreenLine, Viewport};
 use crate::editor::buffers::Mode;
 use crate::editor::motion::movement::display_column;
 use crate::editor::special::splash::Splash;
@@ -198,6 +198,13 @@ impl<'a> Pane<'a> {
         match self.editor.buffers.mode(self.index) {
             Some(Mode::Special(view)) => view.pills(line),
             _ => Vec::new(),
+        }
+    }
+
+    pub fn line_graph(&self, line: usize) -> Option<LineGraph> {
+        match self.editor.buffers.mode(self.index) {
+            Some(Mode::Special(view)) => view.graph(line),
+            _ => None,
         }
     }
 

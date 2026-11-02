@@ -2,7 +2,7 @@
   (import (ox string)
           (git repo)
           (git diff))
-  (export render ago shorten author-face stats))
+  (export render ago shorten author-face stats letters))
 
 (def path-column 60)
 (def summary-column 50)

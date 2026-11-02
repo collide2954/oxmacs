@@ -1,10 +1,31 @@
 use std::path::PathBuf;
 
 use crate::command::CommandId;
-use crate::editor::{Editor, Effect};
+use crate::editor::{Editor, Effect, Event};
 use crate::input::{KeySequence, Lookup};
 
-pub(super) type Segment = fn(&Editor) -> Option<String>;
+pub(super) type Segment = fn(&Editor) -> Vec<ModeLinePart>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModeLinePart {
+    pub text: String,
+    pub click: Option<String>,
+}
+
+impl ModeLinePart {
+    pub fn clickable(text: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            click: Some(key.into()),
+        }
+    }
+}
+
+impl From<String> for ModeLinePart {
+    fn from(text: String) -> Self {
+        Self { text, click: None }
+    }
+}
 
 impl Editor {
     pub fn repeated(&self) -> bool {
@@ -27,17 +48,28 @@ impl Editor {
         self.mode_line_segments.push(segment);
     }
 
-    pub fn mode_line_segments(&self) -> Vec<String> {
+    pub fn mode_line_parts(&self) -> Vec<ModeLinePart> {
         self.macros
             .recording()
-            .then(|| "Recording macro".to_owned())
+            .then(|| "Recording macro".to_owned().into())
             .into_iter()
             .chain(
                 self.mode_line_segments
                     .iter()
-                    .filter_map(|segment| segment(self)),
+                    .flat_map(|segment| segment(self)),
             )
             .collect()
+    }
+
+    pub fn mode_line_segments(&self) -> Vec<String> {
+        self.mode_line_parts()
+            .into_iter()
+            .map(|part| part.text)
+            .collect()
+    }
+
+    pub fn click_mode_line(&mut self, key: &str) {
+        self.record(Event::ModeLineClicked(key.to_owned()));
     }
 }
 

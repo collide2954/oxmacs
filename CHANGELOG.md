@@ -4,6 +4,19 @@ Notable changes to oxmacs, called mx before 0.12. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `git` shows history: `l l` in the status, or `M-x git-log`, lists the current branch's commits with their branch graph drawn in colored lanes, branch and tag labels, authors and dates, and `l a` lists every branch. The commit at point shows beside the list with its message, author, date, changed files and diff; `RET` goes to it, `RET` on a diff line visits that line in the working tree, `t` switches the diff to side by side, and `+` loads more commits.
+- `git` lists branches: `y` in the status, or `M-x git-branches`, shows local branches, remote branches and tags with their last commit and how far each is ahead of or behind its upstream. Typing filters the list, `RET` checks out the branch at point, and `C-c c`, `C-c m` and `C-c k` make a branch from it, rename it or delete it after asking. `b` in the status opens a menu to check out, make, rename, delete or list branches.
+- `git`'s `$` lists the commands that changed the repository, each with its exit status and output, a failed one unfolded; `TAB` folds one.
+- `git`'s `mode-line` setting shows the repository's branch in the mode line, as `main ↑2 ↓0 ●`, with how far it is ahead of and behind its upstream and a dot when anything changed; clicking it opens the status.
+- `set-mode-line` takes `:on-click`, a function run when its text is clicked.
+- A line given to `open-buffer` can carry a `:graph` of lanes, drawn over its first columns with curves between lanes and a dot on its node, so a plugin can draw a branch graph line by line.
+
+### Fixed
+
+- `prompt` with both `:choices` and `:initial` starts with the initial text, as its documentation says, instead of an empty input, so `RET` takes the suggested choice.
+
 ## [0.15.1] - 2026-11-01
 
 ### Removed

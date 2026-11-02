@@ -1,6 +1,6 @@
 (module
   (import (ox string))
-  (export parse whole-file header patch words shown matches))
+  (export parse files whole-file header patch words shown matches))
 
 (def (numbers text)
   (let [parts (string/split text ",")]
@@ -39,6 +39,59 @@
              (again (+ i 1) (if current (conj done current) done) (hunk-start line))]
             [(nil? current) (again (+ i 1) done current)]
             [else (again (+ i 1) done (add-line current line))]))))))
+
+(def (header-path line)
+  (let [at (string/last-index-of line " b/")]
+    (if at (string/slice line (+ at 3)) line)))
+
+(def (counted hunks)
+  (reduce (fn [found hunk]
+            (reduce (fn [found line]
+                      (cond
+                        [(= line.kind :added) [(+ (nth found 0) 1) (nth found 1)]]
+                        [(= line.kind :removed) [(nth found 0) (+ (nth found 1) 1)]]
+                        [else found]))
+                    found hunk.lines))
+          [0 0] hunks))
+
+(def (finished file)
+  (let [hunks (parse (string/join "\n" file.body))]
+    {path: (or file.path (header-path file.header)) from: file.from kind: file.kind
+     hunks: hunks counted: (if file.binary :binary (counted hunks))}))
+
+(def (stripped line)
+  (let [rest (string/slice line 4)]
+    (if (or (string/starts-with? rest "a/") (string/starts-with? rest "b/")) (string/slice rest 2) rest)))
+
+(def (file-line file line)
+  (cond
+    [(string/starts-with? line "@@ ") (assoc file :started true :body (conj file.body line))]
+    [file.started (assoc file :body (conj file.body line))]
+    [(string/starts-with? line "new file mode") (assoc file :kind :added)]
+    [(string/starts-with? line "deleted file mode") (assoc file :kind :deleted)]
+    [(string/starts-with? line "rename from ") (assoc file :kind :renamed :from (string/slice line 12))]
+    [(string/starts-with? line "rename to ") (assoc file :path (string/slice line 10))]
+    [(string/starts-with? line "copy from ") (assoc file :kind :copied :from (string/slice line 10))]
+    [(string/starts-with? line "copy to ") (assoc file :path (string/slice line 8))]
+    [(string/starts-with? line "Binary files ") (assoc file :binary true)]
+    [(and (string/starts-with? line "+++ ") (not (= line "+++ /dev/null"))) (assoc file :path (stripped line))]
+    [(and (string/starts-with? line "--- ") (not (= line "--- /dev/null")) (nil? file.path))
+     (assoc file :path (stripped line))]
+    [else file]))
+
+(def (files text)
+  (let [lines (string/split text "\n")
+        n (count lines)]
+    (loop [i 0 done [] current nil]
+      (if (>= i n)
+        (map finished (if current (conj done current) done))
+        (let [line (nth lines i)]
+          (cond
+            [(string/starts-with? line "diff --git ")
+             (again (+ i 1) (if current (conj done current) done)
+                    {header: line kind: :modified path: nil from: nil binary: false started: false body: []})]
+            [(nil? current) (again (+ i 1) done current)]
+            [else (again (+ i 1) done (file-line current line))]))))))
 
 (def (whole-file text)
   (let [parts (string/split text "\n")

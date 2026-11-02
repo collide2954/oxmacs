@@ -1,9 +1,9 @@
 (plugin claude
-  :version "0.1.1"
+  :version "0.1.2"
   :opt-in true
   :startup-when :suggestions
   :summary "Claude beside your code: a chat that can read and drive the editor, questions about a region, edits reviewed as diffs, and suggestions as you type"
-  :requires {vault: "^0.3" git: "^0.5"}
+  :requires {vault: "^0.3" git: "^0.6"}
   :commands [claude claude-send claude-stop claude-new claude-ask claude-chats claude-open-chat claude-delete-chat
              claude-set-key claude-accept-hunk claude-reject-hunk claude-accept-all claude-reject-all
              claude-finish-review claude-suggest]

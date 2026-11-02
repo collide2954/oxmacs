@@ -14,7 +14,7 @@ use crate::widgets::backdrop::Backdrop;
 use crate::widgets::buffer_view::{BufferView, Motion};
 use crate::widgets::divider::Divider;
 use crate::widgets::drawing::{self, Drawing};
-use crate::widgets::mode_line::{self, Look};
+use crate::widgets::mode_line::{self, Extra, Look};
 use crate::widgets::{completions, echo_area, overlay, ox_view, tab_bar, transient};
 use crate::{style, units};
 
@@ -114,12 +114,7 @@ impl App {
         let Some(pane) = self.editor.pane_of(self.editor.selected_window()) else {
             return covered.into();
         };
-        let extras: Vec<String> = self
-            .editor
-            .mode_line_segments()
-            .into_iter()
-            .chain(self.clock.as_deref().map(clock::now))
-            .collect();
+        let extras = self.mode_line_extras();
         let look = Look {
             faces,
             active: true,
@@ -131,6 +126,22 @@ impl App {
             mode_line::view(&pane.status(), &extras, self.mode_line_style, look)
         ]
         .into()
+    }
+
+    fn mode_line_extras(&self) -> Vec<Extra<Message>> {
+        self.editor
+            .mode_line_parts()
+            .into_iter()
+            .map(|part| Extra {
+                text: part.text,
+                click: part.click.map(Message::ModeLineClicked),
+            })
+            .chain(
+                self.clock
+                    .as_deref()
+                    .map(|format| Extra::plain(clock::now(format))),
+            )
+            .collect()
     }
 
     fn beside_side<'a>(&'a self, main: Element<'a, Message>, faces: Faces) -> Element<'a, Message> {
@@ -224,13 +235,11 @@ impl App {
             return body;
         }
         let last = self.editor.tiling().windows().last() == Some(&window);
-        let segments = if last {
-            self.editor.mode_line_segments()
+        let extras = if last {
+            self.mode_line_extras()
         } else {
             Vec::new()
         };
-        let time = self.clock.as_deref().filter(|_| last).map(clock::now);
-        let extras: Vec<String> = segments.into_iter().chain(time).collect();
         let look = Look {
             faces,
             active,

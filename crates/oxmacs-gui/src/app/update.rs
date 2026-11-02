@@ -206,6 +206,7 @@ impl App {
                     self.end_takeover();
                 }
             }
+            Message::ModeLineClicked(key) => self.editor.click_mode_line(&key),
             Message::Opened(Ok(())) | Message::Clock | Message::OxTick => {}
             Message::View(window, event) => self.handle_view_event(window, event),
             Message::Divider { path, index, delta } => {

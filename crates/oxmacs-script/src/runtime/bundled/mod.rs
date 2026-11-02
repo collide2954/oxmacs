@@ -743,6 +743,15 @@ const GIT: Bundle = Bundle {
         ("status.ox", include_str!("../../../plugins/git/status.ox")),
         ("pane.ox", include_str!("../../../plugins/git/pane.ox")),
         ("commit.ox", include_str!("../../../plugins/git/commit.ox")),
+        ("log.ox", include_str!("../../../plugins/git/log.ox")),
+        (
+            "branches.ox",
+            include_str!("../../../plugins/git/branches.ox"),
+        ),
+        (
+            "process.ox",
+            include_str!("../../../plugins/git/process.ox"),
+        ),
     ],
 };
 

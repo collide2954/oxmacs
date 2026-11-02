@@ -6,7 +6,7 @@ use ox_lang::native::given;
 use ox_lang::value::{Value, print};
 use ox_lang::{Error, Isolate};
 use oxmacs_core::command::{Command, ScopeId};
-use oxmacs_core::display::LineStyle;
+use oxmacs_core::display::{LineGraph, LineStyle};
 use oxmacs_core::editor::{Editor, Event, EventKind, InputLine};
 use oxmacs_core::special_buffer::SpecialBuffer;
 use oxmacs_core::text::{Buffer, BufferId};
@@ -29,6 +29,7 @@ pub struct LinesBuffer {
     styles: Vec<LineStyle>,
     pills: Vec<Pills>,
     links: Vec<Vec<Range<usize>>>,
+    graphs: Vec<Option<LineGraph>>,
     directory: Option<PathBuf>,
     file: Option<PathBuf>,
     watched: Vec<PathBuf>,
@@ -94,6 +95,10 @@ impl SpecialBuffer for LinesBuffer {
         self.links.get(line).cloned().unwrap_or_default()
     }
 
+    fn graph(&self, line: usize) -> Option<LineGraph> {
+        self.graphs.get(line).cloned().flatten()
+    }
+
     fn unsaved(&self) -> bool {
         self.unsaved
     }
@@ -104,6 +109,7 @@ struct Rendered {
     styles: Vec<LineStyle>,
     pills: Vec<Pills>,
     links: Vec<Vec<Range<usize>>>,
+    graphs: Vec<Option<LineGraph>>,
 }
 
 fn render(lines: &[Line]) -> Rendered {
@@ -115,6 +121,7 @@ fn render(lines: &[Line]) -> Rendered {
             .iter()
             .map(|line| line.links().into_iter().map(|(range, _)| range).collect())
             .collect(),
+        graphs: lines.iter().map(|line| line.graph.clone()).collect(),
     }
 }
 fn kept_above(editor: &Editor, id: BufferId, from: usize, rendered: Rendered) -> Rendered {
@@ -147,6 +154,11 @@ fn kept_above(editor: &Editor, id: BufferId, from: usize, rendered: Rendered) ->
             .iter()
             .cloned()
             .chain(rendered.links)
+            .collect(),
+        graphs: view.graphs[..from]
+            .iter()
+            .cloned()
+            .chain(rendered.graphs)
             .collect(),
     }
 }
@@ -261,6 +273,7 @@ fn start_chat(editor: &mut Editor, id: BufferId, prompt: String) {
     view.styles.push(prompt_style(&prompt));
     view.pills.push(Vec::new());
     view.links.push(Vec::new());
+    view.graphs.push(None);
     view.chat = Some(Chat { input, prompt });
     let scope = view.scope;
     editor.bind(scope, "M-p", Command::ComintPreviousInput).ok();
@@ -290,6 +303,8 @@ fn fill_chat(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Opti
     view.pills.push(Vec::new());
     view.links = rendered.links;
     view.links.push(Vec::new());
+    view.graphs = rendered.graphs;
+    view.graphs.push(None);
     let wanted = placed.map(|line| (line, 0)).or(here);
     if let Some((line, column)) = wanted {
         let line = line.min(lines.saturating_sub(1));
@@ -326,6 +341,7 @@ fn append(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<V
     view.styles.splice(index..index, rendered.styles);
     view.pills.splice(index..index, rendered.pills);
     view.links.splice(index..index, rendered.links);
+    view.graphs.splice(index..index, rendered.graphs);
     if view.chat.is_some() {
         editor.move_points(id, |point, _| (point >= following).then_some(point));
     }
@@ -429,6 +445,7 @@ fn fill(editor: &mut Editor, id: BufferId, rendered: Rendered, placed: Option<us
         view.styles = rendered.styles;
         view.pills = rendered.pills;
         view.links = rendered.links;
+        view.graphs = rendered.graphs;
         let line = line.min(buffer.len_lines().saturating_sub(1));
         let start = buffer.line_start(line);
         let position = (start + column).min(buffer.line_end(line));
@@ -581,6 +598,7 @@ fn open(heap: &mut Heap, editor: &mut Editor, arguments: &[Value]) -> Result<Val
                 styles: Vec::new(),
                 pills: Vec::new(),
                 links: Vec::new(),
+                graphs: Vec::new(),
                 directory: None,
                 file,
                 watched: Vec::new(),
